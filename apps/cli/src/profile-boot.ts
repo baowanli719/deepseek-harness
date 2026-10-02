@@ -284,6 +284,16 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
     })
 
     const rootConfig = join(composed.profile.dir, PROFILE_ROOT_FILENAME)
+    const transformPatches = composed.profile.layers.some(layer => layer.packageName === '@deepseek-ai/dsh-gs-app')
+      ? (await import('@deepseek-ai/dsh-gs-app/prompt-policy')).sanitizeGsPromptPatches : undefined
+    const transformEntries = transformPatches === undefined ? undefined
+      : (await import('@deepseek-ai/dsh-gs-app/skill-policy')).sanitizeGsSkillEntries
+    const environment = transformPatches === undefined ? options.environment : await (async () => {
+      const gateway = await import('@deepseek-ai/dsh-llm-gs-gateway')
+      return options.environment.get(gateway.GS_LLM_GATEWAY_CREDENTIAL_REF) === undefined
+        ? gateway.gsLlmGatewayLaunchEnvironment(options.environment, gateway.createGsLlmGatewayToken())
+        : options.environment
+    })()
     const profileContext: ProfileContext = {
       name: options.profile,
       ...(options.packageManager === undefined ? {} : { packageManager: options.packageManager }),
@@ -292,13 +302,15 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       startedBundles: composed.profile.layers.map(layer => layer.packageName),
       cwd: process.cwd(), home: resolveDshHome(),
       overlays: composed.overlays, telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
+      ...(transformPatches === undefined ? {} : { transformPatches }),
+      ...(transformEntries === undefined ? {} : { transformEntries }),
     }
     const ctx = await boot(NAME, rootConfig, readProfilePatches(NAME, profileContext, composed.profile), async (hostCtx) => {
       app.current = hostCtx
       hostCtx.provide('profileContext', profileContext)
       // Before any config-tree entry mounts, so plugins resolve all launch-time
       // environment values from the same immutable launch snapshot.
-      hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)
+      hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, environment)
       await hostCtx.plugin(PluginPackages, {
         resolution: composed.resolution,
       })

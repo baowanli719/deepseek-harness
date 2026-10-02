@@ -1278,6 +1278,112 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-goal -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-gs-server -->
+<a id="deepseek-aidsh-gs-server"></a>
+
+## `@deepseek-ai/dsh-gs-server`
+
+- `source`: [`packages/api/gs-server/src/index.ts:101`](../packages/api/gs-server/src/index.ts)
+
+```ts config-catalog
+/** Deployment and host choices for the gsclaw-server client. */
+export interface Config {
+  /** Absolute directory holding endpoint, credential, and brand state. */
+  readonly stateDir: string
+  /** Deployment default endpoint; the persisted override and the GSCLAW_ENDPOINT environment seam win over it. */
+  readonly endpoint?: string
+  /** Environment endpoint override; defaults to the GSCLAW_ENDPOINT variable. */
+  readonly environment?: string
+  /** Client version reported to the gateway inside login and refresh bodies. */
+  readonly clientVersion: string
+  /** Client platform reported to the gateway; defaults to the running OS. */
+  readonly clientPlatform?: GsClientIdentity['platform']
+  /**
+   * Refresh-token protector. Defaults to Windows DPAPI or macOS Keychain-backed
+   * AES-GCM; other platforms require an injected OS-backed implementation.
+   */
+  readonly protector?: GsRefreshTokenProtector
+  /**
+   * Register the private `/api/gs-server/*` routes on the Host webServer.
+   * Requires the `webServer` service when enabled; the service fails to start
+   * otherwise.
+   */
+  readonly routes?: boolean
+  /** Restore an OS-sealed refresh token before the Desktop startup gate reads session state. */
+  readonly restoreOnStart?: boolean
+  /** Authentication and ClientConfig request deadline in milliseconds; model streams retain caller cancellation. */
+  readonly authRequestTimeoutMs?: number
+  /** Upload rendered, secret-masked client logs to `POST /api/logs/client`. */
+  readonly logUpload?: boolean
+  /** Verbosity threshold of the log uploader. */
+  readonly logLevel?: LogLevel
+  /** Fetch implementation override for host adapters and tests. */
+  readonly request?: GsRequest
+}
+
+/** Client identity reported to the gateway inside login and refresh bodies. */
+export interface GsClientIdentity {
+  /** Operating system the client runs on. */
+  readonly platform: 'windows' | 'macos' | 'linux'
+  /** Client application version. */
+  readonly version: string
+}
+
+/**
+ * OS-backed secret storage seam for the refresh token. Implementations are
+ * async so subprocess-backed protectors (DPAPI via PowerShell) fit the same
+ * contract as in-process ones.
+ */
+export interface GsRefreshTokenProtector {
+  /** Whether sealing is backed by the OS rather than plaintext. */
+  available(): boolean
+  /**
+   * Seal one UTF-8 secret.
+   * @param plaintext - the refresh token to seal.
+   * @returns the sealed bytes safe to persist.
+   */
+  protect(plaintext: string): Promise<Uint8Array>
+  /**
+   * Open one sealed secret.
+   * @param sealed - bytes previously returned by {@link GsRefreshTokenProtector.protect}.
+   * @returns the original plaintext.
+   */
+  unprotect(sealed: Uint8Array): Promise<string>
+}
+
+/** User-selectable log verbosity threshold. */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+/** Fetch-compatible request function used against the gateway. */
+export type GsRequest = (url: string, init: RequestInit) => Promise<Response>
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-gs-server -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-gs-server-skills -->
+<a id="deepseek-aidsh-gs-server-skills"></a>
+
+## `@deepseek-ai/dsh-gs-server-skills`
+
+- `inject`: `skills` · `tools` · `gsServer`
+- `source`: [`packages/skill/gs-server-skills/src/index.ts:66`](../packages/skill/gs-server-skills/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration; deployment-varying values live here, not in code. */
+export interface Config {
+  /** Client-side ceiling of one server skill execute call in milliseconds. */
+  executeTimeoutMs?: number
+  /** Versioned cache root for `client` runtime skill bundles; defaults to `$DSH_HOME/gs-skills/bundles`. */
+  bundleCacheRoot?: string
+  /** Application-managed local skill root; defaults to `$DSH_HOME/local-skills`. */
+  localSkillManagedRoot?: string
+  /** User-home local skill root; defaults to `~/.skills`. */
+  localSkillHomeRoot?: string
+  /** Existing gs-worker account preference directory, when migrating. */
+  preferenceRoot?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-gs-server-skills -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-headless -->
 <a id="deepseek-aidsh-headless"></a>
 
@@ -1597,6 +1703,29 @@ export interface Config extends ProtocolConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-llm-deepseek-api-key -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-llm-gs-gateway -->
+<a id="deepseek-aidsh-llm-gs-gateway"></a>
+
+## `@deepseek-ai/dsh-llm-gs-gateway`
+
+- `inject`: `gsServer` · `settings`
+- `source`: [`packages/llm/llm-gs-gateway/src/index.ts:66`](../packages/llm/llm-gs-gateway/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration: deployment-owned names and bounds of the gateway adapter. */
+export interface Config {
+  /** Settings namespace (profile entry id) of the dormant `llm-pi-ai` mount the mirror owns (default `llm-pi-ai`). */
+  providerNamespace: string
+  /** Settings namespace of the `agent-default-model` mount receiving the server default model (default `agent-default-model`). */
+  defaultModelNamespace: string
+  /** Credential reference the per-boot proxy token resolves through (default `DSH_GS_LLM_PROXY_TOKEN`). */
+  credentialRef: string
+  /** Maximum chat-completions request body the proxy accepts (default 4 MiB). */
+  maxBodyBytes: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-llm-gs-gateway -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-llm-pi-ai -->
 <a id="deepseek-aidsh-llm-pi-ai"></a>
 
@@ -1849,6 +1978,21 @@ export interface PiAiCompatProfile {
   allowEmptySignature?: boolean
   /** Whether the endpoint accepts Anthropic strict tool schemas; `anthropic-messages`. */
   supportsStrictTools?: boolean
+  /**
+   * Whether to send session-affinity headers derived from the request's
+   * session id; `openai-completions`. pi-ai auto-enables them for OpenRouter
+   * endpoints only, so a private gateway the deployment owns cannot be
+   * detected — that gateway is exactly the deployment that may opt in, because
+   * the headers disclose the session id to the endpoint.
+   */
+  sendSessionAffinityHeaders?: boolean
+  /**
+   * Session-affinity header format; `openai-completions`, read only when
+   * {@link sendSessionAffinityHeaders} is on. Only `openrouter` — a single
+   * `x-session-id` header — is offered: the `openai` formats restate the same
+   * session id under three header names.
+   */
+  sessionAffinityFormat?: 'openrouter'
 }
 
 /** One request modality a pi-ai model may accept. */
@@ -2554,6 +2698,31 @@ export interface JsonRpcConfig {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sdk-jsonrpc-server -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-sensitive-policy -->
+<a id="deepseek-aidsh-sensitive-policy"></a>
+
+## `@deepseek-ai/dsh-sensitive-policy`
+
+- `inject`: `gsServer` · `tools` · `sessionProjections`
+- `source`: [`packages/guard/sensitive-policy/src/index.ts:129`](../packages/guard/sensitive-policy/src/index.ts)
+
+```ts config-catalog
+/**
+ * Plugin config, validated by the same-named schemastery schema.
+ */
+export interface Config {
+  /**
+   * Egress-capable tool names denied to private sessions (default
+   * {@link DEFAULT_EGRESS_TOOLS}). Entries are resolved against the live
+   * registry at restriction time, so naming a tool no composition registered
+   * is valid. An empty list removes configured-tool denial; external MCP
+   * denial, trusted-route enforcement, and audit marking remain active.
+   */
+  egressTools?: string[]
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-sensitive-policy -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-session-log-deepseek -->
 <a id="deepseek-aidsh-session-log-deepseek"></a>
@@ -4341,9 +4510,11 @@ export interface Config {
 | `@deepseek-ai/dsh-client-locale` | — | [`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts) |
 | `@deepseek-ai/dsh-client-modules` | `loader` | [`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts) |
 | `@deepseek-ai/dsh-client-resources` | — | [`packages/client/resources/src/index.ts`](../packages/client/resources/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-account-gs` | — | [`packages/client/ui-account-gs/src/index.ts`](../packages/client/ui-account-gs/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-agent-preset` | — | [`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-approval` | — | [`packages/client/ui-approval/src/index.ts`](../packages/client/ui-approval/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-attachment` | — | [`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-brand-gs` | — | [`packages/client/ui-brand-gs/src/index.ts`](../packages/client/ui-brand-gs/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-brand-official` | — | [`packages/client/ui-brand-official/src/index.ts`](../packages/client/ui-brand-official/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-chat` | — | [`packages/client/ui-chat/src/index.ts`](../packages/client/ui-chat/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-commands` | — | [`packages/client/ui-commands/src/index.ts`](../packages/client/ui-commands/src/index.ts) |
@@ -4381,6 +4552,7 @@ export interface Config {
 | `@deepseek-ai/dsh-client-ui-sidebar-right` | — | [`packages/client/ui-sidebar-right/src/index.ts`](../packages/client/ui-sidebar-right/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-sidebar-terminal` | — | [`packages/client/ui-sidebar-terminal/src/index.ts`](../packages/client/ui-sidebar-terminal/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-skill` | — | [`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-skills-gs` | — | [`packages/client/ui-skills-gs/src/index.ts`](../packages/client/ui-skills-gs/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-subagent` | — | [`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-tool` | — | [`packages/client/ui-tool/src/index.ts`](../packages/client/ui-tool/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-trajectory` | — | [`packages/client/ui-trajectory/src/index.ts`](../packages/client/ui-trajectory/src/index.ts) |
@@ -4483,6 +4655,7 @@ export interface Config {
 | `@deepseek-ai/dsh-experimental-voice-input-bundle` | — | [`packages/experimental/voice-input-bundle/src/index.ts`](../packages/experimental/voice-input-bundle/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-webworker-packer` | — | [`packages/experimental/webworker-packer/src/index.ts`](../packages/experimental/webworker-packer/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-webworker-runtime` | — | [`packages/experimental/webworker-runtime/src/index.ts`](../packages/experimental/webworker-runtime/src/index.ts) |
+| `@deepseek-ai/dsh-gs-app` | — | [`packages/bundle/gs-app/src/index.ts`](../packages/bundle/gs-app/src/index.ts) |
 | `@deepseek-ai/dsh-home-paths` | — | [`packages/util/home-paths/src/index.ts`](../packages/util/home-paths/src/index.ts) |
 | `@deepseek-ai/dsh-hook-protocol` | — | [`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts) |
 | `@deepseek-ai/dsh-http-proxy` | — | [`packages/util/http-proxy/src/index.ts`](../packages/util/http-proxy/src/index.ts) |

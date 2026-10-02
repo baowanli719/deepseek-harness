@@ -1807,7 +1807,8 @@ describe('runtime resolution', { concurrent: false }, () => {
     },
   )
 
-  it('excludes profile symlinks to files from linked roots', async () => {
+  // Windows file symlinks require developer mode or elevation; directory junction coverage runs on Windows.
+  it.skipIf(process.platform === 'win32')('excludes profile symlinks to files from linked roots', async () => {
     const f = fixture()
     const modules = join(f.profile.dir, 'node_modules')
     const target = join(f.root, 'work', 'file.cjs')

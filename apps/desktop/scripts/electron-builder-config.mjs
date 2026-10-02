@@ -1,6 +1,6 @@
 import { officePackageDirectories } from '../../../scripts/libreoffice-packages.mjs'
 import { X509Certificate } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,6 +8,12 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
   resolveDesktopAppId,
+  resolveDesktopArtifactBasename,
+  resolveDesktopBrandDir,
+  resolveDesktopNsisAllowAllUsers,
+  resolveDesktopProductName,
+  resolveDesktopProductVersion,
+  resolveDesktopProfile,
   resolveMacOSNotarizationEnvironment,
   resolveMacOSSigningEnvironment,
 } from './desktop-release-environment.mjs'
@@ -51,7 +57,19 @@ export function createElectronBuilderConfig(
   preparedRuntimeVersion = undefined,
 ) {
   const appId = resolveDesktopAppId(env)
-  const policy = resolveDesktopPolicyEnvironment(env)
+  const productName = resolveDesktopProductName(env)
+  const artifactBasename = resolveDesktopArtifactBasename(env)
+  const desktopProfile = resolveDesktopProfile(env)
+  const gsProduct = desktopProfile === 'gs-desktop'
+  const policy = gsProduct ? undefined : resolveDesktopPolicyEnvironment(env)
+  const nsisAllowAllUsers = resolveDesktopNsisAllowAllUsers(env)
+  const resourcesDir = fileURLToPath(new URL('../resources/', import.meta.url))
+  const brandDir = resolveDesktopBrandDir(env, fileURLToPath(new URL('..', import.meta.url)))
+  /** One brand asset from the selected directory; a missing file fails electron-builder at pack time. */
+  const brandAsset = name => join(brandDir ?? resourcesDir, name)
+  // Branded Windows builds share one multi-size ICO for application and NSIS resources.
+  const windowsIcon = existsSync(brandAsset('icon-windows.ico'))
+    ? brandAsset('icon-windows.ico') : brandAsset('icon-windows.png')
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
   const resolvedArch = env.DSH_DESKTOP_TARGET_ARCH ?? hostArch
@@ -66,6 +84,18 @@ export function createElectronBuilderConfig(
   const macOSSigning = packagesMacOS ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS) resolveMacOSNotarizationEnvironment(env)
   const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
+  // The NSIS include needs the target's installer-ui directory as an absolute define;
+  // electron-builder passes no custom defines, so the factory writes a one-line wrapper.
+  // Without it installer.nsh's in-repo default silently mismatches a relocated build root.
+  let nsisInclude = fileURLToPath(new URL('./installer.nsh', import.meta.url))
+  if (packagesWindows) {
+    mkdirSync(buildPaths.root, { recursive: true })
+    nsisInclude = join(buildPaths.root, 'installer-include.nsh')
+    writeFileSync(nsisInclude, [
+      `!define INSTALLER_BUILD_DIR "${join(buildPaths.root, 'installer-ui')}"\n`,
+      `!include "${fileURLToPath(new URL('./installer.nsh', import.meta.url))}"\n`,
+    ].join(''))
+  }
   let primaryRuntimeDestination
   let dshDestination
   let windowsCode = []
@@ -90,11 +120,12 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = unsigned || gsProduct ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
-  const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
+  const runtimeVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
+  const productVersion = resolveDesktopProductVersion(env, runtimeVersion)
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
   const packaged = resolveDesktopBuildCommit(env)
   return {
@@ -102,13 +133,17 @@ export function createElectronBuilderConfig(
     protocols: [{ name: 'DeepSeek Harness', schemes: ['dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
+      dshDesktopProfile: desktopProfile,
       dshMandatoryUpdatePolicy: policy,
-      ...buildVersion === productVersion ? {} : { version: buildVersion },
+      // electron-builder does not write config.productName into the packaged manifest; the shell reads it back here.
+      productName,
+      ...(gsProduct ? { description: '国盛办公AI桌面客户端', author: { name: '国盛办公AI' } } : {}),
+      ...buildVersion === runtimeVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
-    productName: 'DeepSeek Harness',
+    productName,
     // Unsigned builds carry their own suffix so a shared file can never pass for a release artifact.
-    artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : ''}.\${ext}`,
+    artifactName: `${artifactBasename}-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : ''}.\${ext}`,
     directories: { output: unsigned ? buildPaths.unsignedArtifacts : buildPaths.artifacts },
     asar: true,
     electronDist: buildPaths.electron,
@@ -128,8 +163,10 @@ export function createElectronBuilderConfig(
     },
     files: [
       'lib/main.js',
+      'lib/gs-login/**/*',
       'lib/welcome/**/*',
       'lib/preload-app.cjs',
+      'lib/preload-gs-login.cjs',
       'lib/preload-mandatory.cjs',
       'lib/preload-platform-account.cjs',
       'lib/preload-update-dialog.cjs',
@@ -143,12 +180,12 @@ export function createElectronBuilderConfig(
     asarUnpack: unpack,
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
-      { from: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
+      { from: brandAsset('icon-windows.png'), to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
-      ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
+      ...(packagesWindows ? [{ from: brandAsset('tray-windows.ico'), to: 'tray.ico' }] : []),
     ],
     mac: {
-      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      icon: brandAsset('icon-macos.png'),
       category: 'public.app-category.developer-tools',
       // macOS matches the application locale against this bundle, not Electron Framework resources.
       extendInfo: { CFBundleLocalizations: ['en', 'zh_CN'] },
@@ -188,10 +225,10 @@ export function createElectronBuilderConfig(
         await writeMacOSAppUpdateConfig(resourcesDir, resolveMacOSAppUpdateFeed(context.packager.config.publish),
           context.packager.appInfo.updaterCacheDirName)
       }
-      // The bundled runtime declares whichever version prepared it: the product version for an ordinary
+      // The bundled runtime declares whichever version prepared it: the upstream version for an ordinary
       // release, and a rewritten one for installed-update qualification.
       await verifyDesktopRuntime(buildPaths.dsh,
-        preparedRuntimeVersion ?? productVersion, { platform: resolvedPlatform, arch: resolvedArch })
+        preparedRuntimeVersion ?? runtimeVersion, { platform: resolvedPlatform, arch: resolvedArch })
       // Unsigned Windows builds skip electron-builder's afterSign hook.
       if (packagesWindows && unsigned) await verifyWindowsAsarUnpack(buildPaths.dsh, resourcesDir, windowsCode)
     },
@@ -221,7 +258,7 @@ export function createElectronBuilderConfig(
       )
     },
     win: {
-      icon: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)),
+      icon: windowsIcon,
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,
@@ -235,15 +272,19 @@ export function createElectronBuilderConfig(
       target: ['AppImage'],
     },
     nsis: {
+      ...(windowsIcon.endsWith('.ico') ? { installerIcon: windowsIcon, uninstallerIcon: windowsIcon } : {}),
       installerSidebar: join(buildPaths.root, 'installer-ui', 'uninstaller-sidebar.bmp'),
       uninstallerSidebar: join(buildPaths.root, 'installer-ui', 'uninstaller-sidebar.bmp'),
-      include: fileURLToPath(new URL('./installer.nsh', import.meta.url)),
       oneClick: false,
       perMachine: false,
-      allowElevation: false,
-      allowToChangeInstallationDirectory: false,
+      // The assisted installer shows the stock per-user/all-users choice only when elevation
+      // is allowed; installer.nsh reads the same switch at NSIS compile time to relax its
+      // per-user guards.
+      allowElevation: nsisAllowAllUsers,
+      allowToChangeInstallationDirectory: nsisAllowAllUsers,
       installerLanguages: ['en_US', 'zh_CN'],
       differentialPackage: true,
+      include: nsisInclude,
     },
     detectUpdateChannel: false,
     publish: update === undefined ? null : [{ provider: 'generic', url: update.publicUrl, channel: 'nightly' }],

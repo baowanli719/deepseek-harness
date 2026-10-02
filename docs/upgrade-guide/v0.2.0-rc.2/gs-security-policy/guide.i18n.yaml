@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.0-rc.2/gs-security-policy/guide.md
+/:
+  en: 3c0770a92cadfb0d
+  zh: 7350547a0b31f12b
+/gs-gateway-and-security-policy:
+  en: 23941e4c8863acd1
+  zh: 4949dfd609171c99
+/gs-gateway-and-security-policy/change:
+  en: 2f5954722e4c93fe
+  zh: ec4d538324002c70
+/gs-gateway-and-security-policy/migration:
+  en: 365b98897f789127
+  zh: f5e00e520c170d29

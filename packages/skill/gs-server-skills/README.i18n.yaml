@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/skill/gs-server-skills/README.md
+/:
+  en: 04a36d6cee6badb6
+  zh: 1eef1b2eeb49ed24
+/deepseek-ai-dsh-gs-server-skills:
+  en: e56ce05b90401426
+  zh: 2653b816a3b3619c
+/deepseek-ai-dsh-gs-server-skills/summary:
+  en: 48441e528ef76274
+  zh: 2c4180afc74e4d80
+/deepseek-ai-dsh-gs-server-skills/table-of-contents:
+  en: 4e53164159b5ce41
+  zh: 89582dc0294d0776
+/deepseek-ai-dsh-gs-server-skills/use-this-package:
+  en: 4e9f008aac9cd8d3
+  zh: 9314dda08873a608
+/deepseek-ai-dsh-gs-server-skills/use-this-package/what-the-model-gets:
+  en: 05e9437b8f4f0212
+  zh: 802add44c25d6e4f
+/deepseek-ai-dsh-gs-server-skills/use-this-package/observable-success-and-failures:
+  en: d67c56e2909baaae
+  zh: a982f2423facbbef
+/deepseek-ai-dsh-gs-server-skills/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-schema:
+  en: 94f4330c788ecc8b
+  zh: 62bc2dcd911323e1
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-schema/what-the-model-sees:
+  en: fd30298c06e191b4
+  zh: 7f8e14ef06a43a9d
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-schema/token-effect:
+  en: b8b70e4b86c340c4
+  zh: 1f8dbab8a3ba9ed5
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-schema/kv-cache-effect:
+  en: 1b6174146ce5c9bb
+  zh: 7fe211a731c14c53
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-result:
+  en: 3d066a7f0eb5afc8
+  zh: 6729387db7950506
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-result/what-the-model-sees:
+  en: eb3135009418adf0
+  zh: e8b4d8772d8c53b2
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-result/token-effect:
+  en: e91bca903201c5de
+  zh: 0612e16f2c246890
+/deepseek-ai-dsh-gs-server-skills/model-experience/bridge-tool-result/kv-cache-effect:
+  en: abc9210f3472d3cb
+  zh: 7026fae9c29d171d
+/deepseek-ai-dsh-gs-server-skills/known-limitations-and-deferred-work:
+  en: ecaaffa6c2c159f8
+  zh: d38ee604b73dd0cd
+/deepseek-ai-dsh-gs-server-skills/known-limitations-and-deferred-work/dev-note:
+  en: 435b8341096ad2f3
+  zh: ddd3e89c8d71b186

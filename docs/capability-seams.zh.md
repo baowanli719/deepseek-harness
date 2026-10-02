@@ -9,6 +9,17 @@
 
 ```mermaid
 flowchart LR
+  pkg_gs_server["gs-server"]
+  svc_gsServer["ctx.gsServer<br/>GS account and authenticated server access"]
+  pkg_llm_gs_gateway["llm-gs-gateway"]
+  pkg_gs_server_skills["gs-server-skills"]
+  pkg_sensitive_policy["sensitive-policy"]
+  svc_gsLlmGateway["ctx.gsLlmGateway<br/>GS model gateway configuration"]
+  svc_gsServerSkillCatalog["ctx.gsServerSkillCatalog<br/>GS server skill catalog"]
+  pkg_ui_skills_gs["ui-skills-gs"]
+  svc_gsServerSkillGate["ctx.gsServerSkillGate<br/>GS server skill permission gate"]
+  svc_gsServerSkillPreferences["ctx.gsServerSkillPreferences<br/>GS server skill preferences"]
+  svc_sensitivePolicy["ctx.sensitivePolicy<br/>Durable private session policy"]
   pkg_hmr["hmr"]
   svc_hmr["ctx.hmr<br/>Serialized module and configuration reloads"]
   pkg_app_boot["app-boot"]
@@ -336,6 +347,10 @@ flowchart LR
   pkg_fs_sandbox --> svc_fs
   pkg_fs_ssh --> svc_fs
   pkg_goal --> svc_goals
+  pkg_gs_server --> svc_gsServer
+  pkg_gs_server_skills --> svc_gsServerSkillCatalog
+  pkg_gs_server_skills --> svc_gsServerSkillGate
+  pkg_gs_server_skills --> svc_gsServerSkillPreferences
   pkg_hmr --> svc_hmr
   pkg_host_directory_picker --> svc_directoryPicker
   pkg_host_directory_picker_browse --> svc_directoryPicker
@@ -348,6 +363,7 @@ flowchart LR
   pkg_jobs_local --> svc_jobs
   pkg_llm --> svc_llm
   pkg_llm_deepseek --> svc_llm
+  pkg_llm_gs_gateway --> svc_gsLlmGateway
   pkg_llm_pi_ai --> svc_llm
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
@@ -370,6 +386,7 @@ flowchart LR
   pkg_sandbox_ssh --> svc_sandbox
   pkg_sandbox_windows_acl --> svc_skills
   pkg_schedule --> svc_schedule
+  pkg_sensitive_policy --> svc_sensitivePolicy
   pkg_session --> svc_sessions
   pkg_session_log_deepseek --> svc_deepseekLlmApiExtensions
   pkg_session_persistence --> svc_sessionPersistence
@@ -466,6 +483,15 @@ flowchart LR
   svc_fileReferences --> pkg_api_session_controller
   svc_fileUploads --> pkg_api_session_controller
   svc_fs --> pkg_tool_fs
+  svc_gsLlmGateway --> pkg_llm_gs_gateway
+  svc_gsServer --> pkg_gs_server_skills
+  svc_gsServer --> pkg_llm_gs_gateway
+  svc_gsServer --> pkg_sensitive_policy
+  svc_gsServerSkillCatalog --> pkg_ui_skills_gs
+  svc_gsServerSkillGate --> pkg_gs_server_skills
+  svc_gsServerSkillGate --> pkg_sensitive_policy
+  svc_gsServerSkillPreferences --> pkg_gs_server_skills
+  svc_gsServerSkillPreferences --> pkg_ui_skills_gs
   svc_hmr --> pkg_app_boot
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
@@ -495,6 +521,8 @@ flowchart LR
   svc_sandboxPolicy --> pkg_bash_sandbox
   svc_sandboxPolicy --> pkg_fs_sandbox
   svc_sandboxPolicy --> pkg_terminal_bash
+  svc_sensitivePolicy --> pkg_gs_server_skills
+  svc_sensitivePolicy --> pkg_llm_gs_gateway
   svc_sessionPersistence --> pkg_agent_loop
   svc_sessionPersistence --> pkg_hooks_claude_code
   svc_sessionPersistence --> pkg_hooks_codex
@@ -579,6 +607,12 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.gsServer` | `core` | [`gs-server`](../packages/api/gs-server) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway), [`gs-server-skills`](../packages/skill/gs-server-skills), [`sensitive-policy`](../packages/guard/sensitive-policy) | - | 负责账户代次、加密凭据持久化，以及到配置 GS 端点的认证请求。 |
+| `ctx.gsLlmGateway` | `service` | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | 通过认证服务器访问及敏感请求归属标记注册 GS 模型和视觉适配器。 |
+| `ctx.gsServerSkillCatalog` | `core` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | `ui-skills-gs` | - | 读取当前认证账号的技能目录；加载技能时重新检查账号、偏好和隐私策略。 |
+| `ctx.gsServerSkillGate` | `service` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | [`gs-server-skills`](../packages/skill/gs-server-skills), [`sensitive-policy`](../packages/guard/sensitive-policy) | - | 在访问服务器技能前合并当前账号配置与会话隐私策略。 |
+| `ctx.gsServerSkillPreferences` | `core` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | `ui-skills-gs`, [`gs-server-skills`](../packages/skill/gs-server-skills) | - | 持久化全局及逐技能开关，并将变更应用于后续技能访问。 |
+| `ctx.sensitivePolicy` | `core` | [`sensitive-policy`](../packages/guard/sensitive-policy) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway), [`gs-server-skills`](../packages/skill/gs-server-skills) | - | 通过 Session 投影恢复单调隐私状态，并在推理或工具访问前刷写策略变更。 |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | 负责模块和精确配置监听；应用修改共用其队列，自动重载等待应用文件锁。 |
 | `ctx.pluginRegistryProbe` | `core` | [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | - | [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | - | 在 Host 上并发比较公共安装源响应；初始安装源推荐由 Client 负责。 |
 | `ctx.pluginManager` | `core` | [`plugin-manager`](../packages/boot/plugin-manager) | - | [`plugin-manager`](../packages/boot/plugin-manager), `ui-settings-plugin-inventory` | - | 与 CLI 共享 profile 包操作，并向 Web 和 Agent 调用方分别报告持久状态与运行状态。 |

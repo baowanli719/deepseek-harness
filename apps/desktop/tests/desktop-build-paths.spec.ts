@@ -1,5 +1,6 @@
+import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   desktopTargetBuildPaths,
   desktopTargetPlatform,
@@ -65,5 +66,21 @@ describe('desktop build paths', () => {
     expect(resolveDesktopBuildTarget({}, 'win32', 'x64')).toBe('win-x64')
     expect(() => resolveDesktopBuildTarget({}, 'linux', 'x64')).toThrow(/unsupported target/u)
     expect(() => desktopTargetBuildPaths('linux-x64' as 'mac-x64')).toThrow(/unsupported target/u)
+  })
+})
+
+describe('desktop build root relocation', () => {
+  it('moves every mutable directory when DSH_DESKTOP_BUILD_ROOT is set', async () => {
+    vi.stubEnv('DSH_DESKTOP_BUILD_ROOT', join(tmpdir(), 'dsh-build-root-test'))
+    try {
+      vi.resetModules()
+      const relocated = await import('../scripts/desktop-build-paths.mjs')
+      const paths = relocated.desktopTargetBuildPaths('win-x64')
+      expect(paths.root).toBe(join(tmpdir(), 'dsh-build-root-test', 'targets', 'win-x64'))
+      expect(paths.unsignedArtifacts.startsWith(join(tmpdir(), 'dsh-build-root-test'))).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 })

@@ -38,6 +38,7 @@ import * as ToolSubagentControl from '@deepseek-ai/dsh-tool-subagent-control'
 import * as ToolSubagentListAgents from '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
+import * as GsServerSkills from '@deepseek-ai/dsh-gs-server-skills'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import * as ToolAskUser from '@deepseek-ai/dsh-tool-ask-user'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
@@ -495,6 +496,49 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-gs-server-skills',
+    dir: 'gs-server-skills',
+    source: 'packages/skill/gs-server-skills/src/server-skill-tools.ts',
+    requires: ['ctx.tools', 'ctx.skills', 'ctx.gsServer'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(SkillRegistry)
+      // A mock gsclaw-server handshake: the bridge tools register only while
+      // the meta advertises skillExecution AND a sync holds an executable
+      // skill of the runtime type, so the harvest serves both and syncs once.
+      ctx.provide('gsServer', {
+        sessionView: () => ({ status: 'signed-in', endpoint: 'https://catalog.example.test', user: { id: 1 } }),
+        getAccessToken: () => Promise.resolve('tool-catalog-token'),
+        getClientConfig: () => undefined,
+        fetch: (path: string) => Promise.resolve(new Response(JSON.stringify(
+          path === '/api/v1/meta'
+            ? {
+              serviceName: 'gsclaw-server',
+              serviceVersion: '1.0.0',
+              loginMethods: [],
+              minimumClientVersion: '0.0.0',
+              llmProxy: false,
+              skillExecution: { version: 1, types: ['data-query', 'server-mcp'], policyVersion: 1 },
+            }
+            : {
+              skills: [
+                { name: 'sales-query', displayName: 'Sales Query', description: 'Query the sales warehouse.', version: '1.0.0', runtimeType: 'data-query', definitionRevision: 'rev-1', modelPolicy: 'standard' },
+                { name: 'docs-mcp', displayName: 'Docs MCP', description: 'Search the document store.', version: '2.0.0', runtimeType: 'server-mcp', definitionRevision: 'rev-9', modelPolicy: 'standard' },
+              ],
+            },
+        ), { status: 200, headers: { 'content-type': 'application/json' } })),
+      })
+      await ctx.plugin(GsServerSkills, {
+        localSkillManagedRoot: resolve(root, '.tmp/tool-catalog/.dsh/local-skills'),
+        localSkillHomeRoot: resolve(root, '.tmp/tool-catalog/.skills'),
+      })
+      // The bridge tools appear with the first catalog sync, which a listing awaits.
+      await ctx.skills.list({})
+    },
+    note:
+      'The bridge tools exist only while the server advertises the matching skillExecution type and the effective catalog holds an executable skill of that type; executions are forwarded to gsclaw-server, which owns the skill runtime. Trusted-only gated skills are never visible to these tools.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-skill',

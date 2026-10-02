@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/llm/llm-gs-gateway/README.md
+/:
+  en: 7be7dc72ab4936cf
+  zh: f622345d2ac0710c
+/deepseek-ai-dsh-llm-gs-gateway:
+  en: b9dae69ad1ba54a5
+  zh: 3828bfd78fd394ed
+/deepseek-ai-dsh-llm-gs-gateway/summary:
+  en: 30b14f7da7c42a14
+  zh: 990d7d151f78e57c
+/deepseek-ai-dsh-llm-gs-gateway/table-of-contents:
+  en: 3460b3e585e0c020
+  zh: 75e08fa56a6bf958
+/deepseek-ai-dsh-llm-gs-gateway/use-this-package:
+  en: 2ac93759257fc71e
+  zh: d6e5f54ccf5bcf8b
+/deepseek-ai-dsh-llm-gs-gateway/use-this-package/configure-the-adapter:
+  en: d134be9239800f29
+  zh: 77f7ef070f70e060
+/deepseek-ai-dsh-llm-gs-gateway/use-this-package/wire-the-per-boot-token:
+  en: c531798a5d5aafb6
+  zh: 9580cd2ccb2b950d
+/deepseek-ai-dsh-llm-gs-gateway/use-this-package/read-the-published-service:
+  en: c95508e4b7fbad4f
+  zh: 9b4d1365c366aef7
+/deepseek-ai-dsh-llm-gs-gateway/understand-the-implementation:
+  en: ee4615a04fa6503d
+  zh: ee2c5fb2204a43cf
+/deepseek-ai-dsh-llm-gs-gateway/understand-the-implementation/the-loopback-proxy:
+  en: deb2b9173090ecf2
+  zh: 96ed6541860c0fee
+/deepseek-ai-dsh-llm-gs-gateway/understand-the-implementation/the-model-mirror:
+  en: 12b699e9dc6afa6b
+  zh: 3058571e272eb17f
+/deepseek-ai-dsh-llm-gs-gateway/understand-the-implementation/why-llm-pi-ai-and-not-llm-deepseek-volatile-config:
+  en: f9078910bc186c79
+  zh: cb21a292c2c85fe1
+/deepseek-ai-dsh-llm-gs-gateway/model-experience:
+  en: 00d3423d9048ea93
+  zh: 60fbae2ed3d30bb6
+/deepseek-ai-dsh-llm-gs-gateway/model-experience/kv-cache-effect:
+  en: 33c52aea2a29d414
+  zh: 6b296061e6cb548c
+/deepseek-ai-dsh-llm-gs-gateway/known-limitations-and-deferred-work:
+  en: 4a56aa3fc4ef6a32
+  zh: feae829f64f8e28a
+/deepseek-ai-dsh-llm-gs-gateway/known-limitations-and-deferred-work/dev-note:
+  en: 32af0224db31770f
+  zh: 519ebd9dc383b2af

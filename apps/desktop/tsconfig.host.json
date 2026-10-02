@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../packages/api/gs-server"
+    },
+    {
       "path": "../../packages/boot/app-boot"
     },
     {

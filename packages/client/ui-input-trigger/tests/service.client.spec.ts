@@ -428,6 +428,22 @@ describe('track', () => {
 })
 
 describe('programmatic source launcher', () => {
+  it('opens commands and skills together from the composer toolbar', async () => {
+    const command = readySource('/', 'command', [{ name: 'goal' }])
+    const skill = readySource('/', 'skill', [{ name: 'review' }])
+    const { controller } = controllerBench([command.source, skill.source])
+    const hit = {
+      trigger: '/' as const, query: '', quoted: false, position: 'leading' as const,
+      span: { start: 0, end: 0, draftRev: 1 },
+    }
+    controller.toggleAllSources('command', hit)
+    await tick()
+    expect(controller.launcher.getSnapshot()).toBe('command')
+    expect(controller.menu.getSnapshot().groups.map(group => group.source)).toEqual(['command', 'skill'])
+    controller.pick('skill', 0)
+    expect(skill.picks[0]).toMatchObject({ via: 'menu', span: hit.span })
+  })
+
   it('opens only the requested source and reuses its ordinary pick span', async () => {
     const command = readySource('/', 'command', [{ name: 'goal' }])
     const skill = readySource('/', 'skill', [{ name: 'review' }])

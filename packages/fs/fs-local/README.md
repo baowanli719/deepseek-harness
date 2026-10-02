@@ -41,6 +41,8 @@ Load the backend with a base directory; relative paths resolve against it, and a
     cwd: /absolute/path/to/workspace
 ```
 
+Unresolved symbolic links are refused with `FS_NOT_FOUND`; they cannot become ordinary missing directory suffixes. Directory listings retain dangling links as metadata-only `other` entries, and operations must resolve them again.
+
 | Field | Default | Meaning |
 |---|---|---|
 | `cwd` | `process.cwd()` | Base directory for relative paths |

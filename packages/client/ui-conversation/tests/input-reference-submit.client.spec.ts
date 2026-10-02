@@ -334,7 +334,7 @@ it.each(['handled', 'claim', 'message'] as const)('counts only a message after a
     launcher: { getSnapshot: () => null, subscribe: () => () => {} },
     lexicon: { getSnapshot: () => new Map(), subscribe: () => () => {} },
     track: () => {}, arbitrate: () => 'pass', onSpace: () => false,
-    serializeReference: async () => '', openReference: () => false, toggleSource: () => {},
+    serializeReference: async () => '', openReference: () => false, toggleSource: () => {}, toggleAllSources: () => {},
     adjudicate: () => pending.promise,
   }
   const shell = new SessionInputShell({ actx: {} as Context, inputTriggers: () => inputTriggers,
@@ -371,7 +371,7 @@ it('retains occurrence time and Session facts across arbitration and independent
       launcher: { getSnapshot: () => null, subscribe: () => () => {} },
       lexicon: { getSnapshot: () => new Map(), subscribe: () => () => {} },
       track: () => {}, arbitrate: () => 'pass', onSpace: () => false,
-      serializeReference: async () => '', openReference: () => false, toggleSource: () => {},
+      serializeReference: async () => '', openReference: () => false, toggleSource: () => {}, toggleAllSources: () => {},
       adjudicate: () => pending.promise,
     }),
     defaultSink: sink,

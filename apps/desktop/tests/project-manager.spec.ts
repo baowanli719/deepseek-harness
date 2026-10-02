@@ -2,8 +2,8 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveDesktopPaths } from '../src/paths.ts'
-import { DesktopProjectManager } from '../src/project-manager.ts'
+import { resolveDesktopPaths, resolveDesktopProfileName } from '../src/paths.ts'
+import { DesktopProjectManager, desktopProfileTemplate } from '../src/project-manager.ts'
 import { readProfilePlugins } from '@deepseek-ai/dsh-app-boot'
 import { runtimeFixture } from './runtime-fixture.ts'
 
@@ -32,11 +32,11 @@ function plugins(manager: DesktopProjectManager) {
     installAnchor: join(manager.runtime.dsh, 'node_modules/@deepseek-ai/dsh/package.json') }).dependencies
     .map(({ name, version, enabled }) => ({ name, version, enabled }))
 }
-function setup(): { root: string; manager: DesktopProjectManager } {
+function setup(profileName?: string): { root: string; manager: DesktopProjectManager } {
   const root = temporaryRoot()
   const dsh = join(root, 'resources', 'dsh')
   runtimeFixture(dsh)
-  return { root, manager: new DesktopProjectManager(resolveDesktopPaths(join(root, '.dsh')), { dsh }) }
+  return { root, manager: new DesktopProjectManager(resolveDesktopPaths(join(root, '.dsh'), profileName), { dsh }, profileName) }
 }
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
@@ -328,5 +328,36 @@ describe('desktop link-backend projections', () => {
     expect(existsSync(join(profile, '.dsh-module-fallback'))).toBe(false)
     expect(lstatSync(join(profile, 'node_modules', 'bridge'), { throwIfNoEntry: false })).toBeUndefined()
     expect(existsSync(join(target, 'package.json'))).toBe(true)
+  })
+})
+
+describe('desktop product profile selection', () => {
+  it('resolves the profile name from the baked manifest, then the environment', () => {
+    expect(resolveDesktopProfileName(undefined, {})).toBe('desktop')
+    expect(resolveDesktopProfileName(undefined, { DSH_DESKTOP_PROFILE: 'gs-desktop' })).toBe('gs-desktop')
+    expect(resolveDesktopProfileName({ dshDesktopProfile: 'gs-desktop' }, { DSH_DESKTOP_PROFILE: 'other' })).toBe('gs-desktop')
+    expect(resolveDesktopProfileName({}, {})).toBe('desktop')
+    expect(() => resolveDesktopProfileName({ dshDesktopProfile: 'bad/name' }, {})).toThrow('invalid Desktop profile name')
+    expect(() => resolveDesktopProfileName(undefined, { DSH_DESKTOP_PROFILE: 'node_modules' })).toThrow('invalid Desktop profile name')
+  })
+
+  it('selects the shipped template for a branded profile and the Web template for desktop', () => {
+    expect(desktopProfileTemplate('desktop').bundles).toEqual(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+    expect(desktopProfileTemplate('gs-desktop').bundles).toEqual([
+      '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-gs-app',
+    ])
+    expect(() => desktopProfileTemplate('unknown-profile')).toThrow('unknown Desktop profile')
+  })
+
+  it('initializes a branded profile from its shipped template', async () => {
+    const { manager } = setup('gs-desktop')
+    await manager.applyRelease()
+    const manifest = JSON.parse(readFileSync(join(manager.paths.profile, 'package.json'), 'utf8')) as {
+      dsh: { profile: { bundles: string[] } }
+    }
+    expect(manifest.dsh.profile.bundles).toEqual([
+      '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-gs-app',
+    ])
+    expect(manager.paths.profile.endsWith(join('profiles', 'gs-desktop'))).toBe(true)
   })
 })

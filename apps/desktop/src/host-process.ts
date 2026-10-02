@@ -23,7 +23,7 @@ interface PlatformSessionEvent {
   readonly session: PlatformSession | null
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'shutdown-complete' } | {
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'gs-session-ended' } | { readonly type: 'shutdown-complete' } | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -55,6 +55,7 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
   const candidate = message as Record<string, unknown>
   switch (candidate.type) {
     case 'shutdown-complete':
+    case 'gs-session-ended':
       return true
     case 'ready':
       return typeof candidate.url === 'string'
@@ -165,6 +166,7 @@ export class DesktopHostProcess {
    *   `office-skills` resources fail Host startup.
    * @param packageManager - Bundled pnpm entry and Node launcher directory, scoped to package operations.
    * @param onPlatformSession - Private credential updates for embedded Platform views.
+   * @param onGsSessionEnded - Token-free GS logout and expiry notification.
    */
   constructor(
     private readonly node: string,
@@ -177,6 +179,7 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly onGsSessionEnded?: () => void,
   ) {}
 
   /**
@@ -211,6 +214,9 @@ export class DesktopHostProcess {
       }
       if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
+      else if (message.type === 'gs-session-ended') {
+        if (!this.stopping) this.onGsSessionEnded?.()
+      }
       else if (message.type === 'shutdown-complete') {
         if (this.stopping) this.shutdownCompleted = true
         else this.fail(new Error('dsh desktop host acknowledged an unrequested shutdown'))

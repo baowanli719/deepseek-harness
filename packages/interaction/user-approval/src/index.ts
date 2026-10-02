@@ -148,6 +148,7 @@ export interface Config {
  * changes to the model through the runtime-context snapshot and switch notices.
  */
 export class ApprovalService extends Service {
+  private readonly constraints = new Set<(session: Session) => ApprovalPolicy>()
   static Config: z<Config> = z.object({
     policy: z.union(['ask', 'never'] as const).default('ask'),
   })
@@ -241,7 +242,18 @@ export class ApprovalService extends Service {
    * @returns the policy every ask for this session resolves under right now.
    */
   private effectivePolicy(session: Session): ApprovalPolicy {
+    for (const maximum of this.constraints) if (maximum(session) === 'never') return 'never'
     return this.overrideOf(session) ?? this.config.policy ?? 'ask'
+  }
+
+  /**
+   * Allow a policy owner to reject escalation even when a session selects ask.
+   * @param maximum - live upper bound; never rejects every approval request.
+   * @returns disposer removing this constraint.
+   */
+  constrain(maximum: (session: Session) => ApprovalPolicy): () => void {
+    this.constraints.add(maximum)
+    return () => { this.constraints.delete(maximum) }
   }
 
   /**

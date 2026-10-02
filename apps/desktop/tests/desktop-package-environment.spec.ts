@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -200,5 +200,34 @@ it('owns macOS tuning in the local file and validates it before signing credenti
     expect(env.DSH_DESKTOP_MACOS_NOTARIZATION_PROXY).toBe('')
     expect(() =>{  validateDesktopPackageEnvironment({ ...RELEASE, DSH_DESKTOP_MACOS_PACK_CONCURRENCY: '' }, MACOS) }).toThrow('PACK_CONCURRENCY')
     expect(() =>{  validateDesktopPackageEnvironment({ ...RELEASE, DSH_DESKTOP_MACOS_NOTARIZATION_PROXY: 'socks5://localhost:8080' }, MACOS) }).toThrow('NOTARIZATION_PROXY')
+  })
+})
+
+describe('Desktop product identity settings', () => {
+  it('takes product identity from the platform file and strips ambient values', async () => {
+    await withDirectory(async (directory) => {
+      await mkdir(join(directory, 'brand', 'gs'), { recursive: true })
+      await writeFile(join(directory, '.env.windows'), [
+        'DSH_DESKTOP_APP_ID=com.enterprise.officeagent',
+        'DSH_DESKTOP_PRODUCT_NAME=gs-worker',
+        'DSH_DESKTOP_ARTIFACT_BASENAME=gs-worker',
+        'DSH_DESKTOP_BRAND_DIR=brand/gs',
+        'DSH_DESKTOP_PROFILE=gs-desktop',
+        '',
+      ].join('\n'))
+      const parent = {
+        DSH_DESKTOP_PRODUCT_NAME: 'stale-product', DSH_DESKTOP_ARTIFACT_BASENAME: 'stale-artifact',
+        DSH_DESKTOP_BRAND_DIR: 'stale-brand', DSH_DESKTOP_PROFILE: 'stale-profile',
+        dsh_desktop_profile: 'case-insensitive-stale-profile',
+      }
+      expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({
+        DSH_DESKTOP_APP_ID: 'com.enterprise.officeagent',
+        DSH_DESKTOP_PRODUCT_NAME: 'gs-worker',
+        DSH_DESKTOP_ARTIFACT_BASENAME: 'gs-worker',
+        DSH_DESKTOP_BRAND_DIR: join(directory, 'brand', 'gs'),
+        DSH_DESKTOP_PROFILE: 'gs-desktop',
+      })
+      expect(parent.DSH_DESKTOP_PROFILE).toBe('stale-profile')
+    })
   })
 })

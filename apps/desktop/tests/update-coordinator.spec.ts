@@ -47,6 +47,37 @@ describe('desktop release metadata', () => {
 const coordinators: InstanceType<typeof DesktopUpdateCoordinator>[] = []
 afterEach(() => { for (const item of coordinators.splice(0)) item.dispose() })
 
+it.each(['2.1.0', '2.1.1-test.20261002.1'])('does not offer GS release %s over the migrated client', async (version) => {
+  const { updater, checkForUpdates } = fixture()
+  const source = { check: vi.fn(async () => version), download: vi.fn(async () => {}),
+    install: vi.fn(async () => {}), dispose: vi.fn() }
+  const coordinator = new DesktopUpdateCoordinator(state => state, async () => true, updater,
+    () => false, () => '2.1.1-test.20261002.1', undefined, source)
+  coordinators.push(coordinator)
+  expect(await coordinator.check(true)).toEqual({ phase: 'idle' })
+  expect(source.download).not.toHaveBeenCalled()
+  expect(checkForUpdates).not.toHaveBeenCalled()
+})
+
+it('checks, downloads, and installs through the GS source without calling the public feed', async () => {
+  const { updater, checkForUpdates, downloadUpdate, quitAndInstall } = fixture()
+  const source = { check: vi.fn(async () => '2.2.0'), download: vi.fn(async () => {}),
+    install: vi.fn(async () => {}), dispose: vi.fn() }
+  const beforeRestart = vi.fn(async () => true)
+  const coordinator = new DesktopUpdateCoordinator(state => state, beforeRestart, updater, () => false, () => '2.1.0', undefined, source)
+  coordinators.push(coordinator)
+  expect(await coordinator.check(true)).toMatchObject({ phase: 'available', version: '2.2.0' })
+  expect(source.download).not.toHaveBeenCalled()
+  expect(await coordinator.download('2.2.0')).toMatchObject({ phase: 'ready' })
+  expect(source.install).not.toHaveBeenCalled()
+  await coordinator.install('2.2.0')
+  expect(beforeRestart).toHaveBeenCalledOnce()
+  expect(source.install).toHaveBeenCalledWith('2.2.0')
+  expect(checkForUpdates).not.toHaveBeenCalled()
+  expect(downloadUpdate).not.toHaveBeenCalled()
+  expect(quitAndInstall).not.toHaveBeenCalled()
+})
+
 function fixture() {
   const events = new EventEmitter()
   const checkForUpdates = vi.fn(async () => ({

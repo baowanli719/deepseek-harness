@@ -26,6 +26,34 @@ describe('pi-ai gateway compatibility declarations', () => {
       .toMatchObject({ supportsMaxOutputTokens: false })
   })
 
+  it('offers session affinity toward a deployment-owned completions gateway', () => {
+    expect(resolved({ sendSessionAffinityHeaders: true, sessionAffinityFormat: 'openrouter' }))
+      .toMatchObject({ sendSessionAffinityHeaders: true, sessionAffinityFormat: 'openrouter' })
+  })
+
+  it.each([
+    { sendSessionAffinityHeaders: 'yes' },
+    { sessionAffinityFormat: 'openai' },
+  ])('rejects invalid session-affinity values: %j', (compat) => {
+    expect(() => configured(compat)).toThrow()
+  })
+
+  it('refuses session-affinity switches on a route whose models speak a protocol that takes none', () => {
+    expect(() => resolved({ sendSessionAffinityHeaders: true }, 'openai-responses'))
+      .toThrow(/no model on the route speaks a protocol that takes it/)
+    expect(() => resolved({ sessionAffinityFormat: 'openrouter' }, 'openai-responses'))
+      .toThrow(/no model on the route speaks a protocol that takes it/)
+  })
+
+  it('refuses a model-level session-affinity switch its protocol does not take', () => {
+    expect(() => resolveProfiles({
+      gateway: {
+        api: 'openai-responses', baseURL: 'https://gateway.test/v1',
+        models: [{ id: 'model', compat: { sendSessionAffinityHeaders: true } }],
+      },
+    })).toThrow(/does not take it/)
+  })
+
   it.each(['chatTemplateKwargs', 'chatTemplateArgs'])('accepts thinking.budget in %s', (field) => {
     const value = { budget: { $var: 'thinking.budget' } }
     expect(resolved({ [field]: value })).toMatchObject({ [field]: value })
@@ -52,7 +80,7 @@ describe('pi-ai gateway compatibility declarations', () => {
 
   it.each([
     'supportsMidConvoEffort', 'allowedFallbackModels', 'supportsMidConvoSystemMessages',
-    'supportsMidConvoToolAdditions', 'supportsMidConvoToolChanges', 'sessionAffinityFormat',
+    'supportsMidConvoToolAdditions', 'supportsMidConvoToolChanges',
   ])('withholds catalog-owned %s', (field) => {
     expect(() => resolved({ [field]: true }, 'anthropic-messages'))
       .toThrow(/which is not configurable here/)

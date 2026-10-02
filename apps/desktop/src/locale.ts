@@ -1,6 +1,7 @@
 /** Typed English and Chinese copy owned by the Electron shell. */
 
 export const en = {
+  startupLoading: 'Starting…',
   cliCommandMenu: 'Manage dsh Command…',
   cliCommandTitle: 'Manage dsh Command',
   cliCommandLocation: 'Desktop command: {path}',
@@ -34,6 +35,12 @@ export const en = {
   aboutMenu: 'About DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'Version V{version}',
+  gsUpdateInvalid: 'The server returned invalid update information. Please contact your administrator.',
+  gsUpdateStale: 'The confirmed release has changed. Please check for updates again.',
+  gsUpdateNotAvailable: 'This release is not available for download yet.',
+  gsUpdateDownloadFailed: 'The installer download or file validation failed. Please try again.',
+  gsUpdateAvailableFrom: 'Downloads are available from {time}.',
+  gsProductServer: 'Server: {server}\nUpdate channel: server client configuration',
   hideApplication: 'Hide DeepSeek Harness',
   hideOtherApplications: 'Hide Others',
   showAllApplications: 'Show All',
@@ -172,6 +179,7 @@ export const en = {
 export type DesktopMessages = { readonly [Key in keyof typeof en]: string }
 
 export const zh = {
+  startupLoading: '正在启动…',
   cliCommandMenu: '管理 dsh 命令…',
   cliCommandTitle: '管理 dsh 命令',
   cliCommandLocation: 'Desktop 命令：{path}',
@@ -205,6 +213,12 @@ export const zh = {
   aboutMenu: '关于 DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: '版本 V{version}',
+  gsUpdateInvalid: '服务端返回的更新信息无效，请联系管理员。',
+  gsUpdateStale: '已确认的版本发生变化，请重新检查更新。',
+  gsUpdateNotAvailable: '此版本尚未开放下载。',
+  gsUpdateDownloadFailed: '安装包下载或文件校验失败，请重试。',
+  gsUpdateAvailableFrom: '此版本将于 {time} 开放下载。',
+  gsProductServer: '服务端：{server}\n更新渠道：服务端客户端配置',
   hideApplication: '隐藏 DeepSeek Harness',
   hideOtherApplications: '隐藏其他',
   showAllApplications: '显示全部',
@@ -343,6 +357,20 @@ export const zh = {
 export interface DesktopLocale {
   readonly id: 'en' | 'zh-CN'
   readonly messages: DesktopMessages
+}
+
+/**
+ * Apply the server-delivered product name to the native shell's localized messages.
+ * @param locale - Selected complete dictionary.
+ * @param name - Effective product name from the GS brand store.
+ * @returns A dictionary retaining the selected language and named placeholders.
+ */
+export function withDesktopProductName(locale: DesktopLocale, name: string): DesktopLocale {
+  const messages = { ...locale.messages }
+  for (const key of Object.keys(messages) as (keyof DesktopMessages)[]) {
+    messages[key] = messages[key].replaceAll('DeepSeek Harness', name)
+  }
+  return { id: locale.id, messages }
 }
 
 /** Resolve Electron's locale to one shipped Desktop dictionary. */

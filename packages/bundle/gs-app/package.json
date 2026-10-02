@@ -1,0 +1,99 @@
+{
+  "name": "@deepseek-ai/dsh-gs-app",
+  "description": "The gs-worker (国盛办公AI) product bundle: patch layer over dsh-base + dsh-web-app wiring gsclaw-server integration, the model-gateway adapter, sensitive-data compliance, server skills, vision routing, and the 国盛证券办公助理 persona",
+  "version": "0.2.0-rc.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/bundle/gs-app"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./vision-bridge": {
+      "types": "./lib/types/vision-bridge.d.ts",
+      "default": "./lib/vision-bridge.js"
+    },
+    "./skills-routes": {
+      "types": "./lib/types/skills-routes.d.ts",
+      "default": "./lib/skills-routes.js"
+    },
+    "./agent-policy": { "types": "./lib/types/agent-policy.d.ts", "default": "./lib/agent-policy.js" },
+    "./prompt-language": { "types": "./lib/types/prompt-language.d.ts", "default": "./lib/prompt-language.js" },
+    "./prompt-policy": { "types": "./lib/types/prompt-policy.d.ts", "default": "./lib/prompt-policy.js" },
+    "./skill-policy": { "types": "./lib/types/skill-policy.d.ts", "default": "./lib/skill-policy.js" },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "lib/vision-bridge.js",
+    "lib/skills-routes.js",
+    "lib/agent-policy.js",
+    "lib/prompt-language.js",
+    "lib/prompt-policy.js",
+    "lib/skill-policy.js",
+    "lib/mcp-vision-server.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-gs-server": "workspace:*",
+    "@deepseek-ai/dsh-host-webserver": "workspace:*",
+    "@deepseek-ai/dsh-skill": "workspace:*",
+    "@deepseek-ai/dsh-schedule": "workspace:*",
+    "@deepseek-ai/dsh-time-context": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-schedule": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-brand-gs": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-account-gs": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-skills-gs": "workspace:*",
+    "@deepseek-ai/dsh-gs-server-skills": "workspace:*",
+    "@deepseek-ai/dsh-llm-gs-gateway": "workspace:*",
+    "@deepseek-ai/dsh-mcp-client": "workspace:*",
+    "@deepseek-ai/dsh-sensitive-policy": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
+    "@deepseek-ai/dsh-user-approval": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-fs-sandbox": "workspace:*",
+    "@deepseek-ai/dsh-tool-fs": "workspace:*",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-session-projection": "workspace:*",
+    "@deepseek-ai/dsh-agent-loop": "workspace:*",
+    "@deepseek-ai/dsh-tool-skill": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/cordis-plugin-include": "workspace:~",
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-system-prompt": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*"
+  }
+}

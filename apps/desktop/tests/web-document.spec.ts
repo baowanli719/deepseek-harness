@@ -2,6 +2,10 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import type { GsServer } from '@deepseek-ai/dsh-gs-server'
+import { handleGsBrandRequest } from '@deepseek-ai/dsh-gs-server/src/routes.ts'
 import { authenticateWebHost, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
 
 const roots: string[] = []
@@ -35,6 +39,19 @@ it('requires the Host authentication exchange and retains only its cookie value'
   await expect(authenticateWebHost('http://127.0.0.1:1234/')).rejects.toThrow('authentication failed')
 })
 
+it('inserts escaped startup copy before the Web entry without contacting the Host', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'desktop-boot-brand-'))
+  roots.push(root)
+  await writeFile(join(root, 'index.html'), '<html><head></head><body></body></html>')
+  const response = await serveWebDocument(new Request('dsh-app://app/'), root, {
+    wordmark: '国盛办公AI"/><script>bad()</script>', hint: '正在启动… & 等待',
+  })
+  const html = await response.text()
+  expect(html).toContain('name="dsh-boot-wordmark" content="国盛办公AI&quot;/&gt;&lt;script&gt;bad()&lt;/script&gt;"')
+  expect(html).toContain('name="dsh-boot-hint" content="正在启动… &amp; 等待"')
+  expect(html).not.toContain('<script>bad()')
+})
+
 it('forwards upload bytes and cancellation with Host credentials while keeping the response streaming', async () => {
   const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('stream')); controller.close() } })
   const fetch = vi.fn().mockResolvedValue(new Response(body, { headers: { 'content-encoding': 'gzip', 'set-cookie': 'private' } }))
@@ -46,7 +63,8 @@ it('forwards upload bytes and cancellation with Host credentials while keeping t
   const [target, init] = fetch.mock.calls[0] as [URL, RequestInit]
   expect(target.href).toBe('http://127.0.0.1:1234/api/upload?name=file')
   expect(new Headers(init.headers).get('cookie')).toBe('session=owned')
-  expect(new Headers(init.headers).get('origin')).toBeNull()
+  expect(new Headers(init.headers).get('origin')).toBe('http://127.0.0.1:1234')
+  expect(new Headers(init.headers).get('sec-fetch-site')).toBe('same-origin')
   expect(init.signal).toBe(request.signal)
   expect(init.body).toBe(request.body)
   expect(response.headers.get('set-cookie')).toBeNull()
@@ -85,4 +103,36 @@ it('refuses another page origin without forwarding its request', async () => {
   const response = await forwardWebRequest(new Request('dsh-app://app/api/read', { headers: { origin: 'https://other.example' } }), 'http://127.0.0.1:1234/', 'session=owned')
   expect(response.status).toBe(403)
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it('refuses cross-site metadata even when the browser omitted Origin', async () => {
+  const fetch = vi.fn()
+  vi.stubGlobal('fetch', fetch)
+  const response = await forwardWebRequest(new Request('dsh-app://app/api/gs-server/brand', {
+    headers: { 'sec-fetch-site': 'cross-site', referer: 'https://other.example/' },
+  }), 'http://127.0.0.1:1234/', 'session=owned')
+  expect(response.status).toBe(403)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('delivers server brand copy through the real private loopback route', async () => {
+  const brand = { name: '国盛办公AI', headline: '今天想让办公智能体做什么？' }
+  const endpoint: { origin?: string } = {}
+  const server = createServer((req, res) => {
+    expect(req.headers.cookie).toBe('session=owned')
+    if (endpoint.origin === undefined) throw new Error('brand fixture listener has not published readiness')
+    handleGsBrandRequest(req, res, endpoint.origin, { brandView: () => brand } as GsServer)
+  })
+  await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+  const hostOrigin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  endpoint.origin = hostOrigin
+  try {
+    const response = await forwardWebRequest(new Request('dsh-app://app/api/gs-server/brand', {
+      headers: { 'sec-fetch-site': 'same-origin', referer: 'dsh-app://app/' },
+    }), `${hostOrigin}/`, 'session=owned')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(brand)
+  } finally {
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }); server.closeIdleConnections() })
+  }
 })

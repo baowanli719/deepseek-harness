@@ -253,10 +253,10 @@ const COMPLETIONS_COMPAT_GATE = {
   vercelGatewayRouting: 'withhold',
   zaiToolStream: 'withhold',
   supportsOpenAIGrammarTools: 'withhold',
-  sendSessionAffinityHeaders: 'withhold',
+  sendSessionAffinityHeaders: 'offer',
   supportsMidConvoSystemMessages: 'withhold',
   supportsMidConvoToolAdditions: 'withhold',
-  sessionAffinityFormat: 'withhold',
+  sessionAffinityFormat: 'offer',
 } as const satisfies Record<keyof OpenAICompletionsCompat, CompatDisposition>
 
 /** Disposition of every `OpenAIResponsesCompat` field; a drift gate like the one above. */
@@ -441,6 +441,21 @@ export interface PiAiCompatProfile {
   allowEmptySignature?: boolean
   /** Whether the endpoint accepts Anthropic strict tool schemas; `anthropic-messages`. */
   supportsStrictTools?: boolean
+  /**
+   * Whether to send session-affinity headers derived from the request's
+   * session id; `openai-completions`. pi-ai auto-enables them for OpenRouter
+   * endpoints only, so a private gateway the deployment owns cannot be
+   * detected — that gateway is exactly the deployment that may opt in, because
+   * the headers disclose the session id to the endpoint.
+   */
+  sendSessionAffinityHeaders?: boolean
+  /**
+   * Session-affinity header format; `openai-completions`, read only when
+   * {@link sendSessionAffinityHeaders} is on. Only `openrouter` — a single
+   * `x-session-id` header — is offered: the `openai` formats restate the same
+   * session id under three header names.
+   */
+  sessionAffinityFormat?: 'openrouter'
 }
 
 /** Compile-time constraint that `T` is `never`. */

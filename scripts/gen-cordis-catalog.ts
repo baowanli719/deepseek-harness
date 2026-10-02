@@ -50,6 +50,12 @@ export { REGION_BEGIN, REGION_END }
  * errors, so the partition can never silently drift from the service API.
  */
 export const SERVICE_PAGE: Record<string, string> = {
+  gsLlmGateway: 'llm-streaming.md',
+  gsServer: 'boot.md',
+  gsServerSkillCatalog: 'skills.md',
+  gsServerSkillGate: 'skills.md',
+  gsServerSkillPreferences: 'skills.md',
+  sensitivePolicy: 'session.md',
   speechToText: 'voice-input.md',
   speechController: 'voice-input.md',
   otel: 'otel.md',
@@ -163,6 +169,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  gsLocalSkills: 'GS product local-skill roots and refresh callback are owned by packages/skill/gs-server-skills/README.md.',
   invocation: 'not a service: per-call accessor (RemoteInvocation | undefined) the Gateway derives for each Remote call — packages/api/gateway/README.md owns the contract',
   webTerminals: 'client-side terminal view models — packages/api/terminal-controller/README.md owns the API',
   appReady: 'not a service: launcher-provided successful-startup signal — packages/boot/cmdline/README.md owns the launcher contract',
@@ -212,6 +219,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
  * {@link EVENT_WALK_EXEMPTIONS} names each one with its documentation owner.
  */
 export const EVENT_SCOPE_PAGE: Record<string, string> = {
+  'gs-server': 'boot.md',
   'app-boot': 'boot.md',
   hmr: 'boot.md',
   'plugin-manager': 'boot.md',
@@ -808,6 +816,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
 
 /** TypeScript lib and pinned framework types with no repository-owned data page. */
 export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
+  'RequestInit',
   'Entry', 'Array',
   'Plugin',
   'AbortSignal',
@@ -838,6 +847,28 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  GsAuthMethods: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsAuthSnapshot: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsBrandView: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsCaptcha: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsClientConfigSnapshot: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsEmailCodeResponse: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsEmailLogin: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsPasswordLogin: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsServerMetaView: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsServerRuntimeType: 'GS protocol type is owned by packages/skill/gs-server-skills/README.md and its source contract.',
+  GsServerSkillCatalogSnapshot: 'GS protocol type is owned by packages/skill/gs-server-skills/README.md and its source contract.',
+  GsServerSkillRemoteEntry: 'GS protocol type is owned by packages/skill/gs-server-skills/README.md and its source contract.',
+  GsSessionView: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  GsSkillCatalogEntry: 'GS protocol type is owned by packages/skill/gs-server-skills/README.md and its source contract.',
+  GsTokenPair: 'GS protocol type is owned by packages/api/gs-server/README.md and its source contract.',
+  SensitivePolicyEvent: 'GS protocol type is owned by packages/guard/sensitive-policy/README.md and its source contract.',
+  SensitivePolicyView: 'GS protocol type is owned by packages/guard/sensitive-policy/README.md and its source contract.',
+  SensitivePrivateCause: 'GS protocol type is owned by packages/guard/sensitive-policy/README.md and its source contract.',
+  SensitiveSessionState: 'GS protocol type is owned by packages/guard/sensitive-policy/README.md and its source contract.',
+  ServerSkillPreferenceRow: 'GS protocol type is owned by packages/skill/gs-server-skills/README.md and its source contract.',
+  GsClientConfig: 'GS gateway policy payload is owned by packages/api/gs-server/README.md and src/contract.ts.',
+  GsAuthUser: 'Token-free GS account projection is owned by packages/api/gs-server/README.md and src/contract.ts.',
   ProductEvent: 'Desktop event fields are owned by packages/client/product-analytics/README.md and src/events.ts',
   ConnectionFetchHandler: 'shared Fetch dispatch is owned by packages/client/connection/src/rpc.ts',
   ConnectionRequestRejection: 'transport rejection status is owned by packages/client/connection/src/rpc.ts',

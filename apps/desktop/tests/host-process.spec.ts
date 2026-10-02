@@ -73,6 +73,20 @@ afterEach(async () => {
 })
 
 describe('desktop host process', () => {
+  it('delivers GS logout over private IPC and ignores termination-time notifications', async () => {
+    const source = HTTP_HOST.replace("if (request.url === '/fatal')", "if (request.url === '/ended') { process.send({ type: 'gs-session-ended' }); response.end('ended'); return }\n  if (request.url === '/fatal')")
+      .replace("process.send({ type: 'shutdown-complete' }", "process.send({ type: 'gs-session-ended' }); process.send({ type: 'shutdown-complete' }")
+    const runtime = projectWithHost(source)
+    const ended = vi.fn()
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+      undefined, undefined, undefined, undefined, ended)
+    hosts.push(host)
+    const { url } = await host.start()
+    await fetch(new URL('/ended', url))
+    await expect.poll(() => ended.mock.calls.length).toBe(1)
+    await host.stop()
+    expect(ended).toHaveBeenCalledTimes(1)
+  })
   it('correlates task inspections and admission changes over private IPC', async () => {
     const host = hostProcess(projectWithHost())
     await expect(host.updateTasks('inspect')).rejects.toThrow('Host is unavailable')

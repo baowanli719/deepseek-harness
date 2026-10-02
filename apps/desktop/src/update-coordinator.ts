@@ -11,6 +11,18 @@ import { DesktopUpdatePreparationError } from './update-error.ts'
 
 const { autoUpdater } = electronUpdater
 
+/** Product-owned release channel sharing the shell's confirmation and task shutdown flow. */
+export interface DesktopReleaseSource {
+  /** Pull a release version; undefined means the server has published no applicable release. */
+  check(): Promise<string | undefined>
+  /** Download the checked version after user confirmation, reporting bounded progress. */
+  download(version: string, progress: (percent: number) => void): Promise<void>
+  /** Launch the prepared installer after the shell has completed task shutdown. */
+  install(version: string): Promise<void>
+  /** Cancel outstanding requests and prevent further installer handoffs. */
+  dispose(): void
+}
+
 /** Owns one updater target until its download and installation settle. */
 export class DesktopUpdateCoordinator {
   private current: DesktopUpdateState = { phase: 'idle' }
@@ -22,9 +34,13 @@ export class DesktopUpdateCoordinator {
   private installOperation: Promise<DesktopUpdateState> | undefined
 
   private readonly onProgress = (progress: ProgressInfo): void => {
+    this.reportProgress(progress.percent)
+  }
+
+  private reportProgress(percent: number): void {
     if (this.downloadOperation === undefined || this.downloaded) return
-    const percent = Math.min(100, Math.max(0, progress.percent))
-    this.setState({ phase: percent >= 100 ? 'verifying' : 'downloading', ...this.target(), percent })
+    const bounded = Math.min(100, Math.max(0, percent))
+    this.setState({ phase: bounded >= 100 ? 'verifying' : 'downloading', ...this.target(), percent: bounded })
   }
 
   private readonly onDownloaded = (info: UpdateInfo): void => {
@@ -46,6 +62,7 @@ export class DesktopUpdateCoordinator {
    * @param enabled - Whether this process has a packaged update source.
    * @param currentVersion - Actual installed application version.
    * @param downloadResult - Once per completed download attempt, including platform preparation failures.
+   * @param releaseSource - Product channel replacing the public Electron feed, including its download and install handoff.
    */
   constructor(
     private readonly publish: (state: DesktopUpdateState) => DesktopUpdateState,
@@ -54,8 +71,9 @@ export class DesktopUpdateCoordinator {
     private readonly enabled: () => boolean = () => app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')),
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
+    private readonly releaseSource?: DesktopReleaseSource,
   ) {
-    if (updater === autoUpdater) {
+    if (releaseSource === undefined && updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.
       // Real-Electron qualification exercises the pinned dependency integration.
       const transportOwner = updater as AppUpdater & { httpExecutor: DesktopUpdateHttpExecutor }
@@ -108,7 +126,11 @@ export class DesktopUpdateCoordinator {
       if (version !== this.candidate) throw new Error('desktop update: download confirmation is stale')
       this.setState({ phase: 'downloading', version, percent: 0 })
       try {
-        await this.updater.downloadUpdate()
+        if (this.releaseSource === undefined) await this.updater.downloadUpdate()
+        else {
+          await this.releaseSource.download(version, (percent) => { this.reportProgress(percent) })
+          this.downloaded = true
+        }
         if (!this.downloaded) throw new Error('desktop update: platform preparation did not report readiness')
         this.downloadResult?.(true)
         return this.setState({ phase: 'ready', version })
@@ -134,7 +156,8 @@ export class DesktopUpdateCoordinator {
       try {
         if (!await this.beforeRestart()) return this.setState({ phase: 'ready', version })
         this.assertLive()
-        this.updater.quitAndInstall(true, true)
+        if (this.releaseSource === undefined) this.updater.quitAndInstall(true, true)
+        else await this.releaseSource.install(version)
         return this.current
       } catch (error) {
         if (this.current.phase === 'error' && this.current.failedOperation === 'install') return this.current
@@ -147,6 +170,7 @@ export class DesktopUpdateCoordinator {
   /** Remove owned listeners and prevent pending library operations from publishing into closed UI. */
   dispose(): void {
     this.disposed = true
+    this.releaseSource?.dispose()
     this.updater.off('download-progress', this.onProgress)
     this.updater.off('update-downloaded', this.onDownloaded)
     // Pending updater promises can still emit EventEmitter errors during shutdown.
@@ -182,6 +206,13 @@ export class DesktopUpdateCoordinator {
   private async doCheck(): Promise<DesktopUpdateState> {
     try {
       this.assertLive()
+      if (this.releaseSource !== undefined) {
+        const version = await this.releaseSource.check()
+        this.assertLive()
+        if (version !== undefined && valid(version) === null) throw new Error('desktop update: server version is invalid')
+        this.candidate = version !== undefined && gt(version, this.currentVersion()) ? version : undefined
+        return this.setState(this.candidate === undefined ? { phase: 'idle' } : { phase: 'available', version: this.candidate })
+      }
       if (!this.enabled()) throw new Error('desktop update: this application has no packaged update source')
       const result = await this.updater.checkForUpdates()
       if (result === null) throw new Error('desktop update: no check result was returned')

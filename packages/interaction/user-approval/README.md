@@ -25,6 +25,8 @@ Use this package to require a one-shot decision before a sensitive tool action p
 <a id="use-this-package"></a>
 ## Use this package
 
+`constrain(policy)` registers a disposable live restriction. Any constraint returning `never` rejects approval requests regardless of local session overrides; removing the contribution restores the remaining effective policy.
+
 Compose this service when sensitive tool actions should pause for a human or machine decision instead of running unconditionally. The tools pipeline and the sandboxed bash tool route their `ask` decisions through this seam and fail closed when it is absent, so interactive deployments mount it with at least one answerer.
 
 ### Composing answerers

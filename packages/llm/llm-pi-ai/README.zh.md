@@ -104,6 +104,8 @@ profile 的 `models` 列表会替换而非扩展路由的已安装目录；每�
 
 对于自托管 Chat Completions 端点，`thinkingTokenBudgetField` 选择推理预算参数，`vllmPriority` 在服务端启用优先级调度时设置整数调度优先级。模板参数接受 `$var: thinking.budget`。`openai-responses` 网关可设置 `supportsMaxOutputTokens: false` 来省略 `max_output_tokens`；Azure 与 Codex 传输会忽略这个共享兼容字段。这些控制均需显式启用；目录拥有的 Anthropic effort 和回退能力不是可配置开关。
 
+部署方自有的 Chat Completions 网关若需要请求的会话 id——用于其自身边界内的审计或缓存路由——可通过 `compat.sendSessionAffinityHeaders: true` 打开 pi-ai 的会话亲和发射；`compat.sessionAffinityFormat` 只接受 `openrouter`，即单个 `x-session-id` 头，因为 `openai` 格式会把同一个 id 重复写在三个头名下。这些头会把会话 id 披露给端点，因此 pi-ai 只为 OpenRouter 自动启用，其余端点都必须显式声明。
+
 ### 运行时更改配置
 
 每次操作捕获当前 `providers` Config 引用。新增或修改的 provider 配置在表单持久化前验证；未更改的目录故障仍可编辑。路由集合或重试策略变化时原子更新注册；如果其他适配器已拥有所请求的路由，则保留先前路由。

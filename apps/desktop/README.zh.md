@@ -4,7 +4,11 @@
 
 桌面埋点遵循[产品采集策略](../../packages/client/product-analytics/README.zh.md)及其动态应用配置，不包含 Web 使用情况。安装更新会等待该操作的本地埋点接收请求结束，再锁定 API 准入并停止 Host。接收请求的时限为一秒，失败不会阻止安装，也不等待收集端完成发送。
 
-桌面应用是完整 dsh Web 应用外的一层 Electron 壳。Electron RunAsNode 子进程启动共享 profile runner，Electron 立即从 `dsh-app://app/` 加载打包内的 Web 入口。共享加载页等待 Host 启动注入，然后在同一文档中启动客户端。Electron 将应用 HTTP 请求转发给已认证的 Web Host，转发时丢弃描述 Node fetch 连接而非资源本身的响应头（`transfer-encoding`、`connection`、`keep-alive`），并把插件 bundle 响应标记为 `no-store`，因为其每次启动都变化的 revision 只会在 Chromium 磁盘缓存中累积；WebSocket 流连接到该 Host，仅为归属的应用窗口附加凭据。Node IPC 承载启动注入、就绪与关闭。Desktop 默认使用端口 `19387`，与 Web 的 `3080` 分开；可通过 `webserver.config.port` patch 覆盖。
+桌面应用是完整 dsh Web 应用外的一层 Electron 壳。Electron RunAsNode 子进程启动共享 profile runner，Electron 立即从 `dsh-app://app/` 加载打包内的 Web 入口。共享加载页等待 Host 启动注入，然后在同一文档中启动客户端。Electron 将应用 HTTP 请求转发给已认证的 Web Host，在附加凭证前拒绝外部 Origin 与跨站 fetch 元数据，并按该 Host 重建已接受请求的 Origin 与 fetch-site 元数据，转发时丢弃描述 Node fetch 连接而非资源本身的响应头（`transfer-encoding`、`connection`、`keep-alive`），并把插件 bundle 响应标记为 `no-store`，因为其每次启动都变化的 revision 只会在 Chromium 磁盘缓存中累积；WebSocket 流连接到该 Host，仅为归属的应用窗口附加凭据。Node IPC 承载启动注入、就绪与关闭。Desktop 默认使用端口 `19387`，与 Web 的 `3080` 分开；可通过 `webserver.config.port` patch 覆盖。
+
+Windows 在启动或其他用户操作打开工作区时，会恢复已最小化的窗口、显示窗口并将其置前聚焦。浏览器登录完成后若请求非激活显示，工作区仍保持后台显示。
+
+GS Desktop profile 在 Host 初始化和登录恢复完成前就显示本地启动页面，使用缓存的服务端品牌和系统语言。Host 注入仍等待登录判断；未登录时打开 账号密码和邮箱验证码登录窗口。已登录时在同一窗口替换启动内容，不再次显示或聚焦窗口，保留启动过程中用户的隐藏或最小化操作。每次启动完成后，会在 profile 目录下的 `desktop-startup.json` 记录页面加载、窗口显示、后台就绪和登录判断的耗时；该文件不包含凭据。
 
 应用菜单第一项“**关于 DeepSeek Harness**”打开 Electron 原生关于面板，展示应用图标、产品名称和当前安装的发布版本。菜单文案跟随桌面壳的语言。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。macOS 从应用包读取图标，因此未打包的开发启动会显示 Electron 图标；Windows 使用随包分发的 PNG。
 
@@ -164,6 +168,8 @@ Web 侧的对应命令是 `pnpm run dev:web` 与 `pnpm run start:web`，见[开�
 
 ### 启动引导
 
+`gs-desktop` profile 使用从 `dsh-desktop` 迁移的账号密码和邮箱验证码登录窗。启动时读取 Host 的 gs-server 会话，有已密封的 refresh token 时先恢复会话；未登录则打开 440×700 的密码或邮箱验证码表单。表单仅调用 Host 的私有回环路由，登录成功后进入工作区。上游 Desktop profile 继续使用原有欢迎流程。
+
 API Key 输入框初始为空，并通过 `autocomplete="new-password"` 请求 Chromium 不要自动填入已保存的登录密码。
 
 重复启动和 `dsh://open` 会保持工作区隐藏，直到启动凭据检查或欢迎页操作允许进入。从 Welcome 进入时，键盘焦点落在文档上，不选中侧边栏控件；Tab 导航仍可使用。
@@ -234,6 +240,25 @@ pnpm run package:desktop:win:x64
 macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
 
 每个目标都在 `apps/desktop/.desktop-build/targets/<target>/` 下持有自己的打包输入、已准备运行时、包集合、dsh 依赖树、pnpm 准备状态、未打包应用、更新元数据和最终产物。Electron 归档缓存继续由 `.desktop-build/downloads` 共享，因为每个归档文件名都包含版本、平台和架构，并且在解包前经过验证。目标构建绝不读取其他目标的可变准备状态。
+
+### 产品身份覆盖
+
+四个可选的 dotenv 设置可以把一次打包变成另一品牌的产品，而不触动上游默认值；它们全部属于平台 dotenv（`.env.windows` / `.env.macos`），环境变量中的同名值会和其他发布字段一样被剥离：
+
+- `DSH_DESKTOP_PRODUCT_NAME`——electron-builder 的 `productName`（窗口标题、安装目录、可执行文件名）。默认 `DeepSeek Harness`。
+- `DSH_DESKTOP_ARTIFACT_BASENAME`——产物文件名前缀（小写连字符 ASCII）。默认 `deepseek-harness`。
+- `DSH_DESKTOP_BRAND_DIR`——存放 `icon-windows.png`、`icon-macos.png` 与 `tray-windows.ico` 的目录，相对于 `apps/desktop` 或绝对路径。默认 `resources/`。当该目录还包含 `installer/` 子目录时，Windows 安装器会从那里取整套安装界面素材（`brand.png`、`brand-2x.png`、`brand-dark.png`、`brand-dark-2x.png`、`uninstaller-sidebar.png`），素材不全则让构建失败；安装器文案在 NSIS 编译期从 `DSH_DESKTOP_PRODUCT_NAME` 读取产品名。
+- `DSH_DESKTOP_PROFILE`——已安装应用初始化并启动的 dsh profile。默认 `desktop`。
+- `DSH_DESKTOP_NSIS_ALLOW_ALL_USERS`——置 `1` 时使用 NSIS 原生向导显示安装范围、目录、进度和完成页面；所有用户安装可申请管理员权限并选择 Program Files 下的子目录。默认保留自定义的仅当前用户安装器。
+- `DSH_DESKTOP_LEGACY_UNINSTALL_PROMPT`——置 `1` 时检查 HKCU 和两种 HKLM 注册表视图中的 dsh-desktop 2.x 旧版安装，先查 UUIDv5(appId) 卸载项，再按产品名扫描兜底。安装器显示检测到的版本并询问是否静默卸载；最多等待 30 秒，确认卸载项消失后继续。取消或超时则退出。默认关闭。卸载后若目录仍非空，需要手动清理残留文件或选择其他安装目录。
+
+gs-worker 构建同时开启这两个安装器开关，使安装包能覆盖任意安装模式下的旧版 gs-worker。
+
+profile 的决策：上游 `desktop` profile 不是 `PROFILE_TEMPLATES` 条目——外壳把它从 Web 模板（`dsh-base` + `dsh-web-app`）物化到 `$DSH_HOME/profiles/desktop`。品牌构建改为命名一个出厂模板：`gs-desktop` 把 `dsh-base` + `dsh-web-app` + `dsh-gs-app` 物化到 `$DSH_HOME/profiles/gs-desktop`，同一个开关还会用该模板的组合包闭包作为桌面包集的额外根，使运行时携带品牌组合包。electron-builder 把该选择以 `dshDesktopProfile` 烘焙进打包后的 manifest；外壳读取它来选定 profile 目录、初始化模板，以及传给 Host 的 `DSH_DESKTOP_PROFILE`。未打包的开发启动改为从环境变量读取 `DSH_DESKTOP_PROFILE`。
+
+gs-worker（国盛办公AI）构建使用 `productName`/产物前缀 `gs-worker`、`appId` `com.enterprise.officeagent`、`brand/gs`（图标由 `pnpm run render:gs-brand` 从 `brand/gs/source-mark.png` 渲染；该标志是国盛证券 logo 资产的只读副本），profile 为 `gs-desktop`，并设 `DSH_DESKTOP_NSIS_ALLOW_ALL_USERS=1`，使安装器能够覆盖上一版 gs-worker 产品的所有用户安装。Windows 主程序和安装包图标保留标志的透明背景，多尺寸 `icon-windows.ico` 去掉原白色底板；macOS 保留圆角底板。
+
+`gs-desktop` profile 通过已认证的 GS Host 路由 `/api/gs-server/app-update` 检查更新；该路由主动拉取当前端点的 `/api/client-config`，只返回 `config.appUpdate`。原生“关于”、托盘和退出文案使用服务端的有效品牌。GS 安装包在应用 manifest 与 Windows 资源中写入产品信息和统一的构建版本，不包含上游公开更新源和强制更新策略服务。GS 产品版本由 `brand/gs/product.json` 声明，内置 Harness 运行时保留上游版本。新 Windows 安装会写入 `DshRuntimeFamily=deepseek-harness`，避免以后被旧版 2.x 卸载提示误识别。检查不会自动下载。用户确认后，客户端使用服务端下发的对应平台直链，遵守 `availableFrom`，在交给安装器前校验原生文件格式，并复用外壳的任务检查和退出确认。`downloadWindow` 会校验格式，但不限制用户确认的下载。未登录、离线或更新信息格式错误时显示检查失败，不会误报为最新版本。
 
 ### 运行时文件筛选
 
@@ -321,7 +346,7 @@ Apple 工具使用 macOS 当前活动网络服务的 HTTP/HTTPS 代理。配置�
 pnpm run package:desktop:win:x64:unsigned
 ```
 
-该命令要求设置 `DSH_DESKTOP_APP_ID` 并具备常规构建依赖，包括编译原生模块所需的 Python 和 Visual C++ 构建工具。Python 不在 `PATH` 中时，将 `PYTHON` 设置为其可执行文件路径。命令将安装包写入 `.desktop-build/targets/win-x64/unsigned-artifacts/`，省略自动更新配置，清除签名凭据，且不生成发布完成记录。它不需要 EV 凭据或更新源地址。签名打包和上传命令仍遵循正式发布要求。
+该命令要求设置 `DSH_DESKTOP_APP_ID` 并具备常规构建依赖，包括编译原生模块所需的 Python 和 Visual C++ 构建工具。Python 不在 `PATH` 中时，将 `PYTHON` 设置为其可执行文件路径。命令将安装包写入 `.desktop-build/targets/win-x64/unsigned-artifacts/`，省略自动更新配置，清除签名凭据，且不生成发布完成记录。它不需要 EV 凭据或更新源地址。签名打包和上传命令仍遵循正式发布要求。当宿主机的文件索引器或杀毒软件以不允许删除的共享方式占用打包产物（例如 `resources/app.asar`），导致每次重建都在 unlink 处失败时，可将环境变量 `DSH_DESKTOP_BUILD_ROOT` 设置为被监听目录之外的目录，整个按目标划分的构建状态随之迁移。无法访问 GitHub 的宿主机还需要把 `ELECTRON_MIRROR` 与 `ELECTRON_BUILDER_BINARIES_MIRROR` 指向可达镜像。
 
 ### Windows 安装界面
 
@@ -400,7 +425,9 @@ macOS 打包在组装 App 时、代码签名前写入 `Contents/Resources/app-up
 
 ## 更新
 
-Windows 下载完成后的更新确认说明应用会在安装期间关闭、完成后自动打开，并提示期间不要重复启动。安装器携带 `--updated` 重启应用并直接打开工作区时，壳会将主窗口前置并聚焦一次，不启用永久置顶。启动进入欢迎页时会清除此请求，使后续登录保留正常的激活行为。普通启动和其他平台不执行此前置步骤。
+GS 更新仅接受不重定向的 HTTPS 下载，遵守服务端可用时间与每日下载窗口，并在下载后、安装前分别进行原生签名校验。Windows 固定已安装应用的签名证书并要求时间戳；macOS 固定已安装应用的 Team ID，并要求通过 Gatekeeper。无签名开发构建不能安装 GS 更新。GS 登出与过期会使桌面返回登录窗口。
+
+Windows 下载完成后的更新确认说明应用会在安装期间关闭、完成后自动打开，并提示期间不要重复启动。安装器携带 `--updated` 重启应用并直接打开工作区时，壳会将主窗口前置并聚焦一次，不启用永久置顶。启动进入欢迎页时会清除此请求，使后续登录保留正常的激活行为。Windows 普通启动激活工作区时也会将窗口前置。
 
 原生更新浮层在文档就绪且父窗口可见时显示，并在父窗口再次显示时恢复。关闭浮层会释放输入拦截和父窗口监听。[本地窗口验证](tests/README.zh.md#verification-overlay)无需启动工作区即可检查这些切换。
 

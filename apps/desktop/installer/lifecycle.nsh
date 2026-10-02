@@ -1,3 +1,4 @@
+!if "${DSH_NSIS_ALLOW_ALL_USERS}" != "1"
 Var InstallerProgressWindow
 
 Function InstallerGuiInit
@@ -41,9 +42,16 @@ Function InstallerWelcome
     StrCpy $InstallerPhase "welcome"
     Call InstallerCreate
 FunctionEnd
+!endif
 
 Function InstallerBeforeInstall
-    SetAutoClose true
+    !if "${DSH_NSIS_ALLOW_ALL_USERS}" == "1"
+        Call instFilesPre
+        StrCpy $InstallerPath $INSTDIR
+    !endif
+    !if "${DSH_NSIS_ALLOW_ALL_USERS}" != "1"
+        SetAutoClose true
+    !endif
     Call InstallerPreflight
     ${If} $InstallerError != ""
         MessageBox MB_OK|MB_ICONEXCLAMATION "$InstallerError" /SD IDOK
@@ -53,6 +61,7 @@ Function InstallerBeforeInstall
     Call InstallerCheckAppRunning
 FunctionEnd
 
+!if "${DSH_NSIS_ALLOW_ALL_USERS}" != "1"
 Function InstallerProgressShow
     ; Only the stock worker executes installation; this overlay runs on the UI thread.
     ShowWindow $mui.InstFilesPage 0
@@ -72,6 +81,7 @@ Function InstallerProgressShow
     System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.Ready", p 1)'
     ShowWindow $HWNDPARENT 5
 FunctionEnd
+!endif
 
 Function .onInstFailed
     MessageBox MB_OK|MB_ICONEXCLAMATION "$(INSTALLER_FAILED)" /SD IDOK
@@ -79,6 +89,7 @@ Function .onInstFailed
     Quit
 FunctionEnd
 
+!if "${DSH_NSIS_ALLOW_ALL_USERS}" != "1"
 Function InstallerFinish
     System::Call '$PLUGINSDIR\window-frame.dll::InstallerFinishProgress(p $InstallerProgressWindow) i.r0 ?c'
     ${If} $0 == 0
@@ -88,3 +99,4 @@ Function InstallerFinish
     StrCpy $InstallerPhase "success"
     Call InstallerCreate
 FunctionEnd
+!endif

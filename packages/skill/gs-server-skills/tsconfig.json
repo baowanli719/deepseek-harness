@@ -1,0 +1,31 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../api/gs-server"
+    },
+    {
+      "path": "../../guard/sensitive-policy"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../skill/skill"
+    },
+    {
+      "path": "../../core/tools"
+    }
+  ]
+}

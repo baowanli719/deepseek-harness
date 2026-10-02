@@ -39,6 +39,7 @@
 | `@deepseek-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list`、`schedule_update` | `ctx.tools`、`ctx.schedule`、live 根 Agent | `tool/call`、Schedule storage domain 创建、更新或删除、`tool/result` | - | Schedule 服务加载期间，在 live 根 Agent scope 内注册。接受 after_seconds、显式绝对 at、有界固定速率 every_seconds、带显式 IANA 时区的每日与每周本地时间，以及作为五字段表达式的 cron。管理使用宿主 storage domain；到期消息会恢复原 Session。 |
 | `@deepseek-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`、`ctx.lsp`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，因此其模型可见 schema 在更换提供方时保持稳定。运行时要求已注册提供方，例如 `@deepseek-ai/dsh-lsp-stdio`；如果没有提供方，查询会返回结构化 `LSP_UNAVAILABLE` 错误，而不会改变 schema。 |
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
+| `@deepseek-ai/dsh-gs-server-skills` | `run_data_query`、`run_mcp_skill` | `ctx.tools`、`ctx.skills`、`ctx.gsServer` | `tool/call`、`tool/result` | - | 桥接工具仅在服务端宣告匹配的 skillExecution 类型且有效目录持有该类型可执行技能时存在；执行被转发给拥有技能运行时的 gsclaw-server。受控的仅可信技能对这些工具永不可见。 |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`、`ctx.agents`、`ctx.skills` | `tool/call`、`tool/result`、`user/message replacement catalogs via agent.inject()` | - | - |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`、`session_event_search`、`session_event_trace`、`session_search`、`session_trace` | `ctx.tools`、`ctx.systemPrompt`、`ctx.sessionQuery`、`a calling Agent for workspace authority` | `tool/call`、`tool/result` | - | 这 5 个只读工具会隐藏提供方游标，并根据不可变的调用 agent 会话为每个结果授权。该包需要选择启用；需要强制截止时间或限制行内输出的组合还会挂载通用超时或 spill 策略。 |
 | `@deepseek-ai/dsh-tool-subagent` | `list_subagent_models`、`subagent` | `ctx.tools`、`ctx.subagents`、`ctx.systemPrompt`、`用于模型发现和所选路由校验的 ctx.llm` | `tool/call`、`tool/result`、`child session events through the chosen provider` | `subagent`、`subagent_fork` | 注册的委派工具名称取决于加载时 `toolName` 配置（默认为 `subagent`）；上述默认 schema 关闭模型选择，而发现 schema 则展示为已启用 Session 中可用的固定配套工具。Web preset 会在每个新顶层 Session 创建时读取插件页偏好，并为其子 Session 保留该决定；`subagent_fork` 始终使用固定路由。每个实例通过 `modelSelectionSettings`、`backgroundMode` 与 `enableRunInBackground` 独立控制是否读取模型选择设置及其后台行为。 |
@@ -1758,6 +1759,74 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 来源：[`packages/workflow/tool-ralph/src/index.ts`](../packages/workflow/tool-ralph/src/index.ts)
 
 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。
+
+<a id="deepseek-aidsh-gs-server-skills"></a>
+
+## `@deepseek-ai/dsh-gs-server-skills`
+
+### `run_data_query`
+
+运行服务端下发的数据查询技能中一个已声明的查询模板，并以文本返回结果行。请先用 skill 工具加载该技能；只使用其定义所声明的模板名与参数。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skill": {
+      "type": "string",
+      "description": "Exact skill name from the available skills catalog."
+    },
+    "query": {
+      "type": "string",
+      "description": "Query template name declared by the skill definition."
+    },
+    "params": {
+      "type": "object",
+      "description": "Template parameter values keyed by declared parameter name.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "skill",
+    "query"
+  ]
+}
+```
+
+来源：[`packages/skill/gs-server-skills/src/server-skill-tools.ts`](../packages/skill/gs-server-skills/src/server-skill-tools.ts)
+
+### `run_mcp_skill`
+
+调用服务端下发的 MCP 技能中一个已许可的工具，并以文本返回其结果。请先用 skill 工具加载该技能；只使用其定义所声明的工具名与参数形态。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skill": {
+      "type": "string",
+      "description": "Exact skill name from the available skills catalog."
+    },
+    "tool": {
+      "type": "string",
+      "description": "MCP tool name declared by the skill definition."
+    },
+    "arguments": {
+      "type": "object",
+      "description": "Tool arguments matching the declared input schema.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "skill",
+    "tool"
+  ]
+}
+```
+
+来源：[`packages/skill/gs-server-skills/src/server-skill-tools.ts`](../packages/skill/gs-server-skills/src/server-skill-tools.ts)
+
+桥接工具仅在服务端宣告匹配的 skillExecution 类型且有效目录持有该类型可执行技能时存在；执行被转发给拥有技能运行时的 gsclaw-server。受控的仅可信技能对这些工具永不可见。
 
 <a id="deepseek-aidsh-tool-skill"></a>
 

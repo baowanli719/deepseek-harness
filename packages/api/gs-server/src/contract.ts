@@ -1,0 +1,551 @@
+/**
+ * Wire contract for the gsclaw-server client layer.
+ *
+ * Two surfaces share this module: the outbound gsclaw-server API the Host
+ * consumes, and the private same-origin loopback routes the Host exposes
+ * (`/api/gs-server/*`) so a bundled login UI never touches tokens directly.
+ *
+ * @module
+ */
+
+import { GS_SKILL_POLICY_ERROR_CODES } from './policy.ts'
+
+/** Server-delivered brand copy; either field falls back to the built-in default. */
+export interface GsBrandConfig {
+  readonly name?: string
+  readonly headline?: string
+}
+
+/** Server skill-execution capability advertised by `GET /api/v1/meta`. */
+export interface GsSkillExecutionCapability {
+  readonly version: number
+  /** Executable runtime types the server bridges; currently `data-query` and `server-mcp`. */
+  readonly types: readonly string[]
+  /** Sensitive-skill policy protocol version; absent on servers without the capability. */
+  readonly policyVersion?: number
+}
+
+/** Server metadata returned by the public `GET /api/v1/meta` handshake. */
+export interface GsServerMeta {
+  readonly serviceName: string
+  readonly serviceVersion: string
+  readonly loginMethods: readonly ('password' | 'email_code')[]
+  readonly minimumClientVersion: string
+  readonly llmProxy: boolean
+  /** Server skill-execution protocol; absent on servers that predate the field. */
+  readonly skillExecution?: GsSkillExecutionCapability
+  /** Pre-login brand delivery; absent on servers that predate the field. */
+  readonly brand?: GsBrandConfig | null
+}
+
+/** One-time graphical captcha issued by `GET /api/auth/captcha`. */
+export interface GsCaptcha {
+  readonly captchaId: string
+  readonly svg: string
+  readonly expiresIn: number
+}
+
+/** Login-method switches returned by `GET /api/auth/methods`. */
+export interface GsAuthMethods {
+  readonly methods: {
+    readonly password: boolean
+    readonly wecom: boolean
+    readonly email: boolean
+  }
+}
+
+/** Authenticated user projection shared by login, refresh, and config responses. */
+export interface GsAuthUser {
+  readonly id: number
+  readonly username: string
+  readonly displayName: string
+  readonly role: string
+}
+
+/** Rotating token pair issued by login and `POST /api/v1/auth/refresh`. */
+export interface GsTokenPair {
+  readonly accessToken: string
+  readonly refreshToken: string
+  readonly expiresIn: number
+}
+
+/** Settings-page visibility controlled by the server. */
+export type GsSettingsPageMode = 'hidden' | 'readonly' | 'editable'
+
+/**
+ * Skill control table entry. Per skill, `off` removes it from the effective
+ * catalog while `on` or an unlisted skill follows the delivered catalog; the
+ * reserved key `SKILLs` is the master switch — `off` disables the whole skill
+ * feature.
+ */
+export type GsSkillControl = 'on' | 'off'
+
+/**
+ * Client-visible model provider. The gateway never echoes baseUrl or apiKey;
+ * clients only receive the protocol and the selectable model list.
+ */
+export interface GsModelProviderEntry {
+  readonly api: 'openai-completions'
+  readonly models: readonly {
+    readonly id: string
+    readonly name?: string
+    readonly input?: readonly string[]
+  }[]
+  /** Trust classification; absent on servers that predate the policy capability. */
+  readonly trustLevel?: 'trusted' | 'external'
+  /** Where inference runs; absent when the server does not classify it. */
+  readonly executionLocation?: 'local' | 'server'
+  /** Opaque policy revision of this provider entry. */
+  readonly revision?: string
+}
+
+/** Client-visible model configuration; null keeps local model settings. */
+export interface GsModelsConfig {
+  readonly providers: Record<string, GsModelProviderEntry>
+  /** Default model in `providerId/modelId` form. */
+  readonly defaultPrimary?: string
+}
+
+/** Private authenticated pull returning only the server's application update notice. */
+export const GS_SERVER_APP_UPDATE_PATH = '/api/gs-server/app-update'
+
+/** Server-pushed application update notice; null disables update prompts. */
+export interface GsAppUpdateConfig {
+  readonly version: string
+  readonly notes?: readonly string[]
+  readonly downloads: {
+    readonly windowsX64?: string
+    readonly macArm?: string
+    readonly macIntel?: string
+  }
+  readonly availableFrom?: string
+  readonly downloadWindow?: { readonly start: string; readonly end: string } | null
+}
+
+/** Server-pushed scrolling notice banner; null hides the banner. */
+export interface GsNoticeConfig {
+  readonly text: string
+  readonly startAt?: string
+  readonly endAt?: string
+  readonly dismissible?: boolean
+}
+
+/** Effective client configuration pushed at login/refresh and via `/api/client-config`. */
+export interface GsClientConfig {
+  readonly version: number
+  readonly agent: {
+    readonly sandboxProfile: 'read-only' | 'workspace-write' | 'tool-mediated'
+    readonly approvalPolicy: 'plan' | 'ask' | 'policy-auto'
+    readonly dataClass: 'public' | 'internal' | 'sensitive' | 'confidential'
+  }
+  readonly features: { readonly customModel: boolean }
+  readonly settingsPages: Record<string, GsSettingsPageMode>
+  readonly permissions: {
+    readonly allowSubmit: boolean
+    readonly allowExternalSkillInstall: boolean
+    /** Local skill creation gate; absent on older servers means allowed. */
+    readonly allowLocalSkillCreate?: boolean
+  }
+  readonly skills: Record<string, GsSkillControl>
+  /** Admin-flagged local skill restrictions: name+hash pairs gated as trusted-only. */
+  readonly localSkillRestrictions?: readonly GsLocalSkillRestrictionWire[]
+  readonly models: GsModelsConfig | null
+  readonly appUpdate: GsAppUpdateConfig | null
+  readonly notice: GsNoticeConfig | null
+  /** Server-pushed brand copy; null or absent keeps the cached/default brand. */
+  readonly brand?: GsBrandConfig | null
+}
+
+/** Wire form of one admin-flagged local skill restriction: trusted-only for exact content. */
+export interface GsLocalSkillRestrictionWire {
+  readonly name: string
+  /** SHA-256 hex of the restricted raw SKILL.md content. */
+  readonly contentHash: string
+}
+
+/** Success body of password login and email-code verify. */
+export interface GsLoginResponse {
+  readonly token: string
+  readonly tokens?: GsTokenPair
+  readonly user: GsAuthUser
+  readonly config: GsClientConfig
+}
+
+/** Success body of `POST /api/auth/email/send-code`. */
+export interface GsEmailCodeResponse {
+  readonly ok: boolean
+  readonly maskedEmail: string
+  readonly expiresIn: number
+  readonly resendIn: number
+}
+
+/** Success body of `POST /api/v1/auth/refresh`. */
+export interface GsRefreshResponse {
+  readonly tokens: GsTokenPair
+  readonly user: GsAuthUser
+  readonly config: GsClientConfig
+}
+
+/** Success body of the authenticated `GET /api/client-config`. */
+export interface GsClientConfigResponse {
+  readonly user: GsAuthUser
+  readonly config: GsClientConfig
+}
+
+/* ------------------------------------------------------------------ */
+/* Server-owned skill distribution.                                   */
+/* ------------------------------------------------------------------ */
+
+/** One skill summary from `GET /api/skills`; the server only sends enabled skills. */
+export interface GsServerSkill {
+  /** Initial activation; false delivers visibly without enabling. User choice wins. */
+  readonly defaultEnabled?: boolean
+  readonly id: string
+  readonly name: string
+  readonly displayName: string
+  readonly description: string
+  readonly version: string
+  readonly content: string
+  readonly enabled: boolean
+  readonly runtimeType: string
+  /** Data-egress policy; only present when the client declares the policy capability. */
+  readonly modelPolicy?: 'standard' | 'trusted-only'
+}
+
+/** Success body of `GET /api/skills`. */
+export interface GsSkillsResponse {
+  readonly skills: readonly GsServerSkill[]
+}
+
+/** One base64-encoded skill bundle file from `GET /api/skills/:name/files`. */
+export interface GsSkillFile {
+  readonly path: string
+  readonly base64: string
+}
+
+/** Success body of `GET /api/skills/:name/files`. */
+export interface GsSkillFilesResponse {
+  readonly name: string
+  readonly files: readonly GsSkillFile[]
+}
+
+/** One row of the `POST /api/skills/report-installed` body. */
+export interface GsInstalledSkillReport {
+  readonly id: string
+  readonly name: string
+  /** Delivery channel; server-delivered skills report `'server'`, residual registry entries report their real source. */
+  readonly source: string
+  readonly riskLevel?: string
+  readonly contentHash?: string
+}
+
+/** One review request of the report-installed response (object form is current). */
+export interface GsSkillReviewRequest {
+  readonly name: string
+  /** SHA-256 hex of the exact content the server wants uploaded. */
+  readonly contentHash?: string
+}
+
+/** Success body of `POST /api/skills/report-installed`; old servers may omit all fields. */
+export interface GsReportInstalledResponse {
+  readonly ok?: boolean
+  readonly count?: number
+  /** Skills whose SKILL.md content the server wants uploaded for review. */
+  readonly reviewRequests?: readonly (string | GsSkillReviewRequest)[]
+}
+
+/* ------------------------------------------------------------------ */
+/* Server skill execution protocol (`/api/v1/skills/*`).              */
+/* ------------------------------------------------------------------ */
+
+/** Runtime types the client bridges to server-side execution. */
+export const GS_SERVER_RUNTIME_TYPES = ['data-query', 'server-mcp'] as const
+
+/** One executable server runtime type. */
+export type GsServerRuntimeType = (typeof GS_SERVER_RUNTIME_TYPES)[number]
+
+/** One skill summary from `GET /api/v1/skills/catalog`; the server pre-filters visibility. */
+export interface GsSkillCatalogEntry {
+  /** Initial activation; omitted preserves legacy default-on behavior. */
+  readonly defaultEnabled?: boolean
+  readonly name: string
+  readonly displayName: string
+  readonly description: string
+  readonly version: string
+  readonly runtimeType: string
+  /** Opaque revision the execute request must echo back. */
+  readonly definitionRevision: string
+  /** Data-egress policy; only present when the client declares the policy capability. */
+  readonly modelPolicy?: 'standard' | 'trusted-only'
+}
+
+/** Success body of `GET /api/v1/skills/catalog`. */
+export interface GsSkillCatalogResponse {
+  readonly skills: readonly GsSkillCatalogEntry[]
+}
+
+/** One declared query-template parameter of a data-query skill. */
+export interface GsSkillQueryParam {
+  readonly name: string
+  readonly type: string
+  readonly required: boolean
+  readonly enum?: readonly string[]
+  readonly description?: string
+}
+
+/** Non-sensitive data-query definition: template names and parameter shapes only. */
+export interface GsSkillDataQueryDefinition {
+  readonly queries: readonly {
+    readonly name: string
+    readonly description?: string
+    readonly params: readonly GsSkillQueryParam[]
+  }[]
+}
+
+/** One allowlisted MCP tool schema of a server-mcp skill. */
+export interface GsSkillMcpTool {
+  readonly name: string
+  readonly description?: string
+  readonly inputSchema?: unknown
+}
+
+/** Success body of `GET /api/v1/skills/:name/definition`. */
+export interface GsSkillDefinitionResponse {
+  readonly name: string
+  readonly version: string
+  readonly runtimeType: string
+  readonly definitionRevision: string
+  /** SKILL.md body with the frontmatter already stripped by the server. */
+  readonly content: string
+  readonly dataQuery?: GsSkillDataQueryDefinition
+  readonly mcp?: { readonly tools: readonly GsSkillMcpTool[] }
+  /** Data-egress policy; only present when the client declares the policy capability. */
+  readonly modelPolicy?: 'standard' | 'trusted-only'
+}
+
+/** Request body of `POST /api/v1/skills/:name/execute`. */
+export interface GsSkillExecuteRequest {
+  readonly requestId: string
+  readonly sessionId?: string
+  readonly definitionRevision: string
+  /** data-query: `{ query, params }`; server-mcp: `{ tool, arguments }`. */
+  readonly arguments: Record<string, unknown>
+}
+
+/** One text block of an execute result. */
+export interface GsSkillExecuteContentBlock {
+  readonly type: 'text'
+  readonly text: string
+}
+
+/** Machine codes the execute endpoint reports, in either the HTTP or the result envelope. */
+export const GS_SKILL_EXECUTE_ERROR_CODES = [
+  'skill_unavailable',
+  'runtime_unsupported',
+  'definition_changed',
+  'invalid_arguments',
+  'execution_timeout',
+  'execution_failed',
+  'too_many_requests',
+  ...GS_SKILL_POLICY_ERROR_CODES,
+] as const
+
+/** One execute-endpoint machine error code. */
+export type GsSkillExecuteErrorCode = (typeof GS_SKILL_EXECUTE_ERROR_CODES)[number]
+
+/**
+ * Body of `POST /api/v1/skills/:name/execute`. Business failures keep HTTP 200
+ * with `status: 'error'`; authentication, validation, and concurrency failures
+ * use the HTTP `{ code, message, traceId }` envelope (409 `definition_changed`
+ * adds the current `definitionRevision`).
+ */
+export interface GsSkillExecuteResponse {
+  readonly requestId: string
+  readonly traceId: string
+  readonly status: 'ok' | 'error'
+  readonly content?: readonly GsSkillExecuteContentBlock[]
+  readonly truncated?: boolean
+  readonly error?: { readonly code: string; readonly message?: string }
+}
+
+/* ------------------------------------------------------------------ */
+/* Private loopback routes served by the Host webServer.              */
+/* ------------------------------------------------------------------ */
+
+/** Query the current endpoint and server handshake metadata. */
+export const GS_SERVER_META_PATH = '/api/gs-server/meta'
+
+/** Issue a fresh graphical captcha; null when the server predates captchas. */
+export const GS_SERVER_CAPTCHA_PATH = '/api/gs-server/captcha'
+
+/** Password login through the Host-owned credential channel. */
+export const GS_SERVER_LOGIN_PATH = '/api/gs-server/login'
+
+/** Send an email verification code for one account. */
+export const GS_SERVER_EMAIL_CODE_PATH = '/api/gs-server/email-code'
+
+/** Email-code login through the Host-owned credential channel. */
+export const GS_SERVER_EMAIL_LOGIN_PATH = '/api/gs-server/email-login'
+
+/** Revoke the session family and drop all local credential state. */
+export const GS_SERVER_LOGOUT_PATH = '/api/gs-server/logout'
+
+/** Read the current session state without exposing tokens. */
+export const GS_SERVER_SESSION_PATH = '/api/gs-server/session'
+
+/** Read the server-delivered skill catalog and its latest sync status. */
+export const GS_SERVER_SKILLS_PATH = '/api/gs-server/skills'
+
+/** Read and manage the local skills of the allowLocalSkillCreate "allowed" lane. */
+export const GS_SERVER_LOCAL_SKILLS_PATH = '/api/gs-server/local-skills'
+
+/** Read the effective brand copy resolved by the Host brand store. */
+export const GS_SERVER_BRAND_PATH = '/api/gs-server/brand'
+
+/** Renderer-safe brand view; always concrete after default/cache resolution. */
+export interface GsBrandView {
+  readonly name: string
+  readonly headline: string
+}
+
+/** Renderer-safe session view; tokens never leave the Host process. */
+export interface GsSessionView {
+  /** Whether the Host holds a usable access token. */
+  readonly status: 'signed-out' | 'signed-in'
+  /** Effective gsclaw-server endpoint in use. */
+  readonly endpoint: string
+  /** Authenticated user, present only while signed in. */
+  readonly user?: GsAuthUser
+}
+
+/** Meta route response: the configured endpoint plus the live handshake. */
+export interface GsServerMetaView {
+  readonly endpoint: string
+  readonly meta: GsServerMeta
+}
+
+/** How one delivered skill executes, for settings-page display. */
+export type GsSkillExecutionKind = 'desktop' | 'server-data-query' | 'server-mcp'
+
+/** Renderer-safe view of one server-delivered skill. */
+export interface GsSkillViewItem {
+  /** Effective activation after the account-local user choice. */
+  readonly enabled?: boolean
+  readonly name: string
+  readonly displayName?: string
+  readonly version?: string
+  readonly description: string
+  /** Raw server runtime type (`client`, `data-query`, `server-mcp`, or an unrecognized value). */
+  readonly runtimeType?: string
+  /** Resolved execution channel; absent on legacy catalogs. */
+  readonly execution?: GsSkillExecutionKind
+  /** False when the delivered skill cannot execute on this client (e.g. unknown runtime type). */
+  readonly available?: boolean
+  /** Machine key for the unavailability cause, rendered through the locale table. */
+  readonly unavailableReason?: string
+  /** Data-egress policy marker; trusted-only skills are listed but invocable only in private sessions. */
+  readonly policy?: 'trusted-only'
+}
+
+/** Renderer-safe server-skill sync view; bundle content stays in the Host process. */
+export interface GsSkillsView {
+  /** Latest synchronization outcome recorded by the server skill provider. */
+  readonly status: 'idle' | 'ok' | 'error' | 'signed-out'
+  /** ISO timestamp of the last successful catalog sync. */
+  readonly syncedAt?: string
+  readonly skills: readonly GsSkillViewItem[]
+  /** Server skill-execution capability from the meta handshake; absent before the first probe. */
+  readonly execution?: {
+    readonly supported: boolean
+    readonly types: readonly string[]
+  }
+  /** Whether the reserved `SKILLs` master switch disabled the whole skill feature. */
+  readonly masterOff?: boolean
+  /** Count of delivered skills suppressed by a per-skill `off` switch. */
+  readonly switchedOff?: number
+}
+
+/** Which of the two local skill roots produced one skill. */
+export type GsLocalSkillRoot = 'managed' | 'home'
+
+/** Renderer-safe view of one local skill; file content stays in the Host process. */
+export interface GsLocalSkillViewItem {
+  readonly name: string
+  readonly description: string
+  readonly root: GsLocalSkillRoot
+  /** True while the server bans local skill creation; the skill is listed but not loadable. */
+  readonly disabledByAdmin: boolean
+}
+
+/** Renderer-safe view of one skill file the scanner skipped, with the refusal reason. */
+export interface GsLocalSkillSkippedItem {
+  /** Which root the skipped file lives under. */
+  readonly root: GsLocalSkillRoot
+  /** File path relative to that root, e.g. `research_summary/SKILL.md`. */
+  readonly path: string
+  /** Machine-readable refusal reason from the parser or scanner. */
+  readonly reason: string
+}
+
+/** Renderer-safe local-skills view of the allowLocalSkillCreate lane. */
+export interface GsLocalSkillsView {
+  /** Effective local-creation permission; an absent permission (old server) means allowed. */
+  readonly allowLocalSkillCreate: boolean
+  /** Application-managed skill root, the target of the create and open actions. */
+  readonly managedRoot: string
+  /** User-home skill root (~/.skills), scanned after the managed root. */
+  readonly homeRoot: string
+  readonly skills: readonly GsLocalSkillViewItem[]
+  /** Files that looked like skills but were skipped, with reasons; empty when nothing was skipped. */
+  readonly skipped: readonly GsLocalSkillSkippedItem[]
+}
+
+/** Exact body accepted by the local-skills route. */
+export interface GsLocalSkillsRequest {
+  readonly action: 'create' | 'refresh' | 'open'
+  readonly name?: string
+  readonly description?: string
+}
+
+/** Exact body accepted by the password-login route. */
+export interface GsPasswordLoginRequest {
+  readonly username: string
+  readonly password: string
+  readonly captchaId?: string
+  readonly captchaCode?: string
+}
+
+/** Successful password login returns the fresh session view. */
+export type GsPasswordLoginResponse = GsSessionView
+
+/** Exact body accepted by the email-code route. */
+export interface GsEmailCodeRequest {
+  readonly account: string
+}
+
+/** Successful send-code handoff; the email address stays masked. */
+export type GsEmailCodeRouteResponse = GsEmailCodeResponse
+
+/** Exact body accepted by the email-login route. */
+export interface GsEmailLoginRequest {
+  readonly account: string
+  readonly code: string
+}
+
+/** Successful email login returns the fresh session view. */
+export type GsEmailLoginResponse = GsSessionView
+
+/** Exact empty body accepted by the logout route. */
+export type GsLogoutRequest = Readonly<Record<string, never>>
+
+/** Successful logout handoff. */
+export interface GsLogoutResponse {
+  readonly accepted: true
+}
+
+/** Stable renderer failure shape; carries the gateway code when one exists. */
+export interface GsServerErrorResponse {
+  readonly error: string
+  readonly code?: string
+  readonly retryAfter?: number
+}

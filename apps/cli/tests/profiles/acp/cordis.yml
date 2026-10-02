@@ -1,1 +1,4 @@
-../../../../../snapshots/acp/escalation-approved/cordis.yml
+- id: acp-snapshot-composition
+  name: cordis:include
+  config:
+    path: ../../../../../snapshots/acp/escalation-approved/cordis.yml

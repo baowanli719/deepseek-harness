@@ -53,6 +53,130 @@ async edit( entry: Entry, change: (current: Record<string, unknown>, inherited: 
 
 Source: [`packages/boot/config-editor/src/index.ts`](../../packages/boot/config-editor/src/index.ts)
 
+<a id="ctxgsserver--gsserver"></a>
+
+### `ctx.gsServer` — `GsServer`
+
+Host-owned gsclaw-server client service. Composes the endpoint store, the authentication state machine, the ClientConfig cache, and the brand store, and optionally mounts the private loopback routes and the log uploader.
+
+```ts cordis-catalog
+/**
+ * Current real access token, held only in memory; undefined while signed out.
+ * @returns the in-memory access token, or undefined.
+ */
+getAccessToken(): Promise<string | undefined>
+
+/**
+ * Authenticated request against the resolved gsclaw endpoint: attaches the
+ * Bearer token and the policy-version header, and on an expired-token 401
+ * runs one single-flight refresh before retrying exactly once. The response
+ * is returned verbatim; transport failures and the signed-out state reject
+ * with GatewayError.
+ * @param path - absolute API path beginning with `/`.
+ * @param init - fetch init carried verbatim; its headers merge under the credential headers.
+ * @returns the gateway response after at most one refresh retry.
+ */
+fetch(path: string, init?: RequestInit): Promise<Response>
+
+/**
+ * Latest cached server ClientConfig, or undefined before the first login/refresh.
+ * @returns the cached ClientConfig, or undefined.
+ */
+getClientConfig(): GsClientConfig | undefined
+
+/**
+ * Actively pull `/api/client-config` and update the cache.
+ * @returns the fresh user + config snapshot.
+ */
+refreshClientConfig(): Promise<GsClientConfigSnapshot>
+
+/**
+ * Token-free session view for UI projections.
+ * @returns the session view; tokens are never exposed.
+ */
+sessionView(): GsSessionView
+
+/**
+ * Live server handshake against the effective endpoint; doubles as the pre-login brand channel.
+ * @returns the effective endpoint plus the server metadata.
+ */
+async getMeta(): Promise<GsServerMetaView>
+
+/**
+ * Enabled login methods; never requires a session.
+ * @returns the login-method switches.
+ */
+getAuthMethods(): Promise<GsAuthMethods>
+
+/**
+ * One-time graphical captcha; null when the server predates captchas.
+ * @returns the captcha, or null on a legacy server.
+ */
+fetchCaptcha(): Promise<GsCaptcha | null>
+
+/**
+ * Password login; resolves with the fresh session view.
+ * @param login - credentials plus the solved captcha when the server asked for one.
+ * @returns the token-free session view after login.
+ */
+async loginWithPassword(login: GsPasswordLogin): Promise<GsSessionView>
+
+/**
+ * Send one email verification code to the account's registered address.
+ * @param account - account name or email accepted by the gateway.
+ * @returns the send-code outcome with second-normalized windows.
+ */
+sendEmailCode(account: string): Promise<GsEmailCodeResponse>
+
+/**
+ * Email-code login; resolves with the fresh session view.
+ * @param login - account plus the received verification code.
+ * @returns the token-free session view after login.
+ */
+async loginWithEmailCode(login: GsEmailLogin): Promise<GsSessionView>
+
+/**
+ * Host token-write entry for login surfaces this package does not ship
+ * (SSO, QR, or a native login window): adopt a gateway-issued token pair,
+ * sealing and persisting the refresh token exactly like a password login.
+ * @param tokens - rotating token pair issued by the gateway.
+ * @param user - authenticated user projection paired with the tokens.
+ * @param config - ClientConfig delivered alongside the tokens.
+ * @returns the token-free snapshot after adoption.
+ */
+adoptTokens(tokens: GsTokenPair, user: GsAuthUser, config: GsClientConfig): Promise<GsAuthSnapshot>
+
+/**
+ * Restore the persisted session after a restart, single-flight.
+ * @returns true when a session is live after the call.
+ */
+restoreSession(): Promise<boolean>
+
+/**
+ * Revoke the session family server-side on a best effort, then wipe all local credential state.
+ * @returns the token-free snapshot after logout.
+ */
+async logout(): Promise<GsAuthSnapshot>
+
+/**
+ * UI-safe view of the effective brand.
+ * @returns the frozen brand view.
+ */
+brandView(): GsBrandView
+
+/**
+ * Validate and persist one runtime endpoint override.
+ * @param value - new endpoint URL.
+ * @returns the normalized persisted endpoint.
+ */
+async setEndpointOverride(value: string): Promise<string>
+
+/** Drop the runtime endpoint override so environment and configured default apply again. */
+async clearEndpointOverride(): Promise<void>
+```
+
+Source: [`packages/api/gs-server/src/index.ts`](../../packages/api/gs-server/src/index.ts)
+
 <a id="ctxhmr--hmr"></a>
 
 ### `ctx.hmr` — `Hmr`
@@ -201,7 +325,7 @@ Source: [`packages/client/ui-plugin-manager/src/index.ts`](../../packages/client
 
 ### `ctx.profileContext` — `ProfileContext`
 
-Current profile facts; scheduling and mutation belong to their callers.
+Current profile facts; scheduling and mutation belong to their callers. An optional application-owned `transformPatches` callback transforms the complete ordered stack returned by `readProfilePatches`, both at startup and during configuration reload. `transformEntries` applies to effective rows before profile or Agent preset imports.
 
 Source: [`packages/boot/app-boot/src/profile-context.ts`](../../packages/boot/app-boot/src/profile-context.ts)
 
@@ -225,6 +349,96 @@ Profile patches were reconciled into the running Loader tree: every entry update
 ```
 
 Source: [`packages/boot/app-boot/src/index.ts`](../../packages/boot/app-boot/src/index.ts)
+
+<a id="gs-server-events"></a>
+
+### `gs-server/*` events
+
+<a id="gs-serverclient-config-changed--emit"></a>
+
+#### `gs-server/client-config-changed` — emit
+
+The cached server ClientConfig changed, by login/refresh push or by an active `refreshClientConfig()` pull.
+
+```ts cordis-catalog
+/**
+ * The cached server ClientConfig changed, by login/refresh push or by an
+ * active `refreshClientConfig()` pull.
+ * @mode emit
+ * @param config - the new effective ClientConfig.
+ */
+'gs-server/client-config-changed'(config: GsClientConfig): void
+```
+
+Source: [`packages/api/gs-server/src/index.ts`](../../packages/api/gs-server/src/index.ts)
+
+<a id="gs-serversession-ended--emit"></a>
+
+#### `gs-server/session-ended` — emit
+
+Local authentication ended through logout or an endpoint change.
+
+```ts cordis-catalog
+/**
+ * Local authentication ended through logout or an endpoint change.
+ * @mode emit
+ */
+'gs-server/session-ended'(): void
+```
+
+Source: [`packages/api/gs-server/src/index.ts`](../../packages/api/gs-server/src/index.ts)
+
+<a id="gs-serversession-established--emit"></a>
+
+#### `gs-server/session-established` — emit
+
+A gsclaw-server session became live: password/email login, host token adoption, restart restore, or a token refresh.
+
+```ts cordis-catalog
+/**
+ * A gsclaw-server session became live: password/email login, host token
+ * adoption, restart restore, or a token refresh.
+ * @mode emit
+ * @param user - authenticated user the established session belongs to.
+ */
+'gs-server/session-established'(user: GsAuthUser): void
+```
+
+Source: [`packages/api/gs-server/src/index.ts`](../../packages/api/gs-server/src/index.ts)
+
+<a id="gs-serversession-expired--emit"></a>
+
+#### `gs-server/session-expired` — emit
+
+The server rejected the refresh token as expired (401); local credential state was wiped. A user-initiated logout does not fire this event.
+
+```ts cordis-catalog
+/**
+ * The server rejected the refresh token as expired (401); local credential
+ * state was wiped. A user-initiated logout does not fire this event.
+ * @mode emit
+ */
+'gs-server/session-expired'(): void
+```
+
+Source: [`packages/api/gs-server/src/index.ts`](../../packages/api/gs-server/src/index.ts)
+
+<a id="gs-servertrust-revoked--emit"></a>
+
+#### `gs-server/trust-revoked` — emit
+
+The server revoked the credential family (403: account disabled or trust withdrawn); local credential state was wiped.
+
+```ts cordis-catalog
+/**
+ * The server revoked the credential family (403: account disabled or trust
+ * withdrawn); local credential state was wiped.
+ * @mode emit
+ */
+'gs-server/trust-revoked'(): void
+```
+
+Source: [`packages/api/gs-server/src/index.ts`](../../packages/api/gs-server/src/index.ts)
 
 <a id="hmr-events"></a>
 

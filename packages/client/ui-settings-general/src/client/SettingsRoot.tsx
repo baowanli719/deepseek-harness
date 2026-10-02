@@ -17,6 +17,7 @@ import {
   ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
   IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
+  IconSkillOutlineMedium, IconInfoOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
@@ -30,6 +31,8 @@ const CONNECTING_MIN_VISIBLE_MS = 800
 
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
 function navIcon(id: string) {
+  if (id === 'gs-skills') return <IconSkillOutlineMedium className={css.navIcon} size={16} />
+  if (id === 'gs-about') return <IconInfoOutlineMedium className={css.navIcon} size={16} />
   if (id === 'account') return <IconUserOutlineMedium className={css.navIcon} size={16} />
   if (id === 'models') return <IconDataOutlineMedium className={css.navIcon} size={16} />
   if (id === 'agent-presets') return <IconAgentPresetOutlineMedium className={css.navIcon} size={16} />
@@ -215,7 +218,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     <>
       <div className={clsx(css.triggerRow, !wide && css.railRow)}>
         {renderSlot('settings.launcher', {
-          wide, settingsOpen: open, openSettings: actions.open,
+          wide, settingsOpen: open, openSettings: actions.open, openSection,
           ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
           openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
         }, { fallback: <Tooltip disabled={open} label={t('trigger')} shortcutKeys={shortcut?.keys}>

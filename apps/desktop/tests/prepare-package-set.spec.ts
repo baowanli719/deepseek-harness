@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   assertDesktopHostPackageFiles,
+  desktopProfilePackageRoots,
   selectDesktopPackageClosure,
   type PackedDesktopPackage,
 } from '../scripts/prepare-package-set.ts'
@@ -90,5 +91,49 @@ describe('desktop package-set selection', () => {
       assertDesktopHostPackageFiles(files.slice(1))
     }).toThrow(/lib\/index\.js/u)
     expect(() => { assertDesktopHostPackageFiles(files.slice(0, 1)) }).toThrow(/lib\/cli\.js/u)
+  })
+})
+
+describe('desktop package-set profile roots', () => {
+  it('adds a branded profile template bundles to the closure roots', () => {
+    const available = new Map<string, PackedDesktopPackage>([
+      ['@deepseek-ai/dsh', packed('@deepseek-ai/dsh')],
+      ['@deepseek-ai/dsh-desktop-host', packed('@deepseek-ai/dsh-desktop-host')],
+      ['@deepseek-ai/dsh-base', packed('@deepseek-ai/dsh-base')],
+      ['@deepseek-ai/dsh-web-app', packed('@deepseek-ai/dsh-web-app')],
+      ['@deepseek-ai/dsh-gs-app', packed('@deepseek-ai/dsh-gs-app', {
+        dependencies: { '@deepseek-ai/dsh-gs-server': '^1.0.0' },
+      })],
+      ['@deepseek-ai/dsh-gs-server', packed('@deepseek-ai/dsh-gs-server')],
+    ])
+    expect(selectDesktopPackageClosure(available, [
+      '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-gs-app',
+    ]).map(entry => entry.manifest.name)).toEqual([
+      '@deepseek-ai/dsh',
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-desktop-host',
+      '@deepseek-ai/dsh-gs-app',
+      '@deepseek-ai/dsh-gs-server',
+      '@deepseek-ai/dsh-web-app',
+    ])
+  })
+
+  it('rejects a branded profile bundle absent from the packed release inputs', () => {
+    const available = new Map<string, PackedDesktopPackage>([
+      ['@deepseek-ai/dsh', packed('@deepseek-ai/dsh')],
+      ['@deepseek-ai/dsh-desktop-host', packed('@deepseek-ai/dsh-desktop-host')],
+    ])
+    expect(() => selectDesktopPackageClosure(available, ['@deepseek-ai/dsh-gs-app']))
+      .toThrow(/omit @deepseek-ai\/dsh-gs-app/u)
+  })
+
+  it('derives closure roots from DSH_DESKTOP_PROFILE only for a shipped branded profile', () => {
+    expect(desktopProfilePackageRoots({})).toEqual([])
+    expect(desktopProfilePackageRoots({ DSH_DESKTOP_PROFILE: 'desktop' })).toEqual([])
+    expect(desktopProfilePackageRoots({ DSH_DESKTOP_PROFILE: 'gs-desktop' })).toEqual([
+      '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-gs-app',
+    ])
+    expect(() => desktopProfilePackageRoots({ DSH_DESKTOP_PROFILE: 'unknown-profile' }))
+      .toThrow(/no shipped profile template/u)
   })
 })

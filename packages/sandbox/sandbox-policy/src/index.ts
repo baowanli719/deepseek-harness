@@ -122,6 +122,7 @@ export class SandboxPolicyService extends Service {
   readonly defaultMode: SandboxMode
   /** The absolute `workspace-write` fallback root for calls without a session cwd. */
   readonly workspaceRoot: string
+  private readonly constraints = new Set<(request: SandboxPolicyRequest) => SandboxMode>()
   constructor(ctx: Context, config: Config) {
     super(ctx, 'sandboxPolicy')
     // schemastery (static Config) already filled `mode`; the cast records that
@@ -163,11 +164,28 @@ export class SandboxPolicyService extends Service {
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
+    const modes: readonly SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access']
+    let mode = request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode
+    for (const constrain of this.constraints) {
+      const maximum = constrain(request)
+      if (modes.indexOf(maximum) < modes.indexOf(mode)) mode = maximum
+    }
     return {
-      mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
+      mode,
       workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
       ...session === undefined ? {} : { sessionId: session.id },
     }
+  }
+
+  /**
+   * Limit every resolution, including explicit escalations, to a live maximum mode.
+   * Multiple constraints can only tighten the policy.
+   * @param maximum - per-call upper bound owned by the registering policy.
+   * @returns disposer removing this constraint.
+   */
+  constrain(maximum: (request: SandboxPolicyRequest) => SandboxMode): () => void {
+    this.constraints.add(maximum)
+    return () => { this.constraints.delete(maximum) }
   }
 
   /**

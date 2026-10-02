@@ -3,7 +3,8 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
 import { readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
   app,
@@ -22,7 +23,7 @@ import {
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from 'electron'
-import { resolveDesktopPaths } from './paths.ts'
+import { DEFAULT_DESKTOP_PROFILE, resolveDesktopPaths, resolveDesktopProfileName } from './paths.ts'
 import { DesktopProjectManager } from './project-manager.ts'
 import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError } from './host-process.ts'
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
@@ -31,14 +32,19 @@ import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
 import { readDeviceInfo } from './device-info.ts'
-import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
+import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale, withDesktopProductName } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
+import { GsDesktopReleaseSource } from './gs-updates.ts'
 import { DesktopCommandManager } from './command-management.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
 import { openWelcomeWindow } from './welcome-window.ts'
+import { openGsLoginWindow } from './gs-login-window.ts'
+import { verifyGsUpdateSignature } from './gs-update-signature.ts'
+import { connectGsLogin, type GsLoginBackend } from './gs-login-backend.ts'
+
 import { WELCOME_IPC, needsWelcome, type WelcomeNotice } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
 import { DesktopUpdateJournal } from './update-journal.ts'
@@ -59,10 +65,22 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
+import { GsBrandStore, GS_BRAND_DEFAULT } from '@deepseek-ai/dsh-gs-server'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
+function requireGsLoginBackend(backend: GsLoginBackend | undefined): GsLoginBackend {
+  if (backend === undefined) throw new Error('gs login: backend unavailable')
+  return backend
+}
+
 let shuttingDown = false
+/**
+ * Profile this build owns, resolved from the packaged manifest at the start of
+ * main(). The fatal-recovery closure reads it before window setup completes.
+ */
+let activeProfileName = DEFAULT_DESKTOP_PROFILE
+let desktopProductName: string | undefined
 /**
  * Set by quit entries that must not ask: crash recovery exit and restart, and the
  * development restart command. The installer handoff has its own before-quit branch.
@@ -83,7 +101,8 @@ const rendererConsole = new RendererConsoleTail()
 app.setAppLogsPath()
 
 function currentDesktopLocale(): ReturnType<typeof resolveDesktopLocale> {
-  return resolveDesktopLocale(windowsLanguage ?? app.getLocale())
+  const locale = resolveDesktopLocale(windowsLanguage ?? app.getLocale())
+  return desktopProductName === undefined ? locale : withDesktopProductName(locale, desktopProductName)
 }
 /** Quit without the task confirmation; the caller has already decided the application must stop. */
 function quitWithoutConfirmation(): void {
@@ -95,7 +114,7 @@ const recovery = new DesktopFatalRecovery({
   show: options => dialog.showMessageBox(options),
   stop: () => { shuttingDown = true; return stopForRecovery() },
   disablePlugins: async () => {
-    const manager = new DesktopProjectManager(resolveDesktopPaths(), runtimeResources())
+    const manager = new DesktopProjectManager(resolveDesktopPaths(undefined, activeProfileName), runtimeResources(), activeProfileName)
     const backupPath = await manager.disableAllPlugins()
     console.info('Desktop profile recovery completed:', { profilePatchBackup: backupPath ?? null, homePatch: 'unchanged' })
   },
@@ -313,17 +332,25 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 }
 
 async function main(): Promise<void> {
+  const startupStarted = Date.now()
+  const startupStages: Record<string, number> = {}
+  const startupStage = (name: string): void => { startupStages[name] = Date.now() - startupStarted }
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
   const updateJournal = journalDirectory === undefined ? undefined : new DesktopUpdateJournal(journalDirectory, app.getVersion())
   const resources = runtimeResources()
-  const paths = resolveDesktopPaths()
+  const appManifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
+  if (typeof appManifest !== 'object' || appManifest === null) throw new Error('desktop policy: invalid application manifest')
+  const manifest = appManifest as Record<string, unknown>
+  activeProfileName = resolveDesktopProfileName(app.isPackaged ? manifest : undefined)
+  const gsDesktop = activeProfileName === 'gs-desktop'
+  const paths = resolveDesktopPaths(undefined, activeProfileName)
   const development = !app.isPackaged
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')
   const activeProject = paths.profile
-  const manager = new DesktopProjectManager(paths, resources)
+  const manager = new DesktopProjectManager(paths, resources, activeProfileName)
   // Dock and Finder launches inherit only launchd's environment; every Host shares one login-shell read.
   const loginShellRead = new AbortController()
   // The probe runs in its own process group, which outlives Desktop unless the read is aborted.
@@ -342,6 +369,7 @@ async function main(): Promise<void> {
   let mainWindow: BrowserWindow | undefined
   let welcomeWindow: BrowserWindow | undefined
   let enteredWorkspace = false
+  let startupWindow: BrowserWindow | undefined
   // NSIS passes --updated when it launches the application after installation.
   let raiseAfterUpdate = process.platform === 'win32' && process.argv.includes('--updated')
   let shellInstallerOwnsQuit = false
@@ -351,6 +379,10 @@ async function main(): Promise<void> {
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const systemLanguages = app.getPreferredSystemLanguages()
   let locale = resolveDesktopStartupLocale(null, systemLanguages)
+  desktopProductName = gsDesktop ? GS_BRAND_DEFAULT.name : undefined
+  if (desktopProductName !== undefined) locale = withDesktopProductName(locale, desktopProductName)
+  const bootBrand = gsDesktop ? GsBrandStore.load({ stateDir: join(paths.profile, 'gs-server') })
+    .then(store => store.current(), () => GS_BRAND_DEFAULT) : undefined
   windowsLanguage = locale.id
   let mandatoryPolicy: DesktopMandatoryUpdatePolicy | undefined
   let mandatoryUI: DesktopMandatoryUpdateWindow | undefined
@@ -382,8 +414,21 @@ async function main(): Promise<void> {
   // Copy comes from the same locale as the update prompts so the dialog
   // chrome and its content never mix languages.
   const showAbout = async (): Promise<void> => {
+    let serverDetail = ''
+    if (gsDesktop && gsLoginBackend !== undefined) {
+      try {
+        const result = await gsLoginBackend.meta()
+        const name = result.meta.brand?.name
+        if (typeof name === 'string' && name.trim()) {
+          desktopProductName = name
+          locale = withDesktopProductName(resolveDesktopLocale(locale.id), name)
+          refreshApplicationMenu()
+        }
+        serverDetail = '\n\n' + formatDesktopMessage(locale.messages.gsProductServer, { server: result.endpoint })
+      } catch (_cause) { /* Cached brand and local version remain available while the server is offline. */ }
+    }
     await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: locale.messages.aboutProduct,
-      detail: formatDesktopMessage(locale.messages.aboutVersion, { version: app.getVersion() }),
+      detail: formatDesktopMessage(locale.messages.aboutVersion, { version: app.getVersion() }) + serverDetail,
       buttons: [locale.messages.updateAcknowledge], cancelId: 0 })
   }
   const commandManager = new DesktopCommandManager({
@@ -402,6 +447,7 @@ async function main(): Promise<void> {
   const browserGuests = new DesktopBrowserGuests(() => hostUrl)
   let injections: readonly unknown[] = []
   let welcomeBackend: DesktopWelcomeBackend | undefined
+  let gsLoginBackend: GsLoginBackend | undefined
   let reportedLaunch = false
   let analyticsEnabled = false
   const track = async <K extends keyof ProductEventMap>(eventName: K, attributes: ProductEventMap[K]): Promise<void> => {
@@ -441,10 +487,15 @@ async function main(): Promise<void> {
     () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin')
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
+    const hostEnv = { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion(), DSH_DESKTOP_PROFILE: activeProfileName }
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
-      hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
+      hostInspectPort, hostEnv, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) }, () => {
+        if (!gsDesktop || quitting || shuttingDown) return
+        enteredWorkspace = false
+        void showWelcome().catch((cause: unknown) => { reportFatal(cause, 'main') })
+      })
     return {
       start: async () => {
         const ready = await host.start()
@@ -453,11 +504,12 @@ async function main(): Promise<void> {
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')
         injections = ready.injections
         welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
+        if (gsDesktop) gsLoginBackend = connectGsLogin(ready.url, (input, init) => net.fetch(input, init))
         analyticsEnabled = await welcomeBackend.analyticsEnabled().catch(() => false)
         if (!reportedLaunch) { reportedLaunch = true; void track('desktop_app_launch', {}) }
         stopAccount?.()
         const accountBackend = welcomeBackend.account
-        stopAccount = accountBackend.watch((state) => {
+        if (!gsDesktop) stopAccount = accountBackend.watch((state) => {
           if (quitting) return
           if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
           const attempt = state.attempt
@@ -567,10 +619,23 @@ async function main(): Promise<void> {
   const reconcileBackend = (): Promise<void> => {
     startup ??= (async () => {
       await navigateMain(applicationUrl)
+      startupStage('documentLoadedMs')
+      if (gsDesktop && !enteredWorkspace && !isQuitting() && !recovery.active && mainWindow !== undefined && !mainWindow.isDestroyed()) {
+        startupWindow = mainWindow
+        if (startupWindow.isMinimized()) startupWindow.restore()
+        startupWindow.show()
+        if (process.platform === 'win32') { startupWindow.moveTop(); startupWindow.focus() }
+        startupStage('windowShownMs')
+      }
       await backend.start(async () => {
         await Promise.all([manager.applyRelease(), prepareHostEnvironment()])
       })
+      startupStage('backendReadyMs')
       if (backend.host !== undefined) await openInitialWindow()
+      startupStage('initialWindowSelectedMs')
+      void writeFile(join(paths.profile, 'desktop-startup.json'), JSON.stringify({
+        startedAt: new Date(startupStarted).toISOString(), ...startupStages,
+      }) + '\n').catch(() => {})
       if (backend.host !== undefined) updateJournal?.action('workspace-ready')
       // The existing Web document resumes through the boot IPC response.
     })().catch((error: unknown) => {
@@ -581,6 +646,33 @@ async function main(): Promise<void> {
     return startup
   }
 
+  const gsReleases = gsDesktop ? new GsDesktopReleaseSource({
+    pull: (signal) => {
+      if (gsLoginBackend === undefined) throw new Error(locale.messages.gsUpdateInvalid)
+      return gsLoginBackend.appUpdate(signal)
+    },
+    request: (url, init) => net.fetch(url, init),
+    directory: join(app.getPath('userData'), 'updates'), platform: process.platform, arch: process.arch,
+    messages: () => locale.messages,
+    verify: path => verifyGsUpdateSignature(path),
+    install: async (path) => {
+      if (process.platform === 'win32') {
+        await new Promise<void>((resolve, reject) => {
+          const environment = Object.fromEntries(Object.entries(process.env)
+            .filter(([name]) => !/key|secret|token|password|^NODE_OPTIONS$|^NODE_PATH$|^ELECTRON_RUN_AS_NODE$/iu.test(name)))
+          const child = spawn(path, ['/S', `/D=${dirname(process.execPath)}`], {
+            detached: true, stdio: 'ignore', windowsHide: true, env: environment,
+          })
+          child.once('error', reject)
+          child.once('spawn', () => { child.unref(); resolve() })
+        })
+        quitWithoutConfirmation()
+      } else {
+        const failure = await shell.openPath(path)
+        if (failure) throw new Error(locale.messages.gsUpdateDownloadFailed)
+      }
+    },
+  }) : undefined
   const updates = new DesktopUpdateCoordinator(
     publishUpdate,
     async () => {
@@ -634,7 +726,7 @@ async function main(): Promise<void> {
     },
     undefined, undefined, undefined,
     (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
-
+    gsReleases,
   )
 
   const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
@@ -666,7 +758,11 @@ async function main(): Promise<void> {
     if (url.hostname === 'app') {
       if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.startsWith('/assets/')
         || ['/favicon.svg', '/manifest.webmanifest'].includes(url.pathname)) {
-        return serveWebDocument(request, join(resources.dsh, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist'))
+        const root = join(resources.dsh, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist')
+        if (bootBrand !== undefined) return bootBrand.then(brand => serveWebDocument(request, root, {
+          wordmark: brand.name, hint: locale.messages.startupLoading,
+        }))
+        return serveWebDocument(request, root)
       }
       if (backend.host === undefined || hostUrl === undefined || hostCookie === undefined) {
         return Promise.resolve(new Response(null, { status: 503 }))
@@ -759,7 +855,7 @@ async function main(): Promise<void> {
       || typeof next !== 'string') return
     const current = resolveDesktopStartupLocale(next, systemLanguages)
     if (current.id === locale.id) return
-    locale = current
+    locale = desktopProductName === undefined ? current : withDesktopProductName(current, desktopProductName)
     platformView.notifyLocaleChanged()
     windowsLanguage = locale.id
     refreshApplicationMenu()
@@ -774,6 +870,7 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(DESKTOP_IPC.onboardingApiKey, async (event) => {
     assertProductSender(event)
+    if (gsDesktop) return true // gs-worker obtains its model credentials from gs-server.
     return (await readWelcomeState()).hasApiKey
   })
   ipcMain.on(DESKTOP_IPC.onboardingActive, (event, active: unknown) => {
@@ -839,10 +936,17 @@ async function main(): Promise<void> {
           return
         }
         if (state.phase !== 'available' && !(state.phase === 'error' && state.failedOperation === 'download')) return
+        const serverNotice = gsReleases?.notice
+        if (serverNotice?.availableFrom !== undefined && Date.now() < Date.parse(serverNotice.availableFrom)) {
+          await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
+            message: formatDesktopMessage(locale.messages.updateAvailable, { version: serverNotice.version }),
+            detail: formatDesktopMessage(locale.messages.gsUpdateAvailableFrom, { time: serverNotice.availableFrom }) })
+          return
+        }
         if (manual) {
           const result = await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
             message: formatDesktopMessage(locale.messages.updateAvailable, { version: state.version ?? '' }),
-            detail: locale.messages.updateDetail,
+            detail: [...(serverNotice?.notes ?? []), locale.messages.updateDetail].join('\n'),
             buttons: [locale.messages.updateDownload], cancelId: 1 })
           if (result.response !== 0) return
         }
@@ -925,7 +1029,8 @@ async function main(): Promise<void> {
   const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: 'DeepSeek Harness',
+    // Packaged manifests carry the branded productName; an unpackaged launch keeps the upstream label.
+    applicationName: typeof manifest.productName === 'string' && app.isPackaged ? manifest.productName : 'DeepSeek Harness',
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -981,6 +1086,11 @@ async function main(): Promise<void> {
     tray?.relabel()
   }
   refreshApplicationMenu()
+  if (bootBrand !== undefined) void bootBrand.then((brand) => {
+    desktopProductName = brand.name
+    locale = withDesktopProductName(resolveDesktopLocale(locale.id), brand.name)
+    refreshApplicationMenu()
+  })
   const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
   if (process.platform === 'win32') {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
@@ -1065,6 +1175,10 @@ async function main(): Promise<void> {
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload, false, true)
     mainWindow = window
+    if (gsDesktop) window.webContents.on('page-title-updated', (event, title) => {
+      event.preventDefault()
+      window.setTitle(title.replaceAll('DeepSeek Harness', desktopProductName ?? GS_BRAND_DEFAULT.name))
+    })
     browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name))
     shortcuts.attach(window)
     window.on('focus', automaticCheck)
@@ -1110,20 +1224,24 @@ async function main(): Promise<void> {
     })
     return window
   }
-  const enterWorkspace = async ({ activate = true }: { activate?: boolean } = {}): Promise<void> => {
+  const enterWorkspace = async ({ activate = true, reveal = true }: { activate?: boolean; reveal?: boolean } = {}): Promise<void> => {
     if (quitting) return
     const window = mainWindow ?? createMainWindow()
     await navigateMain(applicationUrl)
     if (isQuitting() || recovery.active || window.isDestroyed()) return
-    if (activate) window.show()
-    else window.showInactive()
+    const focusOnReveal = reveal && activate && process.platform === 'win32'
+    if (focusOnReveal && window.isMinimized()) window.restore()
+    if (reveal) {
+      if (activate) window.show()
+      else window.showInactive()
+    }
     enteredWorkspace = true
     if (welcomeWindow !== undefined) {
       welcomeWindow.close()
       window.webContents.send(DESKTOP_IPC.enterWorkspace)
     }
     welcomeWindow = undefined
-    if (raiseAfterUpdate) {
+    if (reveal && (focusOnReveal || raiseAfterUpdate)) {
       raiseAfterUpdate = false
       window.moveTop()
       window.focus()
@@ -1142,40 +1260,44 @@ async function main(): Promise<void> {
       return Promise.resolve()
     }
     openingWelcome ??= (async () => {
-      welcomeWindow = await openWelcomeWindow(locale, {
-        analytics: track,
-        analyticsEnabled: () => Promise.resolve(analyticsEnabled),
-        takeNotice: () => {
-          const notice = pendingWelcomeNotice
-          pendingWelcomeNotice = undefined
-          return Promise.resolve(notice)
-        },
-        startSignIn: async () => {
-          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-          return welcomeBackend.account.start(desktopClientMetadata(locale.id))
-        },
-        cancelSignIn: async (id) => {
-          if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
-          return welcomeBackend.account.cancel(id)
-        },
-        copySignInLink: async (id) => {
-          const state = await welcomeBackend?.account.state()
-          if (state?.attempt?.id !== id || state.attempt.phase !== 'waiting-browser' || state.attempt.authorizeUrl === undefined) {
-            throw new Error('desktop welcome: login link is unavailable')
-          }
-          await clipboard.writeText(platformLoginUrl(state.attempt.authorizeUrl))
-        },
-        saveApiKey: async (apiKey) => {
-          if (backend.host === undefined || welcomeBackend === undefined) return { ok: false }
-          const saved = await welcomeBackend.save(apiKey)
-          if (!saved.ok) return saved
-          await enterWorkspace()
-          return { ok: true }
-        },
-        skip: enterWorkspace,
-      })
+      const loginBackend = gsLoginBackend
+      if (gsDesktop && loginBackend === undefined) throw new Error('gs login: backend unavailable')
+      welcomeWindow = gsDesktop
+        ? await openGsLoginWindow(locale, desktopClientVersion(), requireGsLoginBackend(loginBackend), enterWorkspace)
+        : await openWelcomeWindow(locale, {
+          analytics: track,
+          analyticsEnabled: () => Promise.resolve(analyticsEnabled),
+          takeNotice: () => {
+            const notice = pendingWelcomeNotice
+            pendingWelcomeNotice = undefined
+            return Promise.resolve(notice)
+          },
+          startSignIn: async () => {
+            if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
+            return welcomeBackend.account.start(desktopClientMetadata(locale.id))
+          },
+          cancelSignIn: async (id) => {
+            if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
+            return welcomeBackend.account.cancel(id)
+          },
+          copySignInLink: async (id) => {
+            const state = await welcomeBackend?.account.state()
+            if (state?.attempt?.id !== id || state.attempt.phase !== 'waiting-browser' || state.attempt.authorizeUrl === undefined) {
+              throw new Error('desktop welcome: login link is unavailable')
+            }
+            await clipboard.writeText(platformLoginUrl(state.attempt.authorizeUrl))
+          },
+          saveApiKey: async (apiKey) => {
+            if (backend.host === undefined || welcomeBackend === undefined) return { ok: false }
+            const saved = await welcomeBackend.save(apiKey)
+            if (!saved.ok) return saved
+            await enterWorkspace()
+            return { ok: true }
+          },
+          skip: enterWorkspace,
+        })
       const window = welcomeWindow
-      window.once('closed', () => {
+      if (!gsDesktop) window.once('closed', () => {
         void welcomeBackend?.account.state().then((state) => {
           if (state.attempt !== null && !enteredWorkspace) return welcomeBackend?.account.cancel(state.attempt.id)
           return undefined
@@ -1196,7 +1318,12 @@ async function main(): Promise<void> {
   }
   const openInitialWindow = async (): Promise<void> => {
     if (quitting || recovery.active) return
-    const state = await readWelcomeState()
+    const loginBackend = gsLoginBackend
+    if (gsDesktop && loginBackend === undefined) throw new Error('gs login: backend unavailable')
+    const state = gsDesktop
+      ? { loggedIn: (await requireGsLoginBackend(loginBackend).session()).status === 'signed-in', hasApiKey: false,
+        localePreference: await welcomeBackend?.readLocalePreference() ?? null }
+      : await readWelcomeState()
     if (isQuitting() || backend.state.phase !== 'ready') return
     locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages)
     windowsLanguage = locale.id
@@ -1206,7 +1333,9 @@ async function main(): Promise<void> {
       raiseAfterUpdate = false
       await showWelcome()
     } else {
-      await enterWorkspace()
+      const alreadyShown = startupWindow === mainWindow
+      if (alreadyShown) raiseAfterUpdate = false
+      await enterWorkspace({ activate: !alreadyShown, reveal: !alreadyShown })
     }
   }
   focusPrimaryWindow = () => {
@@ -1219,7 +1348,7 @@ async function main(): Promise<void> {
       return
     }
     // Startup and sign-out select the visible window before activation may reveal the workspace.
-    if (window === mainWindow && !enteredWorkspace) return
+    if (window === mainWindow && !enteredWorkspace && window !== startupWindow) return
     if (window.isMinimized()) window.restore()
     window.show()
     window.focus()
@@ -1281,10 +1410,8 @@ async function main(): Promise<void> {
   })
 
   mainWindow = createMainWindow()
-  const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
-  if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
   const developmentPolicy = app.isPackaged ? undefined : process.env.DSH_DESKTOP_MANDATORY_UPDATE_CONFIG
-  const policyInput: unknown = app.isPackaged
+  const policyInput: unknown = gsDesktop ? undefined : app.isPackaged
     ? ('dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)
     : developmentPolicy === undefined ? undefined : JSON.parse(developmentPolicy) as unknown
   const policyConfig = resolveDesktopPolicyConfig(policyInput, !app.isPackaged)

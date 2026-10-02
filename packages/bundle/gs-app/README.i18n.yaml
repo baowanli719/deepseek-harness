@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/bundle/gs-app/README.md
+/:
+  en: 869e700c95a99cd8
+  zh: de62710f7f86d8d2
+/deepseek-ai-dsh-gs-app:
+  en: 648342213dadc020
+  zh: 654d57908e6bffdb
+/deepseek-ai-dsh-gs-app/summary:
+  en: 6ecea56d54a0b236
+  zh: ba7ac9cec08b454f
+/deepseek-ai-dsh-gs-app/table-of-contents:
+  en: d41fb55facabc112
+  zh: d04d06c0849482ef
+/deepseek-ai-dsh-gs-app/what-the-patch-does:
+  en: 7f77a21bb334b11a
+  zh: 7bdc198d2e7f7f2d
+/deepseek-ai-dsh-gs-app/what-the-patch-does/gs-vision-bridge-config:
+  en: 32e9ce5e3060f65f
+  zh: 9c61df81b80a8dbb
+/deepseek-ai-dsh-gs-app/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-gs-app/model-experience/system-prompt:
+  en: cf78b9dd5596495f
+  zh: bd44560f8c2435e8
+/deepseek-ai-dsh-gs-app/model-experience/system-prompt/what-the-model-sees:
+  en: 869a04d424d8816e
+  zh: 091c392ef0a16800
+/deepseek-ai-dsh-gs-app/model-experience/system-prompt/what-the-model-sees/persona-language-section-and-working-directory-suffix:
+  en: 58b8e4c158168c60
+  zh: 9705df26516f3a69
+/deepseek-ai-dsh-gs-app/model-experience/system-prompt/token-effect:
+  en: 748aae7ebd2aa1d9
+  zh: 0e34f7092608598a
+/deepseek-ai-dsh-gs-app/model-experience/system-prompt/kv-cache-effect:
+  en: c9ad227f2aa2bd53
+  zh: 7f2c496f6acde52e
+/deepseek-ai-dsh-gs-app/model-experience/vision-tool:
+  en: 5efc8d05b2f5992a
+  zh: 26bff860a880c80a
+/deepseek-ai-dsh-gs-app/model-experience/vision-tool/what-the-model-sees:
+  en: 7e8c785e79660696
+  zh: 145ae2aaf09d3c75
+/deepseek-ai-dsh-gs-app/model-experience/vision-tool/token-effect:
+  en: 6bbdba01d9ffb6ab
+  zh: 1375b9cc4dfe4b2b
+/deepseek-ai-dsh-gs-app/model-experience/vision-tool/kv-cache-effect:
+  en: 51c63255cbde6f90
+  zh: 54c9ec017b1730b1
+/deepseek-ai-dsh-gs-app/known-limitations-and-deferred-work:
+  en: d8fff0c41d6935e0
+  zh: f9f2a2de7dfc28a3
+/deepseek-ai-dsh-gs-app/known-limitations-and-deferred-work/dev-note:
+  en: 7568b58e2e3e4de9
+  zh: 617aaf4c4ec8a863

@@ -8,12 +8,45 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-deepseek-account'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { createGsLlmGatewayToken, gsLlmGatewayLaunchEnvironment } from '@deepseek-ai/dsh-llm-gs-gateway'
+import type { LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import * as desktopOffice from './office.ts'
 
 import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installDesktopQuitInspection } from './quit-inspection.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
+
+/** Profile the Host boots when the Electron shell supplies no override. */
+const DEFAULT_DESKTOP_PROFILE = 'desktop'
+
+/**
+ * Resolve the profile name this Host reports to the boot context. The profile
+ * directory itself is chosen by the Electron shell and arrives as argv; a
+ * branded build passes its own name through DSH_DESKTOP_PROFILE so session
+ * metadata and diagnostics name the product profile.
+ * @param env - Host process environment.
+ * @returns Validated profile name.
+ */
+export function resolveDesktopHostProfile(env: NodeJS.ProcessEnv = process.env): string {
+  const value = env.DSH_DESKTOP_PROFILE?.trim() ?? ''
+  if (value === '') return DEFAULT_DESKTOP_PROFILE
+  if (!/^[A-Za-z0-9][A-Za-z0-9._~-]*$/u.test(value) || value === 'node_modules') {
+    throw new Error(`dsh desktop host: invalid DSH_DESKTOP_PROFILE ${JSON.stringify(value)}`)
+  }
+  return value
+}
+
+/** Share a single proxy credential between the gs gateway and model adapter. */
+export function desktopHostLaunchEnvironment(
+  profileName: string,
+  environment: LaunchEnvironmentSnapshot,
+  createToken: () => string = createGsLlmGatewayToken,
+): LaunchEnvironmentSnapshot {
+  return profileName === 'gs-desktop'
+    ? gsLlmGatewayLaunchEnvironment(environment, createToken())
+    : environment
+}
 
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
@@ -22,9 +55,13 @@ async function main(): Promise<void> {
   const installAnchor = join(runtimeDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
   const profile = loadProfileDirectory('dsh', projectDir, installAnchor)
   reportSkippedBundles('dsh', profile)
+  const profileName = resolveDesktopHostProfile()
+  const environment = loadLayeredEnv('dsh')
   const application = runProfile({
-    environment: loadLayeredEnv('dsh'),
-    profile: 'desktop',
+    // The gateway and pi-ai must resolve the same per-boot token. Keep it in
+    // the launch snapshot so tool subprocesses never inherit it from process.env.
+    environment: desktopHostLaunchEnvironment(profileName, environment),
+    profile: profileName,
     resolvedProfile: { profile, installAnchor },
     patchFiles: [],
     args: ['--no-open', '--port', '19387'],
@@ -90,6 +127,12 @@ async function main(): Promise<void> {
   })
   process.once('disconnect', () => { void stop() })
   const { ctx } = await application
+  if (profileName === 'gs-desktop') {
+    const ended = (): void => { void send({ type: 'gs-session-ended' }).catch((cause: unknown) => { console.error(cause) }) }
+    ctx.on('gs-server/session-ended', ended)
+    ctx.on('gs-server/session-expired', ended)
+    ctx.on('gs-server/trust-revoked', ended)
+  }
   control.updateTasks = installDesktopUpdateTaskControl(ctx)
   control.quitInspection = installDesktopQuitInspection(ctx)
   await ctx.plugin(desktopOffice, {

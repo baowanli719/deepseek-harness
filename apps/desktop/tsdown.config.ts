@@ -80,6 +80,23 @@ export default defineConfig([
           },
         },
       })
+      await build({
+        configFile: false,
+        root: fileURLToPath(new URL('.', import.meta.url)),
+        esbuild: { jsx: 'automatic' },
+        define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+        build: {
+          outDir: 'lib/gs-login',
+          emptyOutDir: true,
+          lib: {
+            entry: 'src/client/gs-login.tsx',
+            formats: ['iife'],
+            name: 'DesktopGsLogin',
+            fileName: () => 'gs-login.js',
+            cssFileName: 'gs-login',
+          },
+        },
+      })
     },
     outDir: 'lib',
     format: ['esm'],
@@ -90,7 +107,7 @@ export default defineConfig([
     clean: false,
     deps: { neverBundle: ['electron'] },
   },
-  ...(['preload-app', 'preload-welcome', 'preload-platform-account', 'preload-mandatory', 'preload-update-dialog'] as const).map(name => ({
+  ...(['preload-app', 'preload-welcome', 'preload-gs-login', 'preload-platform-account', 'preload-mandatory', 'preload-update-dialog'] as const).map(name => ({
     // Sandboxed Electron preloads run as CommonJS even though the application package is ESM.
     entry: { [name]: `lib/types/${name}.js` },
     plugins: [packagedImportsPlugin(preloadImports)],

@@ -623,6 +623,32 @@ describe('createRuntimeResolution', () => {
     expect(resolution.entries.find(entry => entry.name === 'explicit-only')?.packageDir).toBe(realpathSync.native(explicitOnly))
   })
 
+  it('keeps a bundle the installation does not supply resolvable for its own subpath entries', async () => {
+    const installationAnchor = stageInstallation({})
+    const home = tmp()
+    const root = tmp()
+    const bundleDir = join(root, 'product-bundle')
+    mkdirSync(bundleDir, { recursive: true })
+    writeFileSync(join(bundleDir, 'package.json'), JSON.stringify({ name: 'product-bundle' }))
+    const dir = resolveProfileDir('product', home)
+    const profile: Profile = { skippedBundles: [],
+      name: 'product',
+      dir,
+      layers: [{
+        packageName: 'product-bundle',
+        packageDir: bundleDir,
+        patchPaths: [join(bundleDir, 'cordis.patch.yml')],
+        patches: [],
+      }],
+      patchPath: join(dir, PROFILE_PATCH_FILENAME),
+      patches: [],
+    }
+    const resolution = await createRuntimeResolution({ installAnchor: installationAnchor, profile, home })
+    expect(resolution.entries.find(entry => entry.name === 'product-bundle')).toMatchObject({
+      packageDir: bundleDir, scope: 'profile',
+    })
+  })
+
   it('resolves import-only exports from each package installation', async () => {
     const anchor = stageInstallation({
       'bundle-a': { patch: '[]\n', deps: { 'nested-esm': '0.0.0' } },

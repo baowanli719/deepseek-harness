@@ -402,6 +402,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['when no turn is open or either audit event fails before the session append commit point.'],
       },
       {
+        signature: 'constrain(maximum: (session: Session) => ApprovalPolicy): () => void',
+        description: 'Allow a policy owner to reject escalation even when a session selects ask.',
+        parameters: [{ name: 'maximum', description: 'live upper bound; never rejects every approval request.' }],
+        returns: 'disposer removing this constraint.',
+      },
+      {
         signature: 'overrideOf(session: Session): ApprovalPolicy | undefined',
         description: 'Read the session override without applying the configured default.',
         parameters: [{ name: 'session', description: 'session whose log supplies the override.' }],
@@ -1206,6 +1212,229 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'gsLlmGateway',
+    summary: 'The loopback gateway face this plugin publishes as `ctx.gsLlmGateway`: everything a composition needs to route a provider profile through the proxy and to wire the per-boot token into the credential plane.',
+    description: 'The loopback gateway face this plugin publishes as `ctx.gsLlmGateway`: everything a composition needs to route a provider profile through the proxy and to wire the per-boot token into the credential plane.',
+    methods: [
+      {
+        signature: 'readonly origin: string',
+        description: 'Loopback origin of the running proxy, e.g. `http://127.0.0.1:43123`.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly token: string',
+        description: 'Per-boot placeholder token provider profiles resolve through the credential reference.',
+        parameters: [],
+      },
+      {
+        signature: 'providerBaseUrl(providerId: string): string',
+        description: 'Provider-profile baseURL route for one server provider id.',
+        parameters: [{ name: 'providerId', description: 'provider id inside the route grammar.' }],
+        returns: 'the loopback baseURL naming that provider.',
+      },
+    ],
+  },
+  {
+    key: 'gsServer',
+    summary: 'Host-owned gsclaw-server client service.',
+    description: 'Host-owned gsclaw-server client service. Composes the endpoint store, the authentication state machine, the ClientConfig cache, and the brand store, and optionally mounts the private loopback routes and the log uploader.',
+    methods: [
+      {
+        signature: 'endpoints!: GsEndpointStore',
+        description: 'Endpoint store backing every request; assigned at service init.',
+        parameters: [],
+      },
+      {
+        signature: 'auth!: GsAuthService',
+        description: 'Authentication state machine; assigned at service init.',
+        parameters: [],
+      },
+      {
+        signature: 'config!: GsClientConfigCache',
+        description: 'ClientConfig cache; assigned at service init.',
+        parameters: [],
+      },
+      {
+        signature: 'brand!: GsBrandStore',
+        description: 'Brand store; assigned at service init.',
+        parameters: [],
+      },
+      {
+        signature: 'getAccessToken(): Promise<string | undefined>',
+        description: 'Current real access token, held only in memory; undefined while signed out.',
+        parameters: [],
+        returns: 'the in-memory access token, or undefined.',
+      },
+      {
+        signature: 'fetch(path: string, init?: RequestInit): Promise<Response>',
+        description: 'Authenticated request against the resolved gsclaw endpoint: attaches the Bearer token and the policy-version header, and on an expired-token 401 runs one single-flight refresh before retrying exactly once. The response is returned verbatim; transport failures and the signed-out state reject with GatewayError.',
+        parameters: [{ name: 'path', description: 'absolute API path beginning with `/`.' }, { name: 'init', description: 'fetch init carried verbatim; its headers merge under the credential headers.' }],
+        returns: 'the gateway response after at most one refresh retry.',
+      },
+      {
+        signature: 'getClientConfig(): GsClientConfig | undefined',
+        description: 'Latest cached server ClientConfig, or undefined before the first login/refresh.',
+        parameters: [],
+        returns: 'the cached ClientConfig, or undefined.',
+      },
+      {
+        signature: 'refreshClientConfig(): Promise<GsClientConfigSnapshot>',
+        description: 'Actively pull `/api/client-config` and update the cache.',
+        parameters: [],
+        returns: 'the fresh user + config snapshot.',
+      },
+      {
+        signature: 'sessionView(): GsSessionView',
+        description: 'Token-free session view for UI projections.',
+        parameters: [],
+        returns: 'the session view; tokens are never exposed.',
+      },
+      {
+        signature: 'async getMeta(): Promise<GsServerMetaView>',
+        description: 'Live server handshake against the effective endpoint; doubles as the pre-login brand channel.',
+        parameters: [],
+        returns: 'the effective endpoint plus the server metadata.',
+      },
+      {
+        signature: 'getAuthMethods(): Promise<GsAuthMethods>',
+        description: 'Enabled login methods; never requires a session.',
+        parameters: [],
+        returns: 'the login-method switches.',
+      },
+      {
+        signature: 'fetchCaptcha(): Promise<GsCaptcha | null>',
+        description: 'One-time graphical captcha; null when the server predates captchas.',
+        parameters: [],
+        returns: 'the captcha, or null on a legacy server.',
+      },
+      {
+        signature: 'async loginWithPassword(login: GsPasswordLogin): Promise<GsSessionView>',
+        description: 'Password login; resolves with the fresh session view.',
+        parameters: [{ name: 'login', description: 'credentials plus the solved captcha when the server asked for one.' }],
+        returns: 'the token-free session view after login.',
+      },
+      {
+        signature: 'sendEmailCode(account: string): Promise<GsEmailCodeResponse>',
+        description: 'Send one email verification code to the account\'s registered address.',
+        parameters: [{ name: 'account', description: 'account name or email accepted by the gateway.' }],
+        returns: 'the send-code outcome with second-normalized windows.',
+      },
+      {
+        signature: 'async loginWithEmailCode(login: GsEmailLogin): Promise<GsSessionView>',
+        description: 'Email-code login; resolves with the fresh session view.',
+        parameters: [{ name: 'login', description: 'account plus the received verification code.' }],
+        returns: 'the token-free session view after login.',
+      },
+      {
+        signature: 'adoptTokens(tokens: GsTokenPair, user: GsAuthUser, config: GsClientConfig): Promise<GsAuthSnapshot>',
+        description: 'Host token-write entry for login surfaces this package does not ship (SSO, QR, or a native login window): adopt a gateway-issued token pair, sealing and persisting the refresh token exactly like a password login.',
+        parameters: [{ name: 'tokens', description: 'rotating token pair issued by the gateway.' }, { name: 'user', description: 'authenticated user projection paired with the tokens.' }, { name: 'config', description: 'ClientConfig delivered alongside the tokens.' }],
+        returns: 'the token-free snapshot after adoption.',
+      },
+      {
+        signature: 'restoreSession(): Promise<boolean>',
+        description: 'Restore the persisted session after a restart, single-flight.',
+        parameters: [],
+        returns: 'true when a session is live after the call.',
+      },
+      {
+        signature: 'async logout(): Promise<GsAuthSnapshot>',
+        description: 'Revoke the session family server-side on a best effort, then wipe all local credential state.',
+        parameters: [],
+        returns: 'the token-free snapshot after logout.',
+      },
+      {
+        signature: 'brandView(): GsBrandView',
+        description: 'UI-safe view of the effective brand.',
+        parameters: [],
+        returns: 'the frozen brand view.',
+      },
+      {
+        signature: 'async setEndpointOverride(value: string): Promise<string>',
+        description: 'Validate and persist one runtime endpoint override.',
+        parameters: [{ name: 'value', description: 'new endpoint URL.' }],
+        returns: 'the normalized persisted endpoint.',
+      },
+      {
+        signature: 'async clearEndpointOverride(): Promise<void>',
+        description: 'Drop the runtime endpoint override so environment and configured default apply again.',
+        parameters: [],
+      },
+    ],
+  },
+  {
+    key: 'gsServerSkillCatalog',
+    summary: 'Host-plane share of the effective server catalog.',
+    description: 'Host-plane share of the effective server catalog. The provider publishes it; the bridge tools read it to decide visibility and to resolve revisions.',
+    methods: [
+      {
+        signature: 'snapshot(): GsServerSkillCatalogSnapshot',
+        description: 'Latest effective snapshot; empty while signed out or unsynced.',
+        parameters: [],
+        returns: 'the immutable effective catalog projection.',
+      },
+      {
+        signature: 'subscribe(listener: () => void): () => void',
+        description: 'Subscribe to catalog changes.',
+        parameters: [{ name: 'listener', description: 'invoked synchronously after each accepted snapshot update.' }],
+        returns: 'the unsubscribe function.',
+      },
+      {
+        signature: 'invalidate(): void',
+        description: 'Invalidate cached catalogs and definitions after a `definition_changed`.',
+        parameters: [],
+      },
+      {
+        signature: 'resolveRemote(name: string, runtimeType: GsServerRuntimeType): GsServerSkillRemoteEntry | undefined',
+        description: 'One available remote entry of the requested runtime type, if still listed. Trusted-only entries never resolve on this lane: a direct bridge call by name must not reach the execute endpoint.',
+        parameters: [{ name: 'name', description: 'exact skill name from the catalog.' }, { name: 'runtimeType', description: 'executable runtime type to match.' }],
+        returns: 'the catalog entry, or undefined.',
+      },
+      {
+        signature: 'resolveGated(name: string, runtimeType: GsServerRuntimeType): GsServerSkillRemoteEntry | undefined',
+        description: 'One gated trusted-only entry of the requested runtime type, if still listed. Only the gated lane\'s execute path consults it, after its own private-session check.',
+        parameters: [{ name: 'name', description: 'exact skill name from the catalog.' }, { name: 'runtimeType', description: 'executable runtime type to match.' }],
+        returns: 'the catalog entry, or undefined.',
+      },
+    ],
+  },
+  {
+    key: 'gsServerSkillGate',
+    summary: 'Provider-side face of the `gsServerSkillGate` service: the mount point of the gated trusted-only lane.',
+    description: 'Provider-side face of the `gsServerSkillGate` service: the mount point of the gated trusted-only lane. `@deepseek-ai/dsh-sensitive-policy` consumes it as an optional service through `ctx.get` under its own structural declaration, so this name stays free of that package\'s `GsServerSkillGateFace`.',
+    methods: [
+      {
+        signature: 'mountPrivateLane(scope: Context): void',
+        description: 'Mount the gated trusted-only lane into one private agent\'s scoped context. The lane re-checks `sensitivePolicy.isPrivate(sessionId)` per load; the scoped registration unwinds with the agent.',
+        parameters: [{ name: 'scope', description: 'the private agent\'s scoped context.' }],
+      },
+    ],
+  },
+  {
+    key: 'gsServerSkillPreferences',
+    summary: 'Account-scoped server skill switches, stored as one JSON file per skill under the account hash so the previous gs-worker\'s files keep applying.',
+    description: 'Account-scoped server skill switches, stored as one JSON file per skill under the account hash so the previous gs-worker\'s files keep applying.',
+    methods: [
+      {
+        signature: 'async enabledFor(skill: Pick<GsSkillCatalogEntry, \'name\' | \'defaultEnabled\'>, key: string | undefined = this.options.accountKey()): Promise<boolean>',
+        description: 'Effective switch of one delivered skill for the current account.',
+        parameters: [{ name: 'skill', description: 'catalog entry carrying the server default.' }, { name: 'key', description: 'account key override; defaults to the current account.' }],
+        returns: 'whether the skill is enabled; a missing or damaged preference falls back to the server default.',
+      },
+      {
+        signature: 'async list(): Promise<readonly ServerSkillPreferenceRow[]>',
+        description: 'Settings-page rows of the current effective catalog; each row carries its switch, availability, and the machine reason when unavailable.',
+        parameters: [],
+        returns: 'the rows, or an empty list while signed out or against a pre-capability server.',
+      },
+      {
+        signature: 'async setEnabled(name: string, enabled: boolean): Promise<void>',
+        description: 'Persist one skill\'s switch for the current account; only a currently delivered, available skill accepts a write.',
+        parameters: [{ name: 'name', description: 'exact skill name from the catalog.' }, { name: 'enabled', description: 'the new switch.' }],
+      },
+    ],
+  },
+  {
     key: 'hmr',
     summary: 'Hot reload service with Cordis-compatible module configuration and events.',
     description: 'Hot reload service with Cordis-compatible module configuration and events.',
@@ -1762,7 +1991,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'profileContext',
     summary: 'Current profile facts; scheduling and mutation belong to their callers.',
-    description: 'Current profile facts; scheduling and mutation belong to their callers.',
+    description: 'Current profile facts; scheduling and mutation belong to their callers. An optional application-owned `transformPatches` callback transforms the complete ordered stack returned by `readProfilePatches`, both at startup and during configuration reload. `transformEntries` applies to effective rows before profile or Agent preset imports.',
     methods: [
       {
         signature: 'readonly packageManager?: ProfilePnpmInvocation',
@@ -1782,6 +2011,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'readonly telemetryDisabledEnv: string | undefined',
         description: 'Launch-time DSH_TELEMETRY_DISABLED value; any non-empty value opts out.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly transformPatches?: (patches: readonly PatchOptions[]) => PatchOptions[]',
+        description: 'Application-owned composition policy, applied on startup and every configuration reload.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly transformEntries?: (entries: readonly EntryOptions[]) => EntryOptions[]',
+        description: 'Application-owned admission applied after patch composition and before scoped preset imports.',
         parameters: [],
       },
     ],
@@ -1851,6 +2090,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the fully resolved per-call mode and absolute workspace root.',
       },
       {
+        signature: 'constrain(maximum: (request: SandboxPolicyRequest) => SandboxMode): () => void',
+        description: 'Limit every resolution, including explicit escalations, to a live maximum mode. Multiple constraints can only tighten the policy.',
+        parameters: [{ name: 'maximum', description: 'per-call upper bound owned by the registering policy.' }],
+        returns: 'disposer removing this constraint.',
+      },
+      {
         signature: 'overrideOf(session: Session): SandboxMode | undefined',
         description: 'Read the session override without applying the deployment default.',
         parameters: [{ name: 'session', description: 'session whose log supplies the override.' }],
@@ -1899,6 +2144,74 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Update the name, instruction, and timing of an active task within the original Session binding without activating the Session or changing saved deliveries.\n\nEach supplied field replaces its stored value; an omitted field keeps it. A name or instruction change alone does not reset the committed target.',
         parameters: [{ name: 'request', description: 'Task binding, complete observed record, and any combination of timing, name, and instruction.' }, { name: 'signal', description: 'Cancellation checked after domain readiness and FIFO waits, before persistence begins.' }],
         returns: 'The committed record, unchanged record for a no-op, or a non-mutating input/lookup/conflict result. Storage and lifecycle failures reject; cancellation after a write starts does not roll it back.',
+      },
+    ],
+  },
+  {
+    key: 'sensitivePolicy',
+    summary: 'Per-session sensitive-data policy state.',
+    description: 'Per-session sensitive-data policy state. Transitions are monotonic — privacy and sensitivity never downgrade inside a process lifetime — and every commit notifies subscribers after the state change lands.',
+    methods: [
+      {
+        signature: 'subscribe(listener: (sessionId: string, event: SensitivePolicyEvent) => void): () => void',
+        description: 'Subscribe to committed transitions.',
+        parameters: [{ name: 'listener', description: 'called with the session id after each committed change.' }],
+        returns: 'the unsubscribe function.',
+      },
+      {
+        signature: 'view(): SensitivePolicyView',
+        description: 'Read-only view for external consumers.',
+        parameters: [],
+        returns: 'the never-mutating face of this core.',
+      },
+      {
+        signature: 'knows(sessionId: string): boolean',
+        description: 'Whether the session is registered with the core.',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }],
+        returns: 'whether the session is known.',
+      },
+      {
+        signature: 'registerSession(sessionId: string, restored?: SensitiveSessionState): void',
+        description: 'Register one session, seeding from a restored state when the caller has one. Re-registration never downgrades an existing record.',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }, { name: 'restored', description: 'a previously folded state, when available.' }],
+      },
+      {
+        signature: 'stateOf(sessionId: string): SensitiveSessionState',
+        description: 'Read one session\'s policy state.',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }],
+        returns: 'the state; unknown sessions read as {@link STANDARD_SESSION_STATE}.',
+      },
+      {
+        signature: 'isPrivate(sessionId: string): boolean',
+        description: 'Whether the session is locked to trusted-only egress.',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }],
+        returns: 'whether the session is private.',
+      },
+      {
+        signature: 'enterPrivate(sessionId: string, cause: SensitivePrivateCause = \'explicit\'): void',
+        description: 'Lock a session to trusted-only egress; committed at entry, never undone. `provider-endpoint` marks the automatic judgement ("a trusted model endpoint makes the conversation private"). Both causes enforce egress restriction, and an explicit entry can upgrade an endpoint cause.',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }, { name: 'cause', description: 'what drove the session into private.' }],
+      },
+      {
+        signature: 'markPotential(sessionId: string): void',
+        description: 'Raise the session\'s sensitivity to at least `potential`.',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }],
+      },
+      {
+        signature: 'markSensitive(sessionId: string): void',
+        description: 'Raise the session\'s sensitivity to `sensitive`.',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }],
+      },
+      {
+        signature: 'noteProvider(sessionId: string, providerId: string): void',
+        description: 'Record the provider route one session\'s model traffic used (on change only).',
+        parameters: [{ name: 'sessionId', description: 'the session id.' }, { name: 'providerId', description: 'the provider route of the delegated request.' }],
+      },
+      {
+        signature: 'suspendedSessions(isTrusted: (provider: string) => boolean): string[]',
+        description: 'Private sessions whose recorded provider route fails the trust predicate. The caller executes the actual suspension; the core only judges. A private session with no observed provider has nothing to suspend yet.',
+        parameters: [{ name: 'isTrusted', description: 'trust predicate over provider ids; fails closed.' }],
+        returns: 'the suspended session ids, sorted for determinism.',
       },
     ],
   },
@@ -4102,6 +4415,46 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'payload', description: '.change - fresh current projection or clear tombstone.' }],
   },
   {
+    name: 'gs-server/client-config-changed',
+    mode: 'emit',
+    signature: '\'gs-server/client-config-changed\'(config: GsClientConfig): void',
+    summary: 'The cached server ClientConfig changed, by login/refresh push or by an active `refreshClientConfig()` pull.',
+    description: 'The cached server ClientConfig changed, by login/refresh push or by an active `refreshClientConfig()` pull.',
+    parameters: [{ name: 'config', description: 'the new effective ClientConfig.' }],
+  },
+  {
+    name: 'gs-server/session-ended',
+    mode: 'emit',
+    signature: '\'gs-server/session-ended\'(): void',
+    summary: 'Local authentication ended through logout or an endpoint change.',
+    description: 'Local authentication ended through logout or an endpoint change.',
+    parameters: [],
+  },
+  {
+    name: 'gs-server/session-established',
+    mode: 'emit',
+    signature: '\'gs-server/session-established\'(user: GsAuthUser): void',
+    summary: 'A gsclaw-server session became live: password/email login, host token adoption, restart restore, or a token refresh.',
+    description: 'A gsclaw-server session became live: password/email login, host token adoption, restart restore, or a token refresh.',
+    parameters: [{ name: 'user', description: 'authenticated user the established session belongs to.' }],
+  },
+  {
+    name: 'gs-server/session-expired',
+    mode: 'emit',
+    signature: '\'gs-server/session-expired\'(): void',
+    summary: 'The server rejected the refresh token as expired (401); local credential state was wiped.',
+    description: 'The server rejected the refresh token as expired (401); local credential state was wiped. A user-initiated logout does not fire this event.',
+    parameters: [],
+  },
+  {
+    name: 'gs-server/trust-revoked',
+    mode: 'emit',
+    signature: '\'gs-server/trust-revoked\'(): void',
+    summary: 'The server revoked the credential family (403: account disabled or trust withdrawn); local credential state was wiped.',
+    description: 'The server revoked the credential family (403: account disabled or trust withdrawn); local credential state was wiped.',
+    parameters: [],
+  },
+  {
     name: 'hmr/change',
     mode: 'emit',
     signature: '\'hmr/change\'(url: string): void',
@@ -5318,6 +5671,162 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
   {
+    name: 'GsAppUpdateConfig',
+    declaration: 'export interface GsAppUpdateConfig {\n    readonly version: string;\n    readonly notes?: readonly string[];\n    readonly downloads: {\n        readonly windowsX64?: string;\n        readonly macArm?: string;\n        readonly macIntel?: string;\n    };\n    readonly availableFrom?: string;\n    readonly downloadWindow?: {\n        readonly start: string;\n        readonly end: string;\n    } | null;\n}',
+  },
+  {
+    name: 'GsAuthMethods',
+    declaration: 'export interface GsAuthMethods {\n    readonly methods: {\n        readonly password: boolean;\n        readonly wecom: boolean;\n        readonly email: boolean;\n    };\n}',
+  },
+  {
+    name: 'GsAuthOptions',
+    declaration: 'export interface GsAuthOptions {\n    readonly endpoint: () => string;\n    readonly stateDir: string;\n    readonly protector: GsRefreshTokenProtector;\n    readonly client: GsClientIdentity;\n    readonly request?: GsRequest;\n    readonly onConfig?: (user: GsAuthUser, config: GsClientConfig) => void;\n    readonly onSessionEstablished?: (user: GsAuthUser) => void;\n    readonly onSessionLost?: (reason: GsSessionLostReason) => void;\n}',
+  },
+  {
+    name: 'GsAuthService',
+    declaration: 'export class GsAuthService implements GsSessionTokenSource {\n    constructor(private readonly options: GsAuthOptions);\n    snapshot(): GsAuthSnapshot;\n    accessToken(): string | undefined;\n    getMeta(): Promise<GsServerMeta>;\n    getAuthMethods(): Promise<GsAuthMethods>;\n    async fetchCaptcha(): Promise<GsCaptcha | null>;\n    async loginWithPassword(login: GsPasswordLogin): Promise<GsAuthSnapshot>;\n    async sendEmailCode(account: string): Promise<GsEmailCodeResponse>;\n    async loginWithEmailCode(login: GsEmailLogin): Promise<GsAuthSnapshot>;\n    async adoptTokens(tokens: GsTokenPair, user: GsAuthUser, config: GsClientConfig): Promise<GsAuthSnapshot>;\n    restoreSession(): Promise<boolean>;\n    async refreshAccessToken(): Promise<string>;\n    refreshTokens(): Promise<GsTokenPair>;\n    async logout(): Promise<void>;\n}',
+  },
+  {
+    name: 'GsAuthSnapshot',
+    declaration: 'export interface GsAuthSnapshot {\n    readonly status: \'signed-out\' | \'signed-in\';\n    readonly user?: GsAuthUser;\n}',
+  },
+  {
+    name: 'GsAuthUser',
+    declaration: 'export interface GsAuthUser {\n    readonly id: number;\n    readonly username: string;\n    readonly displayName: string;\n    readonly role: string;\n}',
+  },
+  {
+    name: 'GsBrand',
+    declaration: 'export interface GsBrand {\n    readonly name: string;\n    readonly headline: string;\n}',
+  },
+  {
+    name: 'GsBrandConfig',
+    declaration: 'export interface GsBrandConfig {\n    readonly name?: string;\n    readonly headline?: string;\n}',
+  },
+  {
+    name: 'GsBrandListener',
+    declaration: 'export type GsBrandListener = (brand: GsBrand) => void;',
+  },
+  {
+    name: 'GsBrandStore',
+    declaration: 'export class GsBrandStore {\n    static async load(options: GsBrandStoreOptions): Promise<GsBrandStore>;\n    current(): GsBrand;\n    view(): GsBrandView;\n    subscribe(listener: GsBrandListener): () => void;\n    async applyServerBrand(candidate: GsBrandConfig | null | undefined): Promise<void>;\n}',
+  },
+  {
+    name: 'GsBrandStoreOptions',
+    declaration: 'export interface GsBrandStoreOptions {\n    readonly stateDir: string;\n}',
+  },
+  {
+    name: 'GsBrandView',
+    declaration: 'export interface GsBrandView {\n    readonly name: string;\n    readonly headline: string;\n}',
+  },
+  {
+    name: 'GsCaptcha',
+    declaration: 'export interface GsCaptcha {\n    readonly captchaId: string;\n    readonly svg: string;\n    readonly expiresIn: number;\n}',
+  },
+  {
+    name: 'GsClientConfig',
+    declaration: 'export interface GsClientConfig {\n    readonly version: number;\n    readonly agent: {\n        readonly sandboxProfile: \'read-only\' | \'workspace-write\' | \'tool-mediated\';\n        readonly approvalPolicy: \'plan\' | \'ask\' | \'policy-auto\';\n        readonly dataClass: \'public\' | \'internal\' | \'sensitive\' | \'confidential\';\n    };\n    readonly features: {\n        readonly customModel: boolean;\n    };\n    readonly settingsPages: Record<string, GsSettingsPageMode>;\n    readonly permissions: {\n        readonly allowSubmit: boolean;\n        readonly allowExternalSkillInstall: boolean;\n        readonly allowLocalSkillCreate?: boolean;\n    };\n    readonly skills: Record<string, GsSkillControl>;\n    readonly localSkillRestrictions?: readonly GsLocalSkillRestrictionWire[];\n    readonly models: GsModelsConfig | null;\n    readonly appUpdate: GsAppUpdateConfig | null;\n    readonly notice: GsNoticeConfig | null;\n    readonly brand?: GsBrandConfig | null;\n}',
+  },
+  {
+    name: 'GsClientConfigCache',
+    declaration: 'export class GsClientConfigCache {\n    constructor(private readonly options: GsClientConfigCacheOptions);\n    snapshot(): GsClientConfigSnapshot | undefined;\n    update(user: GsAuthUser, config: GsClientConfig): void;\n    clear(): void;\n    subscribe(listener: GsClientConfigListener): () => void;\n    async getClientConfig(): Promise<GsClientConfigSnapshot>;\n}',
+  },
+  {
+    name: 'GsClientConfigCacheOptions',
+    declaration: 'export interface GsClientConfigCacheOptions {\n    readonly endpoint: () => string;\n    readonly session: GsSessionTokenSource;\n    readonly request?: GsRequest;\n}',
+  },
+  {
+    name: 'GsClientConfigListener',
+    declaration: 'export type GsClientConfigListener = (snapshot: GsClientConfigSnapshot | undefined) => void;',
+  },
+  {
+    name: 'GsClientConfigSnapshot',
+    declaration: 'export interface GsClientConfigSnapshot {\n    readonly user: GsAuthUser;\n    readonly config: GsClientConfig;\n}',
+  },
+  {
+    name: 'GsClientIdentity',
+    declaration: 'export interface GsClientIdentity {\n    readonly platform: \'windows\' | \'macos\' | \'linux\';\n    readonly version: string;\n}',
+  },
+  {
+    name: 'GsEmailCodeResponse',
+    declaration: 'export interface GsEmailCodeResponse {\n    readonly ok: boolean;\n    readonly maskedEmail: string;\n    readonly expiresIn: number;\n    readonly resendIn: number;\n}',
+  },
+  {
+    name: 'GsEmailLogin',
+    declaration: 'export interface GsEmailLogin {\n    readonly account: string;\n    readonly code: string;\n}',
+  },
+  {
+    name: 'GsEndpointStore',
+    declaration: 'export class GsEndpointStore {\n    static async load(options: GsEndpointStoreOptions): Promise<GsEndpointStore>;\n    resolve(): string;\n    get persistedOverride(): string | undefined;\n    async setOverride(value: string): Promise<string>;\n    async clearOverride(): Promise<void>;\n}',
+  },
+  {
+    name: 'GsEndpointStoreOptions',
+    declaration: 'export interface GsEndpointStoreOptions {\n    readonly stateDir: string;\n    readonly environment?: string | undefined;\n    readonly fallback: string;\n}',
+  },
+  {
+    name: 'GsLocalSkillRestrictionWire',
+    declaration: 'export interface GsLocalSkillRestrictionWire {\n    readonly name: string;\n    readonly contentHash: string;\n}',
+  },
+  {
+    name: 'GsModelProviderEntry',
+    declaration: 'export interface GsModelProviderEntry {\n    readonly api: \'openai-completions\';\n    readonly models: readonly {\n        readonly id: string;\n        readonly name?: string;\n        readonly input?: readonly string[];\n    }[];\n    readonly trustLevel?: \'trusted\' | \'external\';\n    readonly executionLocation?: \'local\' | \'server\';\n    readonly revision?: string;\n}',
+  },
+  {
+    name: 'GsModelsConfig',
+    declaration: 'export interface GsModelsConfig {\n    readonly providers: Record<string, GsModelProviderEntry>;\n    readonly defaultPrimary?: string;\n}',
+  },
+  {
+    name: 'GsNoticeConfig',
+    declaration: 'export interface GsNoticeConfig {\n    readonly text: string;\n    readonly startAt?: string;\n    readonly endAt?: string;\n    readonly dismissible?: boolean;\n}',
+  },
+  {
+    name: 'GsPasswordLogin',
+    declaration: 'export interface GsPasswordLogin {\n    readonly username: string;\n    readonly password: string;\n    readonly captchaId?: string;\n    readonly captchaCode?: string;\n}',
+  },
+  {
+    name: 'GsRefreshTokenProtector',
+    declaration: 'export interface GsRefreshTokenProtector {\n    available(): boolean;\n    protect(plaintext: string): Promise<Uint8Array>;\n    unprotect(sealed: Uint8Array): Promise<string>;\n}',
+  },
+  {
+    name: 'GsRequest',
+    declaration: 'export type GsRequest = (url: string, init: RequestInit) => Promise<Response>;',
+  },
+  {
+    name: 'GsServerMetaView',
+    declaration: 'export interface GsServerMetaView {\n    readonly endpoint: string;\n    readonly meta: GsServerMeta;\n}',
+  },
+  {
+    name: 'GsServerSkillCatalogSnapshot',
+    declaration: 'export interface GsServerSkillCatalogSnapshot {\n    readonly supported: boolean;\n    readonly types: readonly GsServerRuntimeType[];\n    readonly remotes: readonly GsServerSkillRemoteEntry[];\n    readonly gated: readonly GsServerSkillRemoteEntry[];\n}',
+  },
+  {
+    name: 'GsServerSkillRemoteEntry',
+    declaration: 'export interface GsServerSkillRemoteEntry {\n    readonly name: string;\n    readonly runtimeType: GsServerRuntimeType;\n    readonly definitionRevision: string;\n    readonly modelPolicy: \'standard\' | \'trusted-only\';\n}',
+  },
+  {
+    name: 'GsSessionLostReason',
+    declaration: 'export type GsSessionLostReason = \'expired\' | \'disabled\';',
+  },
+  {
+    name: 'GsSessionTokenSource',
+    declaration: 'export interface GsSessionTokenSource {\n    accessToken(): string | undefined;\n    refreshAccessToken(): Promise<string>;\n}',
+  },
+  {
+    name: 'GsSessionView',
+    declaration: 'export interface GsSessionView {\n    readonly status: \'signed-out\' | \'signed-in\';\n    readonly endpoint: string;\n    readonly user?: GsAuthUser;\n}',
+  },
+  {
+    name: 'GsSettingsPageMode',
+    declaration: 'export type GsSettingsPageMode = \'hidden\' | \'readonly\' | \'editable\';',
+  },
+  {
+    name: 'GsSkillControl',
+    declaration: 'export type GsSkillControl = \'on\' | \'off\';',
+  },
+  {
+    name: 'GsTokenPair',
+    declaration: 'export interface GsTokenPair {\n    readonly accessToken: string;\n    readonly refreshToken: string;\n    readonly expiresIn: number;\n}',
+  },
+  {
     name: 'HostConnectionFetch',
     declaration: 'export interface HostConnectionFetch {\n    register(route: ConnectionFetchRoute): () => Promise<void>;\n}',
   },
@@ -6418,8 +6927,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SendTeamMessageResult {\n    readonly messageId: TeamMessageId;\n    readonly status: \'accepted\' | \'queued\';\n}',
   },
   {
+    name: 'SensitiveInferencePolicy',
+    declaration: 'export type SensitiveInferencePolicy = \'standard\' | \'trusted-only\';',
+  },
+  {
+    name: 'SensitivePolicyEvent',
+    declaration: 'export type SensitivePolicyEvent = {\n    readonly kind: \'enter-private\';\n    readonly cause?: SensitivePrivateCause;\n} | {\n    readonly kind: \'mark-potential\';\n} | {\n    readonly kind: \'mark-sensitive\';\n} | {\n    readonly kind: \'admit-skill\';\n    readonly name: string;\n    readonly revision: string;\n} | {\n    readonly kind: \'use-provider\';\n    readonly provider: string;\n};',
+  },
+  {
+    name: 'SensitivePolicyView',
+    declaration: 'export interface SensitivePolicyView {\n    knows(sessionId: string): boolean;\n    isPrivate(sessionId: string): boolean;\n    stateOf(sessionId: string): SensitiveSessionState;\n}',
+  },
+  {
+    name: 'SensitivePrivateCause',
+    declaration: 'export type SensitivePrivateCause = \'explicit\' | \'provider-endpoint\';',
+  },
+  {
+    name: 'SensitiveSessionState',
+    declaration: 'export interface SensitiveSessionState {\n    readonly inferencePolicy: SensitiveInferencePolicy;\n    readonly sensitivity: SessionSensitivity;\n    readonly privateCause?: SensitivePrivateCause;\n    readonly provider?: string;\n}',
+  },
+  {
     name: 'ServerResponse',
     declaration: 'export interface ServerResponse {\n    readonly type: \'server-response\';\n    readonly rpcId: RpcId;\n    readonly result: ConnectionRpcResult<unknown>;\n}',
+  },
+  {
+    name: 'ServerSkillPreferenceRow',
+    declaration: 'export interface ServerSkillPreferenceRow {\n    readonly name: string;\n    readonly description: string;\n    readonly enabled: boolean;\n    readonly available: boolean;\n    readonly runtimeType: string;\n    readonly policy?: \'trusted-only\';\n    readonly unavailableReason?: \'runtime-unsupported\' | \'trusted-session-required\';\n}',
   },
   {
     name: 'Session',
@@ -6848,6 +7381,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionSelectModelValue',
     declaration: 'export interface SessionSelectModelValue {\n    readonly selected: ModelSelection;\n}',
+  },
+  {
+    name: 'SessionSensitivity',
+    declaration: 'export type SessionSensitivity = \'unclassified\' | \'potential\' | \'sensitive\';',
   },
   {
     name: 'SessionSeq',

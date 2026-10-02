@@ -504,7 +504,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           : undefined
         const policy = approvedMode === undefined
           ? standingPolicy
-          : { ...(standingPolicy as SandboxExecutionPolicy), mode: approvedMode }
+          : sandboxPolicy?.resolve({ ...exec.agent ? { session: exec.agent.session } : {}, mode: approvedMode })
         const workdir = resolveWorkdir(args.workdir, exec)
         const request: ShellExecRequest = {
           command: args.command,

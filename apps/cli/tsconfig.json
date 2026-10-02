@@ -8,6 +8,8 @@
     "src"
   ],
   "references": [
+    { "path": "../../packages/llm/llm-gs-gateway" },
+    { "path": "../../packages/bundle/gs-app" },
     {
       "path": "../../vendor/cordis"
     },

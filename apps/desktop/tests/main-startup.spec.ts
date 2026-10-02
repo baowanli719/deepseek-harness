@@ -317,7 +317,10 @@ vi.mock('../src/login-shell-environment.ts', async importOriginal => ({
   readDesktopLoginShellEnvironment: harness.loginShell,
 }))
 vi.mock('../src/runtime-tree.ts', () => ({ readDesktopRuntime: () => ({ release: { version: '1.0.0' } }) }))
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }) }))
+vi.mock('../src/paths.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/paths.ts')>(),
+  resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }),
+}))
 vi.mock('../src/project-manager.ts', () => ({
   DesktopProjectManager: class {
     readonly applyRelease = harness.applyRelease
@@ -1054,10 +1057,10 @@ describe('desktop main startup', () => {
 
   it.each([
     ['win32', ['--updated'], true],
-    ['win32', [], false],
+    ['win32', [], true],
     ['darwin', ['--updated'], false],
     ['linux', ['--updated'], false],
-  ] as const)('raises the first workspace only for a Windows installer restart (%s, %j)', async (platform, args, raises) => {
+  ] as const)('raises an activated Windows workspace after startup or relaunch (%s, %j)', async (platform, args, raises) => {
     vi.stubGlobal('process', { ...process, platform, argv: ['desktop', ...args] })
     await import('../src/main.ts')
     await harness.preparing.promise
@@ -1079,7 +1082,8 @@ describe('desktop main startup', () => {
     const replacement = harness.windows[1]!
     await replacement.shown.promise
     expect(replacement.show).toHaveBeenCalledOnce()
-    expect(replacement.moveTop).not.toHaveBeenCalled()
+    expect(replacement.moveTop).toHaveBeenCalledTimes(raises ? 1 : 0)
+    expect(replacement.focus).toHaveBeenCalledTimes(raises ? 1 : 0)
     expect(replacement.setAlwaysOnTop).not.toHaveBeenCalled()
   })
 

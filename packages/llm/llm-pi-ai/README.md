@@ -104,6 +104,8 @@ A profile's `models` list replaces the route's installed catalog rather than ext
 
 For self-hosted Chat Completions endpoints, `thinkingTokenBudgetField` selects the reasoning-budget parameter, and `vllmPriority` sets an integer scheduler priority when the server enables priority scheduling. Template arguments accept `$var: thinking.budget`. `openai-responses` gateways can set `supportsMaxOutputTokens: false` to omit `max_output_tokens`; Azure and Codex transports ignore this shared compatibility field. These controls are opt-in; catalog-owned Anthropic effort and fallback capabilities are not configurable switches.
 
+A deployment-owned Chat Completions gateway that wants the request's session id — for audit or cache routing inside its own boundary — can opt into pi-ai's session-affinity emission with `compat.sendSessionAffinityHeaders: true`; `compat.sessionAffinityFormat` accepts only `openrouter`, the single `x-session-id` header, because the `openai` formats restate the same id under three header names. The headers disclose the session id to the endpoint, so pi-ai auto-enables them for OpenRouter alone and every other endpoint must state them explicitly.
+
 ### Change configuration at runtime
 
 Each operation captures the current `providers` Config reference. New or changed provider profiles are validated before form persistence; unchanged catalog failures remain editable. Route-set or retry-policy changes update registration atomically, preserving previous routes if another adapter owns a requested route.

@@ -108,6 +108,36 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'gsServer', pkg: 'gs-server', title: 'GS account and authenticated server access',
+    mode: 'core', consumers: ['llm-gs-gateway', 'gs-server-skills', 'sensitive-policy'],
+    note: 'Owns account generations, secure credential persistence, and authenticated requests to the configured GS endpoint.',
+  },
+  {
+    key: 'gsLlmGateway', pkg: 'llm-gs-gateway', title: 'GS model gateway configuration',
+    mode: 'service', consumers: ['llm-gs-gateway'],
+    note: 'Registers GS model and vision adapters using authenticated server access and sensitive request attribution.',
+  },
+  {
+    key: 'gsServerSkillCatalog', pkg: 'gs-server-skills', title: 'GS server skill catalog',
+    mode: 'core', consumers: ['ui-skills-gs'],
+    note: 'Reads the authenticated account catalog; skill loading rechecks current account, preferences, and privacy policy.',
+  },
+  {
+    key: 'gsServerSkillGate', pkg: 'gs-server-skills', title: 'GS server skill permission gate',
+    mode: 'service', consumers: ['gs-server-skills', 'sensitive-policy'],
+    note: 'Combines active account configuration and per-session privacy policy before server skill access.',
+  },
+  {
+    key: 'gsServerSkillPreferences', pkg: 'gs-server-skills', title: 'GS server skill preferences',
+    mode: 'core', consumers: ['ui-skills-gs', 'gs-server-skills'],
+    note: 'Persists global and per-skill enablement and applies changes to subsequent skill access.',
+  },
+  {
+    key: 'sensitivePolicy', pkg: 'sensitive-policy', title: 'Durable private session policy',
+    mode: 'core', consumers: ['llm-gs-gateway', 'gs-server-skills'],
+    note: 'Restores monotonic privacy transitions through a session projection and flushes transitions before inference or tool access.',
+  },
+  {
     key: 'hmr',
     pkg: 'hmr',
     title: 'Serialized module and configuration reloads',

@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
 /deepseek-harness-desktop:
-  en: eccac345d51428fa
-  zh: 4a448b3d63cb8117
+  en: 8ec94dd38549e516
+  zh: 543f6d52fdd2dbcf
 /deepseek-harness-desktop/terminal-command:
   en: bef92953c237363f
   zh: d21d6effd21b8c00
@@ -33,8 +33,8 @@
   en: 40d2ad4014bf445b
   zh: 6a08de06df9ed042
 /deepseek-harness-desktop/develop/startup-onboarding:
-  en: a51346b8d880ddba
-  zh: 7913214c1c66063c
+  en: aeebd6331329229c
+  zh: 2fc6e68b32865e4e
 /deepseek-harness-desktop/develop/welcome-window-appearance:
   en: ae319a496639b38d
   zh: ef044103240ac9da
@@ -44,6 +44,9 @@
 /deepseek-harness-desktop/package/release-versions:
   en: f461b255133384cc
   zh: 2b9db718f22fdd04
+/deepseek-harness-desktop/package/product-identity-overrides:
+  en: c4594a19fc0ba196
+  zh: f0f03ec5d2761a05
 /deepseek-harness-desktop/package/runtime-file-selection:
   en: f0e345fd89868803
   zh: fd2c775ad23fa2f0
@@ -51,8 +54,8 @@
   en: 72073b2e72590067
   zh: 63b1f9790395c37d
 /deepseek-harness-desktop/package/unsigned-windows-test-installer:
-  en: cfd5780dd26a8e46
-  zh: f7a16b1ede793b7b
+  en: d73b39a698516fd2
+  zh: e4676a4027ecfa2f
 /deepseek-harness-desktop/package/windows-installer-interface:
   en: f176a8b1c7de3064
   zh: 6ea2dbe6bb808c34
@@ -60,8 +63,8 @@
   en: 8efe3498dbe8686d
   zh: a88c16f20a9430f3
 /deepseek-harness-desktop/updates:
-  en: d0df867b69cbffa4
-  zh: eeb47b79b86fe5ee
+  en: 5b755d596dbfdce4
+  zh: 43083370e897ad8c
 /deepseek-harness-desktop/updates/mandatory-update-policy:
   en: 2f789a4949fafb12
   zh: d8b28c01cfee11b7

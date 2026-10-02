@@ -1,0 +1,136 @@
+# The dsh-gs-app bundle patch: the gs-worker (国盛办公AI) product layer over
+# dsh-base + dsh-web-app. Applied after both; rows here override earlier rows
+# by id, with the profile's own cordis.patch.yml and any --patch overlays still
+# to come. A patch replaces the targeted row's whole `config`, so each row
+# below restates every key it owns.
+
+# ── 国盛证券办公助理 persona ────────────────────────────────────────────────
+#
+# Ported from the desktop product (dsh-plugin-desktop): profile.ts forced this
+# office-assistant identity onto the deployment system-prompt row and dropped
+# the fixed English harness opener, and prompt-language.ts pinned Simplified
+# Chinese as the default conversation language. The language plugin supplies
+# its independent section and step reminder; the cwd suffix is restated because this row replaces
+# the whole config.
+
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    personaPrefix: |-
+      你是国盛证券的办公助理，为国盛证券员工提供日常办公支持，包括文档撰写与整理、资料查询、数据汇总、会议纪要、流程指引等。回答应当专业、准确、简洁；涉及具体业务数据或内部规定时，以可核实的资料为准，不确定的内容要明确说明，不要臆造。
+
+    personaSuffix: Your working directory is {{cwd}}.
+
+# ── gsclaw-server integration rows ─────────────────────────────────────────
+#
+# Plugin config fields belong to the provider packages; these rows pin only
+# identity and mount order. gs-server first: every other gs row consumes its
+# gsServer service.
+
+- insert:
+    - id: gs-prompt-language
+      name: '@deepseek-ai/dsh-gs-app/prompt-language'
+    # gsclaw-server integration: authentication token state machine (access
+    # token memory-only), authenticated HTTP client with single-flight 401
+    # refresh, server ClientConfig cache, private /api/gs-server/* host
+    # routes, and log export. State lives beside the owning profile; the
+    # Desktop shell passes its build-embedded version as DSH_CLIENT_VERSION to
+    # the Host, and a plain CLI launch reports a placeholder.
+    - id: gs-server
+      name: '@deepseek-ai/dsh-gs-server'
+      config:
+        stateDir: !!js "ctx.get('profileContext').dir + '/gs-server'"
+        clientVersion: !!js "process.env.DSH_CLIENT_VERSION ?? '0.0.0-cli'"
+        restoreOnStart: true
+
+    # Server-mediated model access: a 127.0.0.1 loopback proxy that swaps a
+    # per-boot placeholder token for the real gsclaw access token before
+    # forwarding to the server-side model gateway, plus hot mirroring of the
+    # server ClientConfig models catalog into the llm provider volatile
+    # config. Every agent LLM call crosses this gateway.
+    - id: llm-gs-gateway
+      name: '@deepseek-ai/dsh-llm-gs-gateway'
+
+    # Sensitive-data compliance: private sessions are restricted to trusted
+    # model routes and lose egress-capable tools, every model request carries
+    # the x-gsclaw-sensitive audit header, and sessions suspend when server
+    # trust is revoked.
+    - id: sensitive-policy
+      name: '@deepseek-ai/dsh-sensitive-policy'
+
+    - id: gs-agent-policy
+      name: '@deepseek-ai/dsh-gs-app/agent-policy'
+
+    # Server-executed skill bridges (run_data_query / run_mcp_skill executed
+    # by gsclaw-server; tokens stay in the host process) and
+    # administrator-controlled local skill trust.
+    - id: gs-server-skills
+      name: '@deepseek-ai/dsh-gs-server-skills'
+      config:
+        localSkillManagedRoot: !!js "process.platform === 'win32' && process.env.APPDATA ? process.env.APPDATA + '/gs-worker/local-skills' : dshHomePath('local-skills')"
+        preferenceRoot: !!js "process.platform === 'win32' && process.env.APPDATA ? process.env.APPDATA + '/gs-worker/gs-skills/preferences' : dshHomePath('gs-skills/preferences')"
+
+    - id: gs-skills-routes
+      name: '@deepseek-ai/dsh-gs-app/skills-routes'
+
+    # Vision channel. A plain mcp-client row cannot express this mount: the
+    # child script path derives from this bundle's own module URL, and the
+    # loopback proxy origin/token are per-boot runtime values provided by the
+    # gsLlmGateway service. The bundle-local bridge plugin resolves both and
+    # mounts mcp-client (stdio) onto src/mcp-vision-server.ts, registering
+    # mcp__vision__analyze_image; the proxy token reaches only that child
+    # through the env carve-out. The server resolves models.visionModel on
+    # every request; clients do not select or receive the vision model.
+    - id: gs-vision-bridge
+      name: '@deepseek-ai/dsh-gs-app/vision-bridge'
+      config:
+        toolCallTimeoutMs: 120000
+
+    # The office client keeps its scheduled-task service and task page enabled.
+    - id: time-context
+      name: '@deepseek-ai/dsh-time-context'
+
+    - id: schedule
+      name: '@deepseek-ai/dsh-schedule'
+
+    - id: ui-schedule
+      name: '@deepseek-ai/dsh-client-ui-schedule'
+
+    - id: ui-brand-gs
+      name: '@deepseek-ai/dsh-client-ui-brand-gs'
+
+    - id: ui-account-gs
+      name: '@deepseek-ai/dsh-client-ui-account-gs'
+
+    - id: ui-skills-gs
+      name: '@deepseek-ai/dsh-client-ui-skills-gs'
+
+# ── model-access posture ───────────────────────────────────────────────────
+#
+# The direct DeepSeek adapter would bypass the gsclaw gateway, and the Web
+# Models settings page would hold provider keys on the client; both stay
+# disabled, mirroring the desktop product's proxy-only posture.
+
+- id: llm-deepseek
+  disabled: true
+
+- id: ui-settings-models
+  disabled: true
+
+# Enterprise conversations are never submitted to the external feedback collector.
+- id: session-telemetry-otel
+  disabled: true
+
+- id: ui-message-feedback
+  disabled: true
+
+- id: command-feedback
+  disabled: true
+
+# ── brand posture ────────────────────────────────────────────────────────────
+#
+# The official-profile sidebar brand belongs to DeepSeek Harness deployments;
+# ui-brand-gs fills the gs-worker sidebar and hero brand seats instead.
+
+- id: ui-brand-official
+  disabled: true

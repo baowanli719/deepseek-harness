@@ -925,6 +925,23 @@ async prepare(request: DeepSeekLlmApiExtensionRequest): Promise<PreparedDeepSeek
 
 Source: [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../../packages/llm/deepseek-llm-api-extensions/src/index.ts)
 
+<a id="ctxgsllmgateway--gsllmgateway"></a>
+
+### `ctx.gsLlmGateway` — `GsLlmGateway`
+
+The loopback gateway face this plugin publishes as `ctx.gsLlmGateway`: everything a composition needs to route a provider profile through the proxy and to wire the per-boot token into the credential plane.
+
+```ts cordis-catalog
+/**
+ * Provider-profile baseURL route for one server provider id.
+ * @param providerId - provider id inside the route grammar.
+ * @returns the loopback baseURL naming that provider.
+ */
+providerBaseUrl(providerId: string): string
+```
+
+Source: [`packages/llm/llm-gs-gateway/src/types.ts`](../../packages/llm/llm-gs-gateway/src/types.ts)
+
 <a id="ctxllm--llmruntime"></a>
 
 ### `ctx.llm` — `LlmRuntime`

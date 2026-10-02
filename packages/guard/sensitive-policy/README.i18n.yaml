@@ -1,0 +1,79 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/guard/sensitive-policy/README.md
+/:
+  en: f0aae88af741db6d
+  zh: a9f0f1db6a193a32
+/deepseek-ai-dsh-sensitive-policy:
+  en: 96ca07f46e74e0cb
+  zh: 2e2e270c6a77f2b0
+/deepseek-ai-dsh-sensitive-policy/summary:
+  en: f358e8ef50fbd23b
+  zh: c56338d9b79157a4
+/deepseek-ai-dsh-sensitive-policy/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-sensitive-policy/use-this-package:
+  en: 128227da43e67dbe
+  zh: 992bd8d1f71817e4
+/deepseek-ai-dsh-sensitive-policy/use-this-package/when-to-choose-it:
+  en: afe9d3cc25d6b0f6
+  zh: a493dccff8eaef1e
+/deepseek-ai-dsh-sensitive-policy/use-this-package/setting-it-up:
+  en: 6527457d4e8497d7
+  zh: b5f56edffd1218bc
+/deepseek-ai-dsh-sensitive-policy/use-this-package/what-you-get:
+  en: 3c8f7f8733df27c4
+  zh: 9fef215eafcd4a6b
+/deepseek-ai-dsh-sensitive-policy/understand-the-implementation:
+  en: 5aff52e1842d5505
+  zh: 7329b4dd74ebb57a
+/deepseek-ai-dsh-sensitive-policy/understand-the-implementation/design-philosophy:
+  en: 8a8b5650544fed09
+  zh: bbdb4f2224045c8c
+/deepseek-ai-dsh-sensitive-policy/understand-the-implementation/how-a-request-is-judged:
+  en: 6cd00b4fa4ab7520
+  zh: e9e7719dc0a3aba5
+/deepseek-ai-dsh-sensitive-policy/understand-the-implementation/how-suspension-is-judged-and-executed:
+  en: 462add9537763d1d
+  zh: 60bae807d204cffa
+/deepseek-ai-dsh-sensitive-policy/understand-the-implementation/source-map:
+  en: 4853b2d95e0f323f
+  zh: 94e0080e6a26cf12
+/deepseek-ai-dsh-sensitive-policy/further-exploration:
+  en: d4715fd9481dc06d
+  zh: e4156dbb8b4c48b2
+/deepseek-ai-dsh-sensitive-policy/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-tool-result:
+  en: 7877631ca859b191
+  zh: 32222c70fd81713a
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-tool-result/what-the-model-sees:
+  en: f32e079e045bfa90
+  zh: b7cd17055978e5dd
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-tool-result/token-effect:
+  en: b6a1fae10407a95e
+  zh: ed56e6ee2e05039d
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-tool-result/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: 237090f86b42c262
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-model-request:
+  en: 59eee1db1ec3dffb
+  zh: 0207b977ec215e83
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-model-request/what-the-model-sees:
+  en: 21c71889706012d1
+  zh: 87663a5c0713763a
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-model-request/token-effect:
+  en: 861074ae989ac42f
+  zh: 9f5193bee528d4f0
+/deepseek-ai-dsh-sensitive-policy/model-experience/conditional-model-request/kv-cache-effect:
+  en: 785c0f5cab757a5d
+  zh: c3b094f088da5baf
+/deepseek-ai-dsh-sensitive-policy/known-limitations-and-deferred-work:
+  en: 0e3b11e707b83977
+  zh: 417ed9ed386250a2
+/deepseek-ai-dsh-sensitive-policy/known-limitations-and-deferred-work/dev-note:
+  en: 55224ae5764e1214
+  zh: d36792a788a18aae

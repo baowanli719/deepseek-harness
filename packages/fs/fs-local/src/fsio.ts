@@ -172,6 +172,11 @@ export async function resolveLocalTarget(cwd: string, path: string): Promise<Loc
     if (isENOTDIR(error)) throw new FsError(`cannot resolve "${displayPath}": a parent path segment is not a directory`, 'FS_NOT_FOUND')
     /* v8 ignore next -- non-ENOENT realpath failure needs a permission/IO fault; ENOENT falls through to ancestor resolution. */
     if (!isENOENT(error)) throw error
+    const linkInfo = await lstat(displayPath).catch((cause: unknown) => {
+      if (isENOENT(cause)) return undefined
+      throw cause
+    })
+    if (linkInfo?.isSymbolicLink()) throw new FsError(`cannot resolve "${displayPath}": unresolved symbolic link`, 'FS_NOT_FOUND')
   }
   // File absent: realpath the nearest existing ancestor and re-append the
   // missing suffix (the file basename plus any not-yet-created intermediate
@@ -201,6 +206,13 @@ export async function resolveLocalTarget(cwd: string, path: string): Promise<Loc
       if (error instanceof FsError) throw error
       /* v8 ignore next -- a non-ENOENT realpath failure needs a permission/IO fault. */
       if (!isENOENT(error)) throw error
+      // An unresolved reparse point cannot be appended as an ordinary missing
+      // directory: later writes could follow it beyond the checked identity.
+      const linkInfo = await lstat(ancestor).catch((cause: unknown) => {
+        if (isENOENT(cause)) return undefined
+        throw cause
+      })
+      if (linkInfo?.isSymbolicLink()) throw new FsError(`cannot resolve "${displayPath}": unresolved symbolic link`, 'FS_NOT_FOUND')
       const parent = dirname(ancestor)
       /* v8 ignore next -- the filesystem root always realpaths, so the walk terminates before parent === ancestor. */
       if (parent === ancestor) return { displayPath, targetKey: FsTargetKey(displayPath) }
@@ -284,8 +296,20 @@ function listingIoError(displayPath: string, error: unknown): FsError {
 }
 
 async function resolveListedChildTarget(parent: LocalTarget, name: string): Promise<LocalTarget> {
-  const identity = await resolveLocalTarget(parent.targetKey, name)
-  return { displayPath: localDisplayPath(parent.displayPath, name), targetKey: identity.targetKey }
+  const displayPath = localDisplayPath(parent.displayPath, name)
+  try {
+    const identity = await resolveLocalTarget(parent.targetKey, name)
+    return { displayPath, targetKey: identity.targetKey }
+  } catch (error: unknown) {
+    const path = localDisplayPath(parent.targetKey, name)
+    // Keep dangling links visible as metadata-only "other" entries. Resolving
+    // their display path for an operation still refuses the unresolved link.
+    if (error instanceof FsError && error.code === 'FS_NOT_FOUND'
+      && (await lstat(path)).isSymbolicLink() && await probe(path) === null) {
+      return { displayPath, targetKey: FsTargetKey(path) }
+    }
+    throw error
+  }
 }
 
 /**

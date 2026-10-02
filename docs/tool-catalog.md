@@ -35,6 +35,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list`, `schedule_update` | `ctx.tools`, `ctx.schedule`, `a live root Agent` | `tool/call`, `Schedule storage domain create, update, or delete`, `tool/result` | - | Registered in live root Agent scopes while the Schedule service is loaded. Accepts after_seconds, explicit absolute at, bounded fixed-rate every_seconds, daily and weekly local times in an explicit IANA zone, and cron as a five-field expression. Management uses the Host storage domain; due messages resume the original Session. |
 | `@deepseek-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@deepseek-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
+| `@deepseek-ai/dsh-gs-server-skills` | `run_data_query`, `run_mcp_skill` | `ctx.tools`, `ctx.skills`, `ctx.gsServer` | `tool/call`, `tool/result` | - | The bridge tools exist only while the server advertises the matching skillExecution type and the effective catalog holds an executable skill of that type; executions are forwarded to gsclaw-server, which owns the skill runtime. Trusted-only gated skills are never visible to these tools. |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@deepseek-ai/dsh-tool-subagent` | `list_subagent_models`, `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt`, `ctx.llm for model discovery and selected-route validation` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered delegation name is the load-time `toolName` config (default `subagent`); the default schema above has model selection off, while the discovery schema is shown as the fixed companion available in an enabled Session. Web presets sample the Plugins preference for each new top-level Session and preserve that decision for its child Sessions; `subagent_fork` remains fixed-route. Each instance independently controls whether it reads model-selection settings and its background behavior through `modelSelectionSettings`, `backgroundMode`, and `enableRunInBackground`. |
@@ -1748,6 +1749,74 @@ Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only
 Source: [`packages/workflow/tool-ralph/src/index.ts`](../packages/workflow/tool-ralph/src/index.ts)
 
 A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap.
+
+<a id="deepseek-aidsh-gs-server-skills"></a>
+
+## `@deepseek-ai/dsh-gs-server-skills`
+
+### `run_data_query`
+
+Run one declared query template of a server-delivered data-query skill and return the rows as text. Load the skill with the skill tool first; use only template names and parameters its definition declares.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skill": {
+      "type": "string",
+      "description": "Exact skill name from the available skills catalog."
+    },
+    "query": {
+      "type": "string",
+      "description": "Query template name declared by the skill definition."
+    },
+    "params": {
+      "type": "object",
+      "description": "Template parameter values keyed by declared parameter name.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "skill",
+    "query"
+  ]
+}
+```
+
+Source: [`packages/skill/gs-server-skills/src/server-skill-tools.ts`](../packages/skill/gs-server-skills/src/server-skill-tools.ts)
+
+### `run_mcp_skill`
+
+Call one allowlisted tool of a server-delivered MCP skill and return its result as text. Load the skill with the skill tool first; use only tool names and argument shapes its definition declares.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skill": {
+      "type": "string",
+      "description": "Exact skill name from the available skills catalog."
+    },
+    "tool": {
+      "type": "string",
+      "description": "MCP tool name declared by the skill definition."
+    },
+    "arguments": {
+      "type": "object",
+      "description": "Tool arguments matching the declared input schema.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "skill",
+    "tool"
+  ]
+}
+```
+
+Source: [`packages/skill/gs-server-skills/src/server-skill-tools.ts`](../packages/skill/gs-server-skills/src/server-skill-tools.ts)
+
+The bridge tools exist only while the server advertises the matching skillExecution type and the effective catalog holds an executable skill of that type; executions are forwarded to gsclaw-server, which owns the skill runtime. Trusted-only gated skills are never visible to these tools.
 
 <a id="deepseek-aidsh-tool-skill"></a>
 

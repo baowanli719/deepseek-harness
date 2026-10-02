@@ -30,6 +30,8 @@ const state = vi.hoisted(() => ({
   openDevTools: vi.fn(),
   closeWelcome: vi.fn(),
   welcomeLocale: undefined as DesktopLocale | undefined,
+  gsLoginOpened: vi.fn<(...args: unknown[]) => void>(),
+  gsSignedIn: false,
   preference: 'zh',
   hasApiKey: false,
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
@@ -101,7 +103,10 @@ vi.mock('electron', () => ({
 // The Windows tray relabels through Menu as well; keep the menu call counts below platform-neutral.
 vi.mock('../src/tray.ts', () => ({ DesktopTray: class { relabel() {} dispose() {} } }))
 
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: '/profile' }) }))
+vi.mock('../src/paths.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/paths.ts')>(),
+  resolveDesktopPaths: () => ({ profile: '/profile' }),
+}))
 vi.mock('../src/login-shell-environment.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/login-shell-environment.ts')>(),
   readDesktopLoginShellEnvironment: async (base: NodeJS.ProcessEnv) => ({ environment: base, failures: [] }),
@@ -162,6 +167,16 @@ vi.mock('../src/welcome-window.ts', () => ({
       show: vi.fn(), focus: vi.fn(), webContents: { send: vi.fn() } }
   },
 }))
+vi.mock('../src/gs-login-backend.ts', () => ({
+  connectGsLogin: () => ({ session: async () => ({ status: state.gsSignedIn ? 'signed-in' : 'signed-out' }) }),
+}))
+vi.mock('../src/gs-login-window.ts', () => ({
+  openGsLoginWindow: (...args: unknown[]) => {
+    state.gsLoginOpened(...args)
+    return Promise.resolve({ once: vi.fn(), close: state.closeWelcome, isDestroyed: () => false,
+      show: vi.fn(), focus: vi.fn(), webContents: { send: vi.fn() } })
+  },
+}))
 
 afterEach(() => {
   vi.clearAllTimers()
@@ -169,6 +184,51 @@ afterEach(() => {
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+})
+
+it.each([false, true])('shows startup immediately and selects the GS login gate after a slow Host (signed in=%s)', async (signedIn) => {
+  vi.resetModules()
+  vi.clearAllMocks()
+  state.operations = undefined
+  vi.stubEnv('DSH_DESKTOP_PROFILE', 'gs-desktop')
+  vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
+  vi.stubEnv('DSH_DESKTOP_DEV_PROJECT_DIR', '/development-profile')
+  vi.stubEnv('DSH_DESKTOP_NODE_BINARY', '/runtime/node')
+  vi.stubEnv('DSH_DESKTOP_PNPM_ENTRY', '/runtime/pnpm')
+  vi.stubEnv('DSH_DESKTOP_DSH_DIR', '/runtime/dsh')
+  vi.stubEnv('DSH_DESKTOP_PRIMARY_RUNTIME_DIR', '/runtime/primary-runtime')
+  vi.stubEnv('DSH_DESKTOP_OPEN_DEVTOOLS', '0')
+  vi.stubEnv('DSH_DESKTOP_MANDATORY_UPDATE_CONFIG', undefined)
+  vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', undefined)
+  state.hasApiKey = true
+  state.gsSignedIn = signedIn
+  const starting = Promise.withResolvers<{ url: string; injections: unknown[] }>()
+  state.startHost.mockReturnValueOnce(starting.promise)
+  await import('../src/main.ts')
+  await vi.waitFor(() => { expect(state.startHost).toHaveBeenCalledOnce() })
+  expect(state.showWorkspace).toHaveBeenCalledOnce()
+  expect(state.gsLoginOpened).not.toHaveBeenCalled()
+  let bootReturned = false
+  const boot = Promise.resolve(state.handlers.get(DESKTOP_IPC.boot)!({ senderFrame: { url: 'dsh-app://app/' } }))
+    .then(() => { bootReturned = true })
+  await Promise.resolve()
+  expect(bootReturned).toBe(false)
+  const showsBeforeReady = state.showWorkspace.mock.calls.length
+  const focusBeforeReady = state.focusWorkspace.mock.calls.length
+  starting.resolve({ url: 'http://127.0.0.1:3080/?token=test', injections: [] })
+  await boot
+  expect(state.operations).toBeUndefined()
+  expect(state.showWorkspace).toHaveBeenCalledTimes(showsBeforeReady)
+  expect(state.focusWorkspace).toHaveBeenCalledTimes(focusBeforeReady)
+  if (signedIn) {
+    expect(state.gsLoginOpened).not.toHaveBeenCalled()
+  } else {
+    expect(state.gsLoginOpened).toHaveBeenCalledOnce()
+    const enter = state.gsLoginOpened.mock.calls[0]?.[3] as () => Promise<void>
+    await enter()
+    expect(state.showWorkspace).toHaveBeenCalledTimes(showsBeforeReady + 1)
+  }
+  state.gsSignedIn = false
 })
 
 it.each([false, true])('starts welcome onboarding without carrying update focus into login or skip (Windows update=%s)', async (updated) => {
@@ -236,8 +296,8 @@ it.each([false, true])('starts welcome onboarding without carrying update focus 
   await state.operations!.skip()
   expect(state.loadWorkspace).not.toHaveBeenCalled()
   expect(state.showWorkspace).toHaveBeenCalledOnce()
-  expect(state.moveTopWorkspace).not.toHaveBeenCalled()
-  expect(state.focusWorkspace).not.toHaveBeenCalled()
+  expect(state.moveTopWorkspace).toHaveBeenCalledTimes(process.platform === 'win32' ? 1 : 0)
+  expect(state.focusWorkspace).toHaveBeenCalledTimes(process.platform === 'win32' ? 1 : 0)
   expect(state.windowOptions).toMatchObject({
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 18 }, vibrancy: 'sidebar' } : {}),
     webPreferences: { contextIsolation: true, sandbox: true },
@@ -287,6 +347,7 @@ it.each([false, true])('starts welcome onboarding without carrying update focus 
   expect(await state.operations!.takeNotice()).toBeUndefined()
   state.showWorkspace.mockClear()
   state.focusWorkspace.mockClear()
+  state.moveTopWorkspace.mockClear()
   vi.stubEnv('DSH_DESKTOP_OPEN_DEVTOOLS', '1')
   state.accountListener!({ ...account, status: 'credential-stored', attempt: { id: attemptId, phase: 'succeeded' } })
   await vi.waitFor(() => { expect(state.showInactiveWorkspace).toHaveBeenCalledOnce() })

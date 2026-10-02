@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { composeEntries, loadProfileDirectory, PROFILE_PATCH_FILENAME, type Profile } from './profile.ts'
 import { loadOptionalPatches } from './index.ts'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
+import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 
 /** Application-owned package manager executable; environment applies only to package operations. */
 export interface ProfilePnpmInvocation {
@@ -11,7 +12,12 @@ export interface ProfilePnpmInvocation {
   readonly env: Readonly<Record<string, string>>
 }
 
-/** Current profile facts; scheduling and mutation belong to their callers. */
+/**
+ * Current profile facts; scheduling and mutation belong to their callers.
+ * An optional application-owned `transformPatches` callback transforms the complete ordered stack
+ * returned by `readProfilePatches`, both at startup and during configuration reload.
+ * `transformEntries` applies to effective rows before profile or Agent preset imports.
+ */
 export interface ProfileContext {
   readonly name: string
   /** Packaged applications supply their bundled runtime instead of a PATH executable. */
@@ -27,6 +33,10 @@ export interface ProfileContext {
   readonly overlays: readonly PatchOptions[]
   /** Launch-time DSH_TELEMETRY_DISABLED value; any non-empty value opts out. */
   readonly telemetryDisabledEnv: string | undefined
+  /** Application-owned composition policy, applied on startup and every configuration reload. */
+  readonly transformPatches?: (patches: readonly PatchOptions[]) => PatchOptions[]
+  /** Application-owned admission applied after patch composition and before scoped preset imports. */
+  readonly transformEntries?: (entries: readonly EntryOptions[]) => EntryOptions[]
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -58,7 +68,7 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
  * @param binName Diagnostic prefix for malformed or missing configuration.
  * @param context Data supplied by the profile launcher.
  * @param initialProfile Already loaded startup profile; omitted reads the current files.
- * @returns Detached ordered patches; this function does not update the Loader.
+ * @returns Detached ordered patches after the application policy; this function does not update the Loader.
  */
 export function readProfilePatches(binName: string, context: ProfileContext, initialProfile?: Profile): PatchOptions[] {
   const profile = initialProfile ?? loadProfileDirectory(binName, context.dir, context.installAnchor, { userLayer: false })
@@ -71,5 +81,5 @@ export function readProfilePatches(binName: string, context: ProfileContext, ini
   const telemetryPatch = resolveTelemetryPatch(context.telemetryDisabledEnv,
     composeEntries([patches]).some(row => row.id === TELEMETRY_ROW_ID))
   if (telemetryPatch !== undefined) patches.push(telemetryPatch)
-  return patches
+  return context.transformPatches === undefined ? patches : context.transformPatches(patches)
 }

@@ -15,6 +15,7 @@ import {
 import { basename, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import * as yaml from 'js-yaml'
+import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot'
 import {
   DESKTOP_HOST_PACKAGE,
   DESKTOP_HOST_RUNTIME_FILES,
@@ -26,6 +27,7 @@ import {
 import { capture } from '../../../scripts/release/process.ts'
 import { tarballFiles } from '../../../scripts/release/tarball.ts'
 import { resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { DEFAULT_DESKTOP_PROFILE, DESKTOP_PROFILE_ENV } from './desktop-release-environment.mjs'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh'
 const ROOT_PACKAGES = [DSH_PACKAGE, DESKTOP_HOST_PACKAGE] as const
@@ -51,13 +53,32 @@ function dependencyNames(manifest: Readonly<Record<string, unknown>>, section: s
 }
 
 /**
+ * Additional closure roots a branded Desktop profile needs: the bundle list of
+ * its shipped template. The upstream `desktop` profile has no template entry and
+ * adds nothing.
+ * @param env - Packaging environment carrying DSH_DESKTOP_PROFILE.
+ * @returns Bundle package names to seed the closure with, in template order.
+ */
+export function desktopProfilePackageRoots(env: NodeJS.ProcessEnv): string[] {
+  const value = env[DESKTOP_PROFILE_ENV]?.trim() ?? ''
+  if (value === '' || value === DEFAULT_DESKTOP_PROFILE) return []
+  const template = PROFILE_TEMPLATES[value]
+  if (template === undefined) {
+    throw new Error(`desktop package set: ${DESKTOP_PROFILE_ENV} ${JSON.stringify(value)} names no shipped profile template`)
+  }
+  return [...template.bundles]
+}
+
+/**
  * Select workspace dependencies rooted at dsh and its private Host; npm resolves external packages.
  * Reads the repository workspace manifest and package manifests to distinguish required local packages from npm-resolved externals.
  * @param available - Packed packages indexed by package name.
+ * @param extraRoots - Additional root packages a branded Desktop profile requires (its template bundles).
  * @returns Selected packages sorted by name.
  */
 export function selectDesktopPackageClosure(
   available: ReadonlyMap<string, PackedDesktopPackage>,
+  extraRoots: readonly string[] = [],
 ): PackedDesktopPackage[] {
   const workspace = yaml.load(readFileSync(join(REPOSITORY_ROOT, 'pnpm-workspace.yaml'), 'utf8')) as { packages: string[] }
   const workspaceNames = new Set(globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: REPOSITORY_ROOT })
@@ -80,7 +101,7 @@ export function selectDesktopPackageClosure(
       if (available.has(dependency)) visit(dependency)
     }
   }
-  for (const name of ROOT_PACKAGES) {
+  for (const name of [...ROOT_PACKAGES, ...extraRoots]) {
     if (!available.has(name)) throw new Error(`desktop package set: packed inputs omit ${name}`)
     visit(name)
   }
@@ -128,8 +149,12 @@ export function assertDesktopHostPackageFiles(files: readonly string[]): void {
 }
 
 /** Prepare a package set from release tarball directories. */
-export function prepareDesktopPackageSet(inputs: readonly string[], output: string): void {
-  const selected = selectDesktopPackageClosure(packedPackages(inputs))
+export function prepareDesktopPackageSet(
+  inputs: readonly string[],
+  output: string,
+  extraRoots: readonly string[] = [],
+): void {
+  const selected = selectDesktopPackageClosure(packedPackages(inputs), extraRoots)
   const host = selected.find(packed => packed.manifest.name === DESKTOP_HOST_PACKAGE)
   if (host === undefined) throw new Error(`desktop package set: selected closure omits ${DESKTOP_HOST_PACKAGE}`)
   assertDesktopHostPackageFiles(tarballFiles(host.tarball))
@@ -171,8 +196,9 @@ function main(): void {
   })
   const inputs = (values.from ?? defaultInputs).map(path => resolve(REPOSITORY_ROOT, path))
   const output = values.out === undefined ? buildPaths.packageSet : resolve(REPOSITORY_ROOT, values.out)
-  prepareDesktopPackageSet(inputs, output)
-  console.log(`desktop package set: prepared ${output}`)
+  const extraRoots = desktopProfilePackageRoots(process.env)
+  prepareDesktopPackageSet(inputs, output, extraRoots)
+  console.log(`desktop package set: prepared ${output}${extraRoots.length === 0 ? '' : ` with profile roots ${extraRoots.join(', ')}`}`)
 }
 
 if (import.meta.main) main()
