@@ -12,6 +12,7 @@ This version-scoped reference records the GS desktop requirements, integration c
 - [Requirements and delivery](#requirements-and-delivery)
 - [Changes by area](#changes-by-area)
 - [Security corrections](#security-corrections)
+- [Server update migration comparison](#server-update-migration)
 - [Verification record](#verification-record)
 - [Delivery conditions](#delivery-conditions)
 
@@ -82,6 +83,23 @@ The initial review identified eight P1 and two P2 security issues. The reviewed 
 | S10 / P2 | Disk skill caches could reuse another account's content. | Partition by normalized endpoint/account and fetch current authenticated files before cache reuse; invalidate stale references. |
 
 Additional corrections supply a per-boot CLI loopback credential, reconnect logout to the login window, enforce download windows including midnight crossings, add macOS login Keychain/AES-GCM credential protection, and separate GS macOS artifacts from the upstream update feed. Unresolved Windows links now fail closed before filesystem authorization falls back to a lexical path.
+
+<a id="server-update-migration"></a>
+## Server update migration comparison
+
+The original desktop project receives server-controlled releases through login, refresh, and client-config pulls. Harness already uses that source for versions, notes, platform download URLs, and availability. The comparison found missing automatic native notifications and missing immediate checks after configuration changes; both are now connected. The [desktop update contract](../../../../apps/desktop/README.md#gs-server-updates) owns the current behavior.
+
+| Compared behavior | Harness result |
+| --- | --- |
+| Server controls release metadata and direct installer URLs. | Preserved; the GS release source bypasses the public updater feed. |
+| Login/refresh configuration changes trigger a notification evaluation. | Restored through a credential-free change signal and an authenticated release pull. Repeated identical notices do not form a pull loop. |
+| A strictly newer, platform-applicable release opens a native prompt. | Restored with per-version deduplication; pending notifications are serialized. Periodic and manual checks remain available. |
+| Update notes appear before download; a future opening date permits only a notice. | Preserved for both automatic notifications and GS sidebar actions; cancellation requests no installer bytes. |
+| A user approves downloading the server-selected installer. | Preserved; installation also keeps the Harness task checks and separate restart confirmation. |
+
+The current download policy is stricter than the original desktop: links must use HTTPS, downloads must fall within the configured daily window even after a user confirmation, and installers must pass native signature checks. Server deployment must provide compatible links and signed packages. The compared local server publishes Windows x64, Mac ARM, and UOS slots; its normalizer does not emit the Intel Mac slot that both desktop projects parse. UOS is not a supported update target in this desktop release source. These server/platform differences are not covered by the notification fix.
+
+The focused regression run passes 172 tests in six files, including native prompt confirmation/cancellation, deferred availability, repeat suppression, configuration-change deduplication, private IPC delivery, server-selected downloads, and the existing coordinator lifecycle. Production server delivery and real signed installer installation remain deployment qualification work.
 
 <a id="verification-record"></a>
 ## Verification record

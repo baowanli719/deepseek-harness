@@ -9,8 +9,8 @@
   en: 5f8edf3cae2e636f
   zh: e552eac450057c15
 /gs-worker-requirements-and-changes-2-1-1-test-20261002-3/table-of-contents:
-  en: 49b9a1a05301d45b
-  zh: 9accae75a200aae7
+  en: 679a8e5c697598d7
+  zh: 9e95d58f648a8802
 /gs-worker-requirements-and-changes-2-1-1-test-20261002-3/version-and-scope:
   en: de96a151615ce27a
   zh: 90920d0e8a3a002a
@@ -21,8 +21,11 @@
   en: ca7c36d608860d74
   zh: 8af692f11f7b5742
 /gs-worker-requirements-and-changes-2-1-1-test-20261002-3/security-corrections:
-  en: d6184a9abc10d686
-  zh: cf48746bd2c64f8f
+  en: 94eb4362748ff72d
+  zh: 3e2966a56aeb4fbb
+/gs-worker-requirements-and-changes-2-1-1-test-20261002-3/server-update-migration-comparison:
+  en: 016fa485a9bc559f
+  zh: f035cd964793836e
 /gs-worker-requirements-and-changes-2-1-1-test-20261002-3/verification-record:
   en: 987bcf182eb9750e
   zh: 22d4e53e4126bc50

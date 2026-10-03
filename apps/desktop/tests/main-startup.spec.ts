@@ -148,6 +148,9 @@ const harness = await vi.hoisted(async () => {
       readonly inspectPort?: number, readonly environment?: NodeJS.ProcessEnv, readonly onFailure?: (error: Error) => void,
       readonly primaryRuntime?: string,
       readonly packageManager?: { pnpm: string; nodeBin: string },
+      readonly onPlatformSession?: (session: unknown) => void,
+      readonly onGsSessionEnded?: () => void,
+      readonly onGsUpdateChanged?: () => void,
     ) { hosts.push(this) }
   }
   const app = Object.assign(new EventEmitter(), {
@@ -440,6 +443,39 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it.each([[0, false], [1, false], [0, true]] as const)('prompts for pushed GS releases and downloads only after confirmation (%s, deferred=%s)', async (response, deferred) => {
+    vi.stubEnv('DSH_DESKTOP_PROFILE', 'gs-desktop')
+    const gs = await import('../src/gs-login-backend.ts')
+    const connect = gs.connectGsLogin
+    vi.spyOn(gs, 'connectGsLogin').mockImplementation((...args) => ({
+      ...connect(...args), session: async () => ({ status: 'signed-in' }),
+    }))
+    const { GsDesktopReleaseSource } = await import('../src/gs-updates.ts')
+    vi.spyOn(GsDesktopReleaseSource.prototype, 'notice', 'get').mockReturnValue({
+      version: '2.2.0', notes: ['Server release notes'], downloads: { windowsX64: 'https://updates.example/worker.exe' },
+      ...(deferred ? { availableFrom: '2999-01-01T00:00:00Z' } : {}),
+    })
+    const host = await readyForUpdate()
+    await vi.advanceTimersByTimeAsync(0)
+    harness.dialog.showMessageBox.mockResolvedValue({ response })
+    harness.updateState = { phase: 'available', version: '2.2.0' }
+    harness.publishUpdate(harness.updateState)
+    await vi.advanceTimersByTimeAsync(0)
+    const notices = () => harness.dialog.showMessageBox.mock.calls.filter(args =>
+      (args.at(-1) as MessageBoxOptions).message === 'New version available: 2.2.0')
+    expect(notices()).toHaveLength(1)
+    expect((notices()[0]!.at(-1) as MessageBoxOptions).detail).toContain('Server release notes')
+    if (!deferred) expect(notices()[0]!.at(-1)).toMatchObject({ cancelId: 1 })
+    expect(harness.updateDownload).toHaveBeenCalledTimes(response === 0 && !deferred ? 1 : 0)
+    harness.publishUpdate(harness.updateState)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(notices()).toHaveLength(1)
+    const checks = harness.updateCheck.mock.calls.length
+    host.onGsUpdateChanged?.()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(harness.updateCheck).toHaveBeenCalledTimes(checks + 1)
+    expect(notices()).toHaveLength(1)
+  })
   it('routes shell update documents and assets through the registered main protocol handler', async () => {
     const root = join(import.meta.dirname, '..')
     vi.spyOn(harness.app, 'getAppPath').mockReturnValue(root)

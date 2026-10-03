@@ -23,7 +23,7 @@ interface PlatformSessionEvent {
   readonly session: PlatformSession | null
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'gs-session-ended' } | { readonly type: 'shutdown-complete' } | {
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'gs-session-ended' } | { readonly type: 'gs-update-changed' } | { readonly type: 'shutdown-complete' } | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -56,6 +56,7 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
   switch (candidate.type) {
     case 'shutdown-complete':
     case 'gs-session-ended':
+    case 'gs-update-changed':
       return true
     case 'ready':
       return typeof candidate.url === 'string'
@@ -167,6 +168,7 @@ export class DesktopHostProcess {
    * @param packageManager - Bundled pnpm entry and Node launcher directory, scoped to package operations.
    * @param onPlatformSession - Private credential updates for embedded Platform views.
    * @param onGsSessionEnded - Token-free GS logout and expiry notification.
+   * @param onGsUpdateChanged - Token-free signal to refresh the server release notice.
    */
   constructor(
     private readonly node: string,
@@ -180,6 +182,7 @@ export class DesktopHostProcess {
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
     private readonly onGsSessionEnded?: () => void,
+    private readonly onGsUpdateChanged?: () => void,
   ) {}
 
   /**
@@ -216,6 +219,9 @@ export class DesktopHostProcess {
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
       else if (message.type === 'gs-session-ended') {
         if (!this.stopping) this.onGsSessionEnded?.()
+      }
+      else if (message.type === 'gs-update-changed') {
+        if (!this.stopping) this.onGsUpdateChanged?.()
       }
       else if (message.type === 'shutdown-complete') {
         if (this.stopping) this.shutdownCompleted = true

@@ -73,6 +73,20 @@ afterEach(async () => {
 })
 
 describe('desktop host process', () => {
+  it('delivers changed GS update signals and ignores shutdown-time signals', async () => {
+    const source = HTTP_HOST.replace("if (request.url === '/fatal')", "if (request.url === '/update') { process.send({ type: 'gs-update-changed' }); response.end('updated'); return }\n  if (request.url === '/fatal')")
+      .replace("process.send({ type: 'shutdown-complete' }", "process.send({ type: 'gs-update-changed' }); process.send({ type: 'shutdown-complete' }")
+    const runtime = projectWithHost(source)
+    const changed = vi.fn()
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+      undefined, undefined, undefined, undefined, undefined, changed)
+    hosts.push(host)
+    const { url } = await host.start()
+    await fetch(new URL('/update', url))
+    await expect.poll(() => changed.mock.calls.length).toBe(1)
+    await host.stop()
+    expect(changed.mock.calls).toEqual([[]])
+  })
   it('delivers GS logout over private IPC and ignores termination-time notifications', async () => {
     const source = HTTP_HOST.replace("if (request.url === '/fatal')", "if (request.url === '/ended') { process.send({ type: 'gs-session-ended' }); response.end('ended'); return }\n  if (request.url === '/fatal')")
       .replace("process.send({ type: 'shutdown-complete' }", "process.send({ type: 'gs-session-ended' }); process.send({ type: 'shutdown-complete' }")

@@ -423,6 +423,10 @@ An unpacked artifact contains Electron, the materialized dsh production tree, pn
 
 ## Updates
 
+<a id="gs-server-updates"></a>
+
+GS release versions, notes, platform download URLs, and availability come from the authenticated server configuration. Login and refresh configuration changes trigger a credential-free Host IPC signal and an active release check; startup, periodic, and manual checks also pull the current notice. A strictly newer release for the current platform opens a native notification once per version in an application lifetime. The notification and the GS sidebar action show the server notes and require confirmation before downloading. A future availability date permits only a notice.
+
 GS updates accept only HTTPS downloads without redirects, respect server availability and daily download windows, and require native signature verification after download and again before installation. Windows pins the installed signing certificate and requires a timestamp; macOS pins the installed Team ID and requires Gatekeeper acceptance. Unsigned development builds cannot install GS updates. GS logout and expiry return the desktop to its login window.
 
 On Windows, the downloaded-update confirmation explains that the application closes during installation, reopens automatically, and should not be launched again while updating. An installer restart carrying `--updated` raises and focuses the main window once when startup opens the workspace directly, without enabling always-on-top. Startup into the welcome page discards that request so a later login keeps its normal activation behavior. Windows workspace activation also brings ordinary launches forward.

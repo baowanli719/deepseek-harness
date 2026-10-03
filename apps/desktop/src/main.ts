@@ -36,6 +36,7 @@ import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLoc
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { GsDesktopReleaseSource } from './gs-updates.ts'
+import { GsUpdateNotifications } from './gs-update-notifications.ts'
 import { DesktopCommandManager } from './command-management.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
@@ -448,6 +449,7 @@ async function main(): Promise<void> {
   let injections: readonly unknown[] = []
   let welcomeBackend: DesktopWelcomeBackend | undefined
   let gsLoginBackend: GsLoginBackend | undefined
+  let onGsUpdateChanged = (): void => {}
   let reportedLaunch = false
   let analyticsEnabled = false
   const track = async <K extends keyof ProductEventMap>(eventName: K, attributes: ProductEventMap[K]): Promise<void> => {
@@ -495,7 +497,7 @@ async function main(): Promise<void> {
         if (!gsDesktop || quitting || shuttingDown) return
         enteredWorkspace = false
         void showWelcome().catch((cause: unknown) => { reportFatal(cause, 'main') })
-      })
+      }, () => { onGsUpdateChanged() })
     return {
       start: async () => {
         const ready = await host.start()
@@ -504,7 +506,10 @@ async function main(): Promise<void> {
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')
         injections = ready.injections
         welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
-        if (gsDesktop) gsLoginBackend = connectGsLogin(ready.url, (input, init) => net.fetch(input, init))
+        if (gsDesktop) {
+          gsLoginBackend = connectGsLogin(ready.url, (input, init) => net.fetch(input, init))
+          onGsUpdateChanged()
+        }
         analyticsEnabled = await welcomeBackend.analyticsEnabled().catch(() => false)
         if (!reportedLaunch) { reportedLaunch = true; void track('desktop_app_launch', {}) }
         stopAccount?.()
@@ -565,6 +570,10 @@ async function main(): Promise<void> {
   })
 
   const updateErrors = new WeakMap<DesktopUpdateState, Promise<void>>()
+  const gsNotifications = new GsUpdateNotifications(async () => {
+    await Promise.resolve()
+    if (!quitting && updates.state.phase === 'available') await openUpdatePrompt(false, true)
+  })
   const showUpdateFailure = (state: DesktopUpdateState): Promise<void> => {
     if (state.phase !== 'error') return Promise.resolve()
     if (isMandatory()) { mandatoryUI?.sync(); return Promise.resolve() }
@@ -580,6 +589,9 @@ async function main(): Promise<void> {
   const publishUpdate = (state: DesktopUpdateState): DesktopUpdateState => {
     updateJournal?.state(state)
     updateState = state
+    if (gsDesktop && state.phase === 'available' && state.version !== undefined) {
+      void gsNotifications.available(state.version).catch((error: unknown) => { console.error(error) })
+    }
     mandatoryUI?.sync()
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(DESKTOP_IPC.updatesPresentation, presentDesktopUpdate(state))
@@ -891,7 +903,7 @@ async function main(): Promise<void> {
 
   let promptOperation: Promise<void> | undefined
   let policyAuthenticationQueued = false
-  const openUpdatePrompt = (manual = false): Promise<void> => {
+  const openUpdatePrompt = (manual = false, notification = false): Promise<void> => {
     if (authenticationOperation !== undefined) {
       policyAuth?.focus(); updateDialog.focus()
     }
@@ -940,10 +952,10 @@ async function main(): Promise<void> {
         if (serverNotice?.availableFrom !== undefined && Date.now() < Date.parse(serverNotice.availableFrom)) {
           await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
             message: formatDesktopMessage(locale.messages.updateAvailable, { version: serverNotice.version }),
-            detail: formatDesktopMessage(locale.messages.gsUpdateAvailableFrom, { time: serverNotice.availableFrom }) })
+            detail: [...(serverNotice.notes ?? []), formatDesktopMessage(locale.messages.gsUpdateAvailableFrom, { time: serverNotice.availableFrom })].join('\n') })
           return
         }
-        if (manual) {
+        if (manual || notification || gsDesktop) {
           const result = await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
             message: formatDesktopMessage(locale.messages.updateAvailable, { version: state.version ?? '' }),
             detail: [...(serverNotice?.notes ?? []), locale.messages.updateDetail].join('\n'),
@@ -964,6 +976,11 @@ async function main(): Promise<void> {
       message: desktopErrorState(error).message }))
       .finally(() => { promptOperation = undefined; flushQueuedPolicyAuthentication() })
     return promptOperation
+  }
+  onGsUpdateChanged = (): void => {
+    if (gsDesktop && gsLoginBackend !== undefined && !quitting && !shuttingDown) {
+      void updateSchedule.check(false, true).catch((error: unknown) => { console.error(error) })
+    }
   }
 
   let authenticationOperation: Promise<DesktopPolicyState | undefined> | undefined

@@ -15,6 +15,7 @@ import * as desktopOffice from './office.ts'
 import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installDesktopQuitInspection } from './quit-inspection.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
+import { installGsUpdatePublisher } from './gs-update-publisher.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
 
 /** Profile the Host boots when the Electron shell supplies no override. */
@@ -128,6 +129,9 @@ async function main(): Promise<void> {
   process.once('disconnect', () => { void stop() })
   const { ctx } = await application
   if (profileName === 'gs-desktop') {
+    installGsUpdatePublisher(ctx, () => {
+      void send({ type: 'gs-update-changed' }).catch((cause: unknown) => { console.error(cause) })
+    })
     const ended = (): void => { void send({ type: 'gs-session-ended' }).catch((cause: unknown) => { console.error(cause) }) }
     ctx.on('gs-server/session-ended', ended)
     ctx.on('gs-server/session-expired', ended)
