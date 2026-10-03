@@ -1,6 +1,14 @@
 import { expect, it, vi } from 'vitest'
 import { connectGsLogin } from '../src/gs-login-backend.ts'
 
+it.each([
+  null,
+  { captchaId: 'local-captcha', svg: '<svg><text>2 + 3 = ?</text></svg>', expiresIn: 300 },
+])('unwraps the real Host captcha response, including legacy servers (%j)', async (captcha) => {
+  const backend = connectGsLogin('http://127.0.0.1:19387/', async () => Response.json({ captcha }))
+  expect(await backend.captcha()).toEqual(captcha)
+})
+
 it('uses the authenticated Host origin and private gs-server routes for password login', async () => {
   const send = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ status: 'signed-in' }), {
     headers: { 'content-type': 'application/json' },

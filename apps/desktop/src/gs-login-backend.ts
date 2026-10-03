@@ -44,7 +44,7 @@ export function connectGsLogin(authenticatedUrl: string, send: (input: string, i
     appUpdate: signal => request('/api/gs-server/app-update', undefined, signal),
     session: () => request('/api/gs-server/session'),
     meta: () => request('/api/gs-server/meta'),
-    captcha: () => request('/api/gs-server/captcha'),
+    captcha: async () => (await request<{ captcha: GsLoginCaptcha | null }>('/api/gs-server/captcha')).captcha,
     password: data => request('/api/gs-server/login', data),
     emailCode: account => request('/api/gs-server/email-code', { account }),
     emailLogin: (account, code) => request('/api/gs-server/email-login', { account, code }),
