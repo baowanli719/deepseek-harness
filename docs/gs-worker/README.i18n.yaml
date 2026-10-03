@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/gs-worker/README.md
+/gs-worker-project-records:
+  en: 723f648ea7dcd033
+  zh: 52f553e904a0cd34
+/gs-worker-project-records/summary:
+  en: cdcb1548d17aca0a
+  zh: 5256c7e814b0331e
+/gs-worker-project-records/table-of-contents:
+  en: 187f2e15b5a4d528
+  zh: 431e268fae99a436
+/gs-worker-project-records/version-records:
+  en: ed4e4277c0eb0673
+  zh: 9da0b9e201f16369
+/gs-worker-project-records/version-source:
+  en: f05f28aca20eccd1
+  zh: 8528951701953c82
