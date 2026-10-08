@@ -23,10 +23,11 @@ async function stateDir(): Promise<string> {
 
 it('uses the deployed gsclaw prefix when no endpoint override is configured', async () => {
   const store = await GsEndpointStore.load({ stateDir: await stateDir(), environment: '', fallback: GS_DEFAULT_ENDPOINT })
-  expect(store.resolve()).toBe('https://192.168.230.108:8151/gsclaw')
+  expect(store.resolve()).toMatchInlineSnapshot('"http://192.168.230.108:8151/gsclaw"')
 })
 
 it('accepts loopback http and encrypted LAN endpoints and normalizes trailing slashes', () => {
+  expect(assertGsEndpoint('http://192.168.230.108:8151/gsclaw/')).toBe(GS_DEFAULT_ENDPOINT)
   expect(assertGsEndpoint('http://127.0.0.1:8151/gsworker/')).toBe('http://127.0.0.1:8151/gsworker')
   expect(assertGsEndpoint(' https://192.168.1.10:8151 ')).toBe('https://192.168.1.10:8151')
   expect(assertGsEndpoint('http://[::1]:8151')).toBe('http://[::1]:8151')
@@ -43,6 +44,9 @@ it('rejects non-http schemes, credentials, query, fragment, and plain http on pu
     'http://gsclaw.example.com',
     'http://10.0.0.2',
     'http://192.168.1.10',
+    'http://192.168.230.108:8152/gsclaw',
+    'http://192.168.230.108:8151/other',
+    'http://192.168.230.109:8151/gsclaw',
     'http://10.attacker.invalid',
     'http://192.168.attacker.invalid',
     'http://127.attacker.invalid',

@@ -258,6 +258,19 @@ The gs-worker (国盛办公AI) build uses `productName`/`artifact` `gs-worker`, 
 
 The `gs-desktop` profile checks releases through the authenticated GS Host route `/api/gs-server/app-update`, which actively pulls the current endpoint's `/api/client-config` and returns only `config.appUpdate`. Native About, tray and quit messages use the effective server brand. GS packages carry product metadata and one build version in the application manifest and Windows resources; they omit the upstream public updater feed and mandatory-policy service. The GS release family is declared in `brand/gs/product.json`; the bundled Harness runtime retains its upstream version. New Windows installations record `DshRuntimeFamily=deepseek-harness`, excluding them from the legacy 2.x uninstall prompt. Checks never download automatically. Confirmed downloads use the server's direct platform link, honor `availableFrom`, validate the native installer before handoff, and reuse the shell's task inspection and shutdown confirmation. `downloadWindow` is validated but does not restrict user-confirmed downloads. Signed-out, offline and malformed checks report failure rather than claiming the application is current.
 
+### GS server address verification
+
+The on-premises service address is `http://192.168.230.108:8151/gsclaw`, without a trailing comma; `/gsclaw` is part of the base path. Direct requests to `/api/v1/meta` and `/api/auth/methods` below this base return HTTP 200. The corresponding HTTPS endpoint currently fails the TLS handshake.
+
+The shipped GS client defaults to `http://192.168.230.108:8151/gsclaw`. HTTP is accepted for this exact deployment endpoint and loopback only; other hosts, ports, and base paths require HTTPS. This HTTP deployment sends authentication traffic without TLS and must run on the trusted deployment network. Install a package rebuilt with this default to replace the earlier HTTPS default. Endpoint precedence is persisted override → runtime `GSCLAW_ENDPOINT` → plugin configuration/default; see the [GS server configuration](../../packages/api/gs-server/README.md).
+
+From a machine on the deployment network, verify the two public handshake routes without sending credentials:
+
+```sh
+curl --noproxy '*' --connect-timeout 5 --max-time 12 -sS -w '\nHTTP status: %{http_code}\n' http://192.168.230.108:8151/gsclaw/api/v1/meta
+curl --noproxy '*' --connect-timeout 5 --max-time 12 -sS -w '\nHTTP status: %{http_code}\n' http://192.168.230.108:8151/gsclaw/api/auth/methods
+```
+
 ### Runtime file selection
 
 Desktop packs workspace packages locally and installs external dependencies through the target's bundled Node and pnpm. [Desktop's file policy](scripts/runtime-file-policy.ts) then filters the immutable `resources/app.asar/dsh/node_modules` copy before signing and integrity sealing. It omits TypeScript declarations, recognized JavaScript/CSS/TypeScript source maps, TypeScript build caches, Domino's test directory, selected native compiler outputs, and node-pty prebuilds for other platforms. It preserves runtime JavaScript, native modules and their DLL/EXE helpers, WASM, unknown assets, licenses, and notices. Dependency manifests pass through electron-builder's metadata cleanup before integrity sealing, so archiving preserves their recorded bytes. The policy does not alter npm tarballs, the bundled package manager, or user-installed plugin files.

@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.0-rc.2/gs-security-policy/guide.md
 /:
-  en: 3c0770a92cadfb0d
-  zh: 7350547a0b31f12b
+  en: df4d84eff7f88007
+  zh: 1c64ed43307d3aa2
 /gs-gateway-and-security-policy:
   en: 23941e4c8863acd1
   zh: 4949dfd609171c99
 /gs-gateway-and-security-policy/change:
-  en: 2f5954722e4c93fe
-  zh: ec4d538324002c70
+  en: 20c521f08a456e29
+  zh: ab830eb201c5b3f8
 /gs-gateway-and-security-policy/migration:
-  en: 365b98897f789127
-  zh: f5e00e520c170d29
+  en: 147fc2ec7a5d2554
+  zh: 779c997f631e4e67

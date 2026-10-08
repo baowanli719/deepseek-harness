@@ -4,7 +4,8 @@
  * Precedence: runtime override persisted below the state directory wins, then
  * the environment seam for development and packaging, then the configured
  * deployment default. Plain HTTP is accepted only for literal loopback
- * addresses and localhost; every other authority must use HTTPS.
+ * addresses, localhost, and the exact shipped deployment endpoint; other
+ * endpoints must use HTTPS.
  *
  * @module
  */
@@ -15,7 +16,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
 /** Shipped Config default for the deployment endpoint. */
-export const GS_DEFAULT_ENDPOINT = 'https://192.168.230.108:8151/gsclaw'
+export const GS_DEFAULT_ENDPOINT = 'http://192.168.230.108:8151/gsclaw'
 
 /** Environment variable overriding the configured endpoint for development. */
 export const GS_ENDPOINT_ENV = 'GSCLAW_ENDPOINT'
@@ -60,7 +61,7 @@ function isLoopbackHostname(hostname: string): boolean {
  *
  * Only `http:`/`https:` authorities without credentials, query, or fragment
  * are accepted; the path is kept verbatim minus trailing slashes. Plain HTTP
- * is restricted to loopback and the private ranges an on-prem gateway uses.
+ * is restricted to loopback and the exact shipped deployment endpoint.
  * @param value - candidate endpoint URL.
  * @returns the normalized endpoint.
  */
@@ -81,10 +82,11 @@ export function assertGsEndpoint(value: string): string {
   if (url.search !== '' || url.hash !== '') {
     throw new GsEndpointError('gsclaw-server endpoint must not carry a query or fragment.')
   }
-  if (url.protocol === 'http:' && !isLoopbackHostname(url.hostname)) {
-    throw new GsEndpointError('gsclaw-server endpoint requires https outside loopback.')
+  const endpoint = `${url.origin}${url.pathname.replace(/\/+$/u, '')}`
+  if (url.protocol === 'http:' && !isLoopbackHostname(url.hostname) && endpoint !== GS_DEFAULT_ENDPOINT) {
+    throw new GsEndpointError('gsclaw-server endpoint requires https outside loopback or the shipped deployment endpoint.')
   }
-  return `${url.origin}${url.pathname.replace(/\/+$/u, '')}`
+  return endpoint
 }
 
 /**

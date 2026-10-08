@@ -47,6 +47,9 @@
 /deepseek-harness-desktop/package/product-identity-overrides:
   en: c4594a19fc0ba196
   zh: f0f03ec5d2761a05
+/deepseek-harness-desktop/package/gs-server-address-verification:
+  en: 5a24f1c795d9bf21
+  zh: 5a877ff8141e8c2a
 /deepseek-harness-desktop/package/runtime-file-selection:
   en: e15499ab7d9ba786
   zh: d1b80c8b01ce60b0

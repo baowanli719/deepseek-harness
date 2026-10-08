@@ -260,6 +260,19 @@ gs-worker（国盛办公AI）构建使用 `productName`/产物前缀 `gs-worker`
 
 `gs-desktop` profile 通过已认证的 GS Host 路由 `/api/gs-server/app-update` 检查更新；该路由主动拉取当前端点的 `/api/client-config`，只返回 `config.appUpdate`。原生“关于”、托盘和退出文案使用服务端的有效品牌。GS 安装包在应用 manifest 与 Windows 资源中写入产品信息和统一的构建版本，不包含上游公开更新源和强制更新策略服务。GS 产品版本由 `brand/gs/product.json` 声明，内置 Harness 运行时保留上游版本。新 Windows 安装会写入 `DshRuntimeFamily=deepseek-harness`，避免以后被旧版 2.x 卸载提示误识别。检查不会自动下载。用户确认后，客户端使用服务端下发的对应平台直链，遵守 `availableFrom`，在交给安装器前校验原生文件格式，并复用外壳的任务检查和退出确认。`downloadWindow` 会校验格式，但不限制用户确认的下载。未登录、离线或更新信息格式错误时显示检查失败，不会误报为最新版本。
 
+### GS 服务端地址核对
+
+内网服务地址为 `http://192.168.230.108:8151/gsclaw`，末尾不带逗号；`/gsclaw` 是基础路径的一部分。直连该地址下的 `/api/v1/meta` 和 `/api/auth/methods` 均返回 HTTP 200。对应的 HTTPS 地址目前在 TLS 握手时失败。
+
+出厂 GS 客户端默认使用 `http://192.168.230.108:8151/gsclaw`。仅这个确切部署端点及回环地址允许 HTTP；其他主机、端口和基础路径要求 HTTPS。该 HTTP 部署的认证流量未经 TLS 加密，须在可信部署网络中运行。安装按此默认值重新构建的包，以替换此前的 HTTPS 默认值。端点优先级为已持久化覆盖 → 运行时 `GSCLAW_ENDPOINT` → 插件配置/默认值；详见 [GS 服务端配置](../../packages/api/gs-server/README.zh.md)。
+
+在可访问部署内网的机器上核对两个公开握手接口，无需发送凭据：
+
+```sh
+curl --noproxy '*' --connect-timeout 5 --max-time 12 -sS -w '\nHTTP status: %{http_code}\n' http://192.168.230.108:8151/gsclaw/api/v1/meta
+curl --noproxy '*' --connect-timeout 5 --max-time 12 -sS -w '\nHTTP status: %{http_code}\n' http://192.168.230.108:8151/gsclaw/api/auth/methods
+```
+
 ### 运行时文件筛选
 
 Desktop 在本地打包工作区包，并通过目标捆绑的 Node 和 pnpm 安装外部依赖。[Desktop 文件策略](scripts/runtime-file-policy.ts)随后在签名和完整性封装前过滤不可变的 `resources/app.asar/dsh/node_modules` 副本。它排除 TypeScript 声明、已识别的 JavaScript/CSS/TypeScript source map、TypeScript 构建缓存、Domino 测试目录、选定的原生编译器输出和其他平台的 node-pty 预构建文件。它保留运行时 JavaScript、原生模块及其 DLL/EXE 辅助文件、WASM、未知资源、许可证和 notices。依赖清单在完整性封装前经过 electron-builder 的元数据清理，确保归档保持已记录的字节。该策略不修改 npm tarball、捆绑的包管理器或用户安装的插件文件。

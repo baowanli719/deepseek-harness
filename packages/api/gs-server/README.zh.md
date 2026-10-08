@@ -23,7 +23,7 @@ gs-worker 办公 Agent 的 gsclaw-server 客户端：`gsServer` Cordis 服务负
 
 `GsAuthUser` 是不含令牌的账户投影（`id`、`username`、`displayName`、`role`）。`GsClientConfig` 是经验证的服务器策略快照，涵盖 Agent 限制、功能、设置页面、权限、技能、模型、应用更新、通知及可选品牌内容。传输字段定义于 `src/contract.ts`；会话和配置事件传递这些投影，不包含访问或刷新令牌。
 
-认证提交绑定代次，并与凭据写入串行执行。登出先使正在进行的登录、恢复、刷新与配置拉取失效，再删除本地凭据，并通过 `gs-server/session-ended` 通知消费方。切换端点先结束旧会话。显式端点配置无效时启动失败；非回环服务必须使用 HTTPS。
+认证提交绑定代次，并与凭据写入串行执行。登出先使正在进行的登录、恢复、刷新与配置拉取失效，再删除本地凭据，并通过 `gs-server/session-ended` 通知消费方。切换端点先结束旧会话。显式端点配置无效时启动失败；仅回环地址及出厂部署端点允许 HTTP；其他端点必须使用 HTTPS。
 
 在 Host 侧组合该插件，提供 `stateDir` 和上报给网关的客户端版本：
 
@@ -34,7 +34,7 @@ gs-worker 办公 Agent 的 gsclaw-server 客户端：`gsServer` Cordis 服务负
     clientVersion: 1.0.0
 ```
 
-`Config` 字段：`stateDir`（必填；保存 `gs-refresh-token.bin`、`gs-endpoint.json`、`gs-brand.json`）、`endpoint`（部署默认端点 `https://192.168.230.108:8151/gsclaw`；持久化覆盖与 `GSCLAW_ENDPOINT` 环境接缝优先于它）、`environment`（显式环境覆盖值）、`clientVersion`（必填）、`clientPlatform`（默认取当前操作系统）、`protector`（refresh token 保护器，见下文）、`routes`（默认 true；把私有路由挂载到 `ctx.webServer`，未组合 webServer 时启动失败）、`restoreOnStart`（默认 false；Desktop 启动判定前恢复已密封的会话，网络失败时保留令牌）、`authRequestTimeoutMs`（默认 15000；认证与 ClientConfig 请求超时，包括启动时恢复登录；模型流仍使用调用方取消信号）、`logUpload` 与 `logLevel`（客户端日志上传开关）、`request`（供宿主适配层与测试使用的 fetch 覆盖）。
+`Config` 字段：`stateDir`（必填；保存 `gs-refresh-token.bin`、`gs-endpoint.json`、`gs-brand.json`）、`endpoint`（部署默认端点 `http://192.168.230.108:8151/gsclaw`；持久化覆盖与 `GSCLAW_ENDPOINT` 环境接缝优先于它）、`environment`（显式环境覆盖值）、`clientVersion`（必填）、`clientPlatform`（默认取当前操作系统）、`protector`（refresh token 保护器，见下文）、`routes`（默认 true；把私有路由挂载到 `ctx.webServer`，未组合 webServer 时启动失败）、`restoreOnStart`（默认 false；Desktop 启动判定前恢复已密封的会话，网络失败时保留令牌）、`authRequestTimeoutMs`（默认 15000；认证与 ClientConfig 请求超时，包括启动时恢复登录；模型流仍使用调用方取消信号）、`logUpload` 与 `logLevel`（客户端日志上传开关）、`request`（供宿主适配层与测试使用的 fetch 覆盖）。
 
 消费方声明 `inject = ['gsServer']` 并使用服务契约：`getAccessToken()` 返回内存中的 access token（未登录为 undefined），`fetch(path, init)` 对已解析端点发起认证请求，自动附带 Bearer token 与策略版本头，遇过期 token 的 401 时单飞刷新并重试一次，`getClientConfig()` 返回最新缓存的服务端 ClientConfig。根上下文上以声明合并方式提供事件：`gs-server/session-established`（登录、令牌写入、重启恢复、刷新）、`gs-server/session-expired`（刷新被 401 拒绝）、`gs-server/trust-revoked`（刷新被 403 拒绝）、`gs-server/client-config-changed`（payload 为新的 ClientConfig）。
 
@@ -45,7 +45,7 @@ refresh token 是唯一跨重启持久化的凭证。Windows 使用 CurrentUser 
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
-`endpoint.ts` 校验端点（仅 IP 字面量回环地址与 localhost 允许明文 HTTP），并按 覆盖 → 环境 → 配置默认 的优先级解析；持久化覆盖在启动时加载一次，`resolve()` 保持同步。`auth.ts` 把所有刷新汇入同一个单飞 Promise，因为服务端把并发刷新视为令牌重放并吊销整个家族；刷新收到 401/403 时清除本地状态并发出对应会话事件。`client.ts` 把旧版 `{ error, message }` 与 `/api/v1` 的 `{ code, message, traceId }` 两种错误信封归一为 `GatewayError`，并强制 1 MiB 响应上限。`config.ts` 缓存推送或拉取到的 ClientConfig 并通知订阅者；每次变更同时送达品牌存储与 `client-config-changed` 事件。`brand.ts` 按 服务端推送 → 持久化缓存 → 内置默认 解析。`routes.ts` 只应答同源回环请求（socket、Host 头与 fetch 元数据由 `loopback.ts` 检查）。`log-exporter.ts` 缓冲脱敏后的 Cordis 日志消息，向 `/api/logs/client` 发送有界批次，任何失败都丢弃而不重试。本包没有可供独立观察方校验的自有关系，因此不发布 invariant 伴生模块。
+`endpoint.ts` 校验端点（仅 IP 字面量回环地址、localhost 及出厂部署端点允许明文 HTTP），并按 覆盖 → 环境 → 配置默认 的优先级解析；持久化覆盖在启动时加载一次，`resolve()` 保持同步。`auth.ts` 把所有刷新汇入同一个单飞 Promise，因为服务端把并发刷新视为令牌重放并吊销整个家族；刷新收到 401/403 时清除本地状态并发出对应会话事件。`client.ts` 把旧版 `{ error, message }` 与 `/api/v1` 的 `{ code, message, traceId }` 两种错误信封归一为 `GatewayError`，并强制 1 MiB 响应上限。`config.ts` 缓存推送或拉取到的 ClientConfig 并通知订阅者；每次变更同时送达品牌存储与 `client-config-changed` 事件。`brand.ts` 按 服务端推送 → 持久化缓存 → 内置默认 解析。`routes.ts` 只应答同源回环请求（socket、Host 头与 fetch 元数据由 `loopback.ts` 检查）。`log-exporter.ts` 缓冲脱敏后的 Cordis 日志消息，向 `/api/logs/client` 发送有界批次，任何失败都丢弃而不重试。本包没有可供独立观察方校验的自有关系，因此不发布 invariant 伴生模块。
 
 <a id="model-experience"></a>
 ## 模型体验
