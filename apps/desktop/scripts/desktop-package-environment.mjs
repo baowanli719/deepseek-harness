@@ -80,7 +80,7 @@ export function validateDesktopPackageEnvironment(environment, target, options =
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
   const gsProduct = resolveDesktopProfile(environment) === 'gs-desktop'
-  if (!gsProduct) resolveDesktopPolicyEnvironment(environment)
+  if (!gsProduct && (target.platform !== 'darwin' || !options.unsigned)) resolveDesktopPolicyEnvironment(environment)
   resolveDesktopProductName(environment)
   resolveDesktopArtifactBasename(environment)
   resolveDesktopProfile(environment)

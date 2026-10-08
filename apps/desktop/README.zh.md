@@ -280,6 +280,8 @@ Windows 安装器在启动时和选定目标目录后检查应用是否正在运
 
 <a id="upload-updates"></a>
 
+本地 macOS 构建可在 `package:desktop:mac:arm64` 和 `package:desktop:mac:x64` 后添加 `--unsigned`，也可同时添加 `--dir`。此模式跳过 Developer ID 签名、公证及更新策略配置，保留运行时完整性检查和打包运行时检查，并将带有 `-unsigned` 后缀的产物写入目标的 `unsigned-artifacts/` 目录。产物不包含更新源、强更策略或已完成发布记录；Gatekeeper 可能阻止打开。本地 macOS dotenv 文件仍提供应用 ID 和构建设置。
+
 ### 上传更新
 
 固定安装包下载在仓库根目录使用 `pnpm run upload:latest:mac:arm64`、`pnpm run upload:latest:mac:x64` 或 `pnpm run upload:latest:win:x64`。它们把已完成目标的 DMG 或 EXE 上传到 `desktop/dsh-latest-macos-arm64.dmg`、`desktop/dsh-latest-macos-x64.dmg` 或 `desktop/dsh-latest-windows-x64.exe`。生产 URL 以 `https://download.deepseek.com/` 开头；测试 URL 使用 `DOWNLOAD_TEST_ORIGIN`。两个部署环境均复用目标 dotenv 中的部署、bucket 和凭据、全部常规发布校验以及下述上传审计。每个命令覆盖一个固定对象，不发布更新清单、blockmap 或发布标签。测试固定下载在测试 bucket 中跨发布 ID 共享；包内更新 URL 仍要求原有发布 ID。发布由操作人员显式执行，也允许预发布版本。部署基础设施必须配置重新验证，或在覆盖后清除固定下载的缓存。本地回环测试覆盖上传行为；真实 COS 和 CDN 验收由发布操作人员负责。

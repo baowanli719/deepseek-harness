@@ -278,6 +278,8 @@ When extraction fails, the installer writes a report with the 7-Zip result and i
 
 <a id="upload-updates"></a>
 
+Local macOS builds accept `--unsigned` on `package:desktop:mac:arm64` and `package:desktop:mac:x64`, optionally with `--dir`. They skip Developer ID signing, notarization, and update policy configuration, retain runtime integrity and packaged runtime checks, and write artifacts with an `-unsigned` suffix under the target’s `unsigned-artifacts/` directory. They carry no updater feed, mandatory-update policy, or completed release record; Gatekeeper may block opening them. The local macOS dotenv file still supplies the application ID and build settings.
+
 ### Upload updates
 
 Fixed installer downloads use `pnpm run upload:latest:mac:arm64`, `pnpm run upload:latest:mac:x64`, or `pnpm run upload:latest:win:x64` from the repository root. They upload the completed target's DMG or EXE to `desktop/dsh-latest-macos-arm64.dmg`, `desktop/dsh-latest-macos-x64.dmg`, or `desktop/dsh-latest-windows-x64.exe`. Production URLs start with `https://download.deepseek.com/`; test URLs use `DOWNLOAD_TEST_ORIGIN`. Both deployments reuse the target dotenv's deployment, bucket, and credentials, all normal release validation, and the upload audit below. Each command replaces one fixed object without publishing feeds, blockmaps, or release tags. Test fixed downloads are shared across release IDs in the test bucket; the packaged update URL still requires its original release ID. Publication is explicit, including prerelease versions. Deployment infrastructure must configure revalidation or purge cached fixed downloads after replacement. Local loopback tests cover the upload; release operators own real COS and CDN acceptance.
