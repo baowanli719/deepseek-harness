@@ -49,6 +49,7 @@ it('rejects login origins in production', () => {
 
 it.each([{ unsigned: true }, { prepareOnly: true }, {}])('fails before signing/preparation when policy is absent in %j', (options) => {
   for (const platform of ['win32', 'darwin'] as const) {
+    if (platform === 'darwin' && 'unsigned' in options) continue
     expect(() => { validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'com.example.test' }, { platform, arch: 'x64' }, options) })
       .toThrow('DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN')
   }

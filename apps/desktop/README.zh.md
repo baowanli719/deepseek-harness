@@ -235,6 +235,8 @@ Windows 安装器在启动时和选定目标目录后检查应用是否正在运
 
 <a id="upload-updates"></a>
 
+本地 macOS 构建可在 `package:desktop:mac:arm64` 和 `package:desktop:mac:x64` 后添加 `--unsigned`，也可同时添加 `--dir`。此模式跳过 Developer ID 签名、公证及更新策略配置，保留运行时完整性检查和打包运行时检查，并将带有 `-unsigned` 后缀的产物写入目标的 `unsigned-artifacts/` 目录。产物不包含更新源、强更策略或已完成发布记录；Gatekeeper 可能阻止打开。本地 macOS dotenv 文件仍提供应用 ID 和构建设置。
+
 ### 上传更新
 
 test 与 production 的 `upload:*` 上传在发布前置检查通过后，分别保留新的 `.desktop-build/upload-records/<environment>-<target>-*` 目录。`plan.json` 记录目标、版本、每个文件的大小/SHA-512 和发布的 YAML 字节；刷盘的 `events.jsonl` 记录 PUT 意图及可用的响应状态/请求 ID；`result.json` 记录完成结果或最后失败阶段。缺少最终结果表示中断或存储不可用，不表示成功。不记录凭据值、认证头或原始 SDK 错误。审计写入失败即停止后续 PUT。每个对象都以一次流式腾讯 COS PUT 上传，并携带显式长度与 Content-MD5；COS SDK 仅在请求体不是流时才会重发请求，上传器自身也不重试。保留部分记录，检查远端状态后再执行下一次操作：超时或回执写入失败不能证明对象未存储。这些记录仅在本地，不防篡改，也不会自动备份；每次发布应将它们与构建证据一同归档到受控存储。公网 CDN 回读仍是单独的发布验收，上传结果明确标记为 `not-performed`。
