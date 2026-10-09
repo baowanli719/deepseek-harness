@@ -378,3 +378,134 @@ it('removes the private routes when the plugin fiber disposes', async () => {
   await gsFiber.dispose()
   expect((await api(origin, '/api/gs-server/session')).status).toBe(404)
 })
+
+const riskView = { required: true, revision: 'rev-1', title: '非可信模型风险揭示书', text: '使用前请阅读' }
+const signBody = {
+  providerId: 'p1', modelId: 'm1', revision: 'rev-1', acknowledged: true,
+  signature: [[[0.1, 0.2], [0.3, 0.4]], [[0.5, 0.6]]],
+}
+
+async function login(origin: string) {
+  const response = await api(origin, '/api/gs-server/login', {
+    method: 'POST', body: JSON.stringify({ username: 'alice', password: 'pw' }),
+  })
+  expect(response.status).toBe(200)
+}
+
+function upstreamBody(call: { init: RequestInit } | undefined): unknown {
+  return JSON.parse(typeof call?.init.body === 'string' ? call.init.body : '')
+}
+
+it('proxies model-risk status, sign, and download with the Bearer token and verbatim bodies', async () => {
+  const pdfBase64 = Buffer.from('pdf').toString('base64')
+  const { origin, calls } = await boot({ gatewayRoutes: {
+    '/api/auth/login': () => json(200, loginBody()),
+    '/api/v1/model-risk/status': () => json(200, riskView),
+    '/api/v1/model-risk/sign': () => json(200, { ...riskView, consentId: 'c-1', mailStatus: 'sent' }),
+    '/api/v1/model-risk/download': () => json(200, { pdfBase64 }),
+  } })
+  await login(origin)
+
+  const status = await api(origin, '/api/gs-server/model-risk/status', {
+    method: 'POST', body: JSON.stringify({ providerId: 'p1', modelId: 'm1' }),
+  })
+  expect(status.status).toBe(200)
+  expect(await status.json()).toEqual(riskView)
+
+  const sign = await api(origin, '/api/gs-server/model-risk/sign', {
+    method: 'POST', body: JSON.stringify(signBody),
+  })
+  expect(sign.status).toBe(200)
+  expect(await sign.json()).toEqual({ ...riskView, consentId: 'c-1', mailStatus: 'sent' })
+
+  const download = await api(origin, '/api/gs-server/model-risk/download', {
+    method: 'POST', body: JSON.stringify({ consentId: 'c-1' }),
+  })
+  expect(download.status).toBe(200)
+  expect(await download.json()).toEqual({ pdfBase64 })
+
+  const statusCall = calls.find(call => call.path === '/api/v1/model-risk/status')
+  expect(new Headers(statusCall?.init.headers).get('authorization')).toBe('Bearer at-1')
+  expect(upstreamBody(statusCall)).toEqual({ providerId: 'p1', modelId: 'm1' })
+  const signCall = calls.find(call => call.path === '/api/v1/model-risk/sign')
+  expect(new Headers(signCall?.init.headers).get('authorization')).toBe('Bearer at-1')
+  expect(upstreamBody(signCall)).toEqual(signBody)
+  const downloadCall = calls.find(call => call.path === '/api/v1/model-risk/download')
+  expect(new Headers(downloadCall?.init.headers).get('authorization')).toBe('Bearer at-1')
+  expect(upstreamBody(downloadCall)).toEqual({ consentId: 'c-1' })
+})
+
+it('guards the model-risk routes with same-origin loopback and an authenticated session', async () => {
+  const { origin } = await boot({ gatewayRoutes: {
+    '/api/auth/login': () => json(200, loginBody()),
+  } })
+  const body = JSON.stringify({ providerId: 'p1', modelId: 'm1' })
+
+  const signedOut = await api(origin, '/api/gs-server/model-risk/status', { method: 'POST', body })
+  expect(signedOut.status).toBe(401)
+  expect(await signedOut.json()).toMatchObject({ code: 'unauthorized' })
+
+  await login(origin)
+  expect((await api(origin, '/api/gs-server/model-risk/status', { method: 'POST', body }, 'http://evil.example')).status).toBe(403)
+  expect((await api(origin, '/api/gs-server/model-risk/status', { method: 'POST', body }, null)).status).toBe(403)
+  expect((await api(origin, '/api/gs-server/model-risk/sign', { method: 'POST', body: JSON.stringify(signBody) }, 'http://evil.example')).status).toBe(403)
+  expect((await api(origin, '/api/gs-server/model-risk/download', { method: 'POST', body: JSON.stringify({ consentId: 'c-1' }) }, null)).status).toBe(403)
+  expect((await api(origin, '/api/gs-server/model-risk/status')).status).toBe(405)
+
+  const invalid = await api(origin, '/api/gs-server/model-risk/sign', {
+    method: 'POST', body: JSON.stringify({ ...signBody, signature: [[['x', 0]]] }),
+  })
+  expect(invalid.status).toBe(400)
+})
+
+it('forwards risk_* gateway codes onto the renderer error response', async () => {
+  const { origin } = await boot({ gatewayRoutes: {
+    '/api/auth/login': () => json(200, loginBody()),
+    '/api/v1/model-risk/sign': () => json(409, { code: 'risk_revision_changed', message: 'revision changed', traceId: 't-1' }),
+  } })
+  await login(origin)
+  const response = await api(origin, '/api/gs-server/model-risk/sign', {
+    method: 'POST', body: JSON.stringify(signBody),
+  })
+  expect(response.status).toBe(409)
+  expect(await response.json()).toEqual({ error: 'revision changed', code: 'risk_revision_changed' })
+})
+
+it('accepts a 12k-point signature within the sign body limit and rejects bodies beyond it', async () => {
+  let signed = false
+  const { origin } = await boot({ gatewayRoutes: {
+    '/api/auth/login': () => json(200, loginBody()),
+    '/api/v1/model-risk/sign': () => {
+      signed = true
+      return json(200, { ...riskView, consentId: 'c-1' })
+    },
+  } })
+  await login(origin)
+
+  const points = Array.from({ length: 12000 }, (_, index) => [index / 12000, index / 12000])
+  const big = JSON.stringify({ ...signBody, signature: [points] })
+  expect(big.length).toBeGreaterThan(16 * 1024)
+  const ok = await api(origin, '/api/gs-server/model-risk/sign', { method: 'POST', body: big })
+  expect(ok.status).toBe(200)
+  expect(signed).toBe(true)
+
+  const huge = JSON.stringify({ ...signBody, padding: 'x'.repeat(1024 * 1024) })
+  const tooLarge = await api(origin, '/api/gs-server/model-risk/sign', { method: 'POST', body: huge })
+  expect(tooLarge.status).toBe(413)
+  expect(await tooLarge.json()).toMatchObject({ error: 'request body is too large' })
+})
+
+it('downloads a signed disclosure PDF larger than the default response cap', async () => {
+  // ~1.5 MB of base64 exceeds the 1 MiB default response cap.
+  const pdfBase64 = 'A'.repeat(1500 * 1024)
+  const { origin } = await boot({ gatewayRoutes: {
+    '/api/auth/login': () => json(200, loginBody()),
+    '/api/v1/model-risk/download': () => json(200, { pdfBase64 }),
+  } })
+  await login(origin)
+  const response = await api(origin, '/api/gs-server/model-risk/download', {
+    method: 'POST', body: JSON.stringify({ consentId: 'c-1' }),
+  })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({ pdfBase64 })
+})

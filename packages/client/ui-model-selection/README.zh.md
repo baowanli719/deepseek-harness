@@ -55,6 +55,8 @@ composer 菜单中的模型名称和推理等级均使用 400（regular）字重
 
 -----
 
+部署插件可在 `model.option.accessory` 装饰模型行，并用 `modelDirectories.registerSelectionGuard` 在提交选择前授权。输入区和 `/model` 共用授权检查；返回 false 时保留原模型。启用授权时，输入区先关闭模型菜单，再将焦点交给协议对话框。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 

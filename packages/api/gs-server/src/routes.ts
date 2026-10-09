@@ -22,9 +22,16 @@ import {
   GS_SERVER_LOGIN_PATH,
   GS_SERVER_LOGOUT_PATH,
   GS_SERVER_META_PATH,
+  GS_SERVER_MODEL_RISK_DOWNLOAD_PATH,
+  GS_SERVER_MODEL_RISK_SIGN_PATH,
+  GS_SERVER_MODEL_RISK_STATUS_PATH,
   GS_SERVER_SESSION_PATH,
   type GsEmailCodeRequest,
   type GsEmailLoginRequest,
+  type GsModelRiskDownloadRequest,
+  type GsModelRiskSignRequest,
+  type GsModelRiskStatusRequest,
+  type GsModelRiskStroke,
   type GsPasswordLoginRequest,
   type GsServerErrorResponse,
 } from './contract.ts'
@@ -32,6 +39,7 @@ import { isSameOriginLoopbackRequest } from './loopback.ts'
 import type { GsServer } from './index.ts'
 
 const MAX_GS_ROUTE_BODY_BYTES = 16 * 1024
+const MAX_GS_SIGN_ROUTE_BODY_BYTES = 1024 * 1024
 
 class BodyTooLargeError extends Error {}
 
@@ -80,18 +88,18 @@ function isJsonRequest(req: IncomingMessage): boolean {
   return req.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase() === 'application/json'
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readJson(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   const declaredLength = req.headers['content-length']
   if (declaredLength !== undefined) {
     if (!/^\d+$/u.test(declaredLength)) throw new SyntaxError('invalid content length')
-    if (Number(declaredLength) > MAX_GS_ROUTE_BODY_BYTES) throw new BodyTooLargeError()
+    if (Number(declaredLength) > maxBytes) throw new BodyTooLargeError()
   }
   let size = 0
   const chunks: Buffer[] = []
   for await (const chunk of req) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
     size += buffer.byteLength
-    if (size > MAX_GS_ROUTE_BODY_BYTES) throw new BodyTooLargeError()
+    if (size > maxBytes) throw new BodyTooLargeError()
     chunks.push(buffer)
   }
   const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
@@ -103,13 +111,14 @@ const INVALID_BODY = Symbol('invalid body')
 async function parsePostBody(
   req: IncomingMessage,
   res: ServerResponse,
+  maxBytes = MAX_GS_ROUTE_BODY_BYTES,
 ): Promise<unknown> {
   if (!isJsonRequest(req)) {
     finishJson(res, 415, error('content type must be application/json'))
     return INVALID_BODY
   }
   try {
-    return await readJson(req)
+    return await readJson(req, maxBytes)
   } catch (cause) {
     const tooLarge = cause instanceof BodyTooLargeError
     finishJson(res, tooLarge ? 413 : 400, error(tooLarge ? 'request body is too large' : 'invalid JSON request'))
@@ -149,6 +158,40 @@ function parseEmailLoginRequest(value: unknown): GsEmailLoginRequest | undefined
 
 function isEmptyRequest(value: unknown): boolean {
   return isRecord(value) && Object.keys(value).length === 0
+}
+
+function parseModelRiskStatusRequest(value: unknown): GsModelRiskStatusRequest | undefined {
+  if (!isRecord(value) || typeof value.providerId !== 'string' || typeof value.modelId !== 'string') return undefined
+  return { providerId: value.providerId, modelId: value.modelId }
+}
+
+function isSignaturePoint(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 2
+    && typeof value[0] === 'number' && typeof value[1] === 'number'
+}
+
+function parseModelRiskSignRequest(value: unknown): GsModelRiskSignRequest | undefined {
+  if (!isRecord(value)
+    || typeof value.providerId !== 'string' || typeof value.modelId !== 'string'
+    || typeof value.revision !== 'string' || value.acknowledged !== true
+    || !Array.isArray(value.signature)) return undefined
+  const strokes: GsModelRiskStroke[] = []
+  for (const stroke of value.signature as unknown[]) {
+    if (!Array.isArray(stroke) || !stroke.every(isSignaturePoint)) return undefined
+    strokes.push(stroke as GsModelRiskStroke)
+  }
+  return {
+    providerId: value.providerId,
+    modelId: value.modelId,
+    revision: value.revision,
+    acknowledged: true,
+    signature: strokes,
+  }
+}
+
+function parseModelRiskDownloadRequest(value: unknown): GsModelRiskDownloadRequest | undefined {
+  if (!isRecord(value) || typeof value.consentId !== 'string') return undefined
+  return { consentId: value.consentId }
 }
 
 /** Diagnostic sink for route failures that outlive their response. */
@@ -447,6 +490,129 @@ export async function handleGsLogoutRequest(
   }
 }
 
+/** Wiring of one model-risk POST route: body cap, request parser, and service call. */
+interface GsModelRiskOperation<TRequest> {
+  readonly maxBodyBytes: number
+  readonly invalidMessage: string
+  readonly failureMessage: string
+  readonly reportOperation: string
+  readonly parse: (value: unknown) => TRequest | undefined
+  readonly invoke: (service: GsServer, request: TRequest) => Promise<object>
+}
+
+async function handleGsModelRiskPost<TRequest>(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  service: GsServer,
+  reportError: GsRouteReportError,
+  operation: GsModelRiskOperation<TRequest>,
+): Promise<void> {
+  if (req.method !== 'POST') {
+    methodNotAllowed(res, 'POST')
+    return
+  }
+  if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) {
+    forbidden(res)
+    return
+  }
+  const value = await parsePostBody(req, res, operation.maxBodyBytes)
+  if (value === INVALID_BODY) return
+  const request = operation.parse(value)
+  if (request === undefined) {
+    finishJson(res, 400, error(operation.invalidMessage))
+    return
+  }
+  try {
+    finishJson(res, 200, await operation.invoke(service, request))
+  } catch (cause) {
+    try {
+      finishOperationFailure(res, cause)
+    } catch (unexpected) {
+      reportError(operation.reportOperation, unexpected)
+      finishJson(res, 500, error(operation.failureMessage))
+    }
+  }
+}
+
+/**
+ * Query the model-risk disclosure status of one provider/model pair.
+ * @param req - the incoming request.
+ * @param res - the response owned by this handler.
+ * @param expectedOrigin - loopback origin the request must belong to.
+ * @param service - Host-owned gs-server client.
+ * @param reportError - diagnostic sink for failures that outlive the response.
+ */
+export function handleGsModelRiskStatusRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  service: GsServer,
+  reportError: GsRouteReportError = () => {},
+): Promise<void> {
+  return handleGsModelRiskPost(req, res, expectedOrigin, service, reportError, {
+    maxBodyBytes: MAX_GS_ROUTE_BODY_BYTES,
+    invalidMessage: 'invalid model risk status request',
+    failureMessage: 'model risk status unavailable',
+    reportOperation: 'gs-server model risk status',
+    parse: parseModelRiskStatusRequest,
+    invoke: (gs, request) => gs.modelRiskStatus(request),
+  })
+}
+
+/**
+ * Record one signed model-risk disclosure acknowledgment. The body carries
+ * PII plus the signature strokes, so the route accepts up to
+ * MAX_GS_SIGN_ROUTE_BODY_BYTES; the payload is forwarded verbatim and never
+ * logged.
+ * @param req - the incoming request.
+ * @param res - the response owned by this handler.
+ * @param expectedOrigin - loopback origin the request must belong to.
+ * @param service - Host-owned gs-server client.
+ * @param reportError - diagnostic sink for failures that outlive the response.
+ */
+export function handleGsModelRiskSignRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  service: GsServer,
+  reportError: GsRouteReportError = () => {},
+): Promise<void> {
+  return handleGsModelRiskPost(req, res, expectedOrigin, service, reportError, {
+    maxBodyBytes: MAX_GS_SIGN_ROUTE_BODY_BYTES,
+    invalidMessage: 'invalid model risk sign request',
+    failureMessage: 'model risk signing failed',
+    reportOperation: 'gs-server model risk sign',
+    parse: parseModelRiskSignRequest,
+    invoke: (gs, request) => gs.modelRiskSign(request),
+  })
+}
+
+/**
+ * Download the signed disclosure PDF of one consent record.
+ * @param req - the incoming request.
+ * @param res - the response owned by this handler.
+ * @param expectedOrigin - loopback origin the request must belong to.
+ * @param service - Host-owned gs-server client.
+ * @param reportError - diagnostic sink for failures that outlive the response.
+ */
+export function handleGsModelRiskDownloadRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  service: GsServer,
+  reportError: GsRouteReportError = () => {},
+): Promise<void> {
+  return handleGsModelRiskPost(req, res, expectedOrigin, service, reportError, {
+    maxBodyBytes: MAX_GS_ROUTE_BODY_BYTES,
+    invalidMessage: 'invalid model risk download request',
+    failureMessage: 'model risk download failed',
+    reportOperation: 'gs-server model risk download',
+    parse: parseModelRiskDownloadRequest,
+    invoke: (gs, request) => gs.modelRiskDownload(request),
+  })
+}
+
 /** Inputs for the `/api/gs-server/*` route table. */
 export interface GsServerRoutesOptions {
   /** Host-owned gs-server client the handlers delegate to. */
@@ -530,6 +696,21 @@ export function createGsServerRoutes(options: GsServerRoutesOptions): WebRoute[]
       kind: 'exact',
       path: GS_SERVER_LOGOUT_PATH,
       handler: (req, res) => handleGsLogoutRequest(req, res, options.expectedOrigin(), service, reportError, onLoggedOut),
+    },
+    {
+      kind: 'exact',
+      path: GS_SERVER_MODEL_RISK_STATUS_PATH,
+      handler: (req, res) => handleGsModelRiskStatusRequest(req, res, options.expectedOrigin(), service, reportError),
+    },
+    {
+      kind: 'exact',
+      path: GS_SERVER_MODEL_RISK_SIGN_PATH,
+      handler: (req, res) => handleGsModelRiskSignRequest(req, res, options.expectedOrigin(), service, reportError),
+    },
+    {
+      kind: 'exact',
+      path: GS_SERVER_MODEL_RISK_DOWNLOAD_PATH,
+      handler: (req, res) => handleGsModelRiskDownloadRequest(req, res, options.expectedOrigin(), service, reportError),
     },
   ]
 }

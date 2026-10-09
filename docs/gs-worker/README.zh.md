@@ -20,6 +20,7 @@
 
 | 打包版本 | 产品版本 | 记录 |
 | --- | --- | --- |
+| `2.2.0` | `2.2.0` | [需求、修改及验证记录](releases/2.2.0/requirements-and-changes.zh.md) |
 | `2.1.1-test.20261002.3` | `2.1.1` | [需求、修改及验证记录](releases/2.1.1-test.20261002.3/requirements-and-changes.zh.md) |
 
 <a id="version-source"></a>

@@ -24,7 +24,7 @@ import {
   type GsPasswordLogin,
 } from './auth.ts'
 import { GsBrandStore } from './brand.ts'
-import { authorizedFetch, type GsRequest } from './client.ts'
+import { authorizedFetch, authorizedJson, type GsRequest } from './client.ts'
 import { GsClientConfigCache, type GsClientConfigSnapshot } from './config.ts'
 import type {
   GsAuthMethods,
@@ -33,6 +33,11 @@ import type {
   GsCaptcha,
   GsClientConfig,
   GsEmailCodeResponse,
+  GsModelRiskDownloadRequest,
+  GsModelRiskDownloadResponse,
+  GsModelRiskSignRequest,
+  GsModelRiskStatusRequest,
+  GsModelRiskView,
   GsServerMetaView,
   GsSessionView,
   GsTokenPair,
@@ -146,6 +151,9 @@ export const Config: z<Config> = z.object({
   logLevel: z.union([z.const('debug'), z.const('info'), z.const('warn'), z.const('error')]).default('info'),
   request: z.any(),
 })
+
+/** Response byte cap for model-risk sign/download; the download payload is a base64 PDF. */
+const MAX_MODEL_RISK_RESPONSE_BYTES = 8 * 1024 * 1024
 
 /**
  * Host-owned gsclaw-server client service. Composes the endpoint store, the
@@ -416,6 +424,56 @@ export class GsServer extends Service {
    */
   brandView(): GsBrandView {
     return this.brand.view()
+  }
+
+  /**
+   * Fetch the model-risk disclosure status of one provider/model pair; the
+   * caller blocks model use on `required` until a signature lands.
+   * @param request - provider and model identifiers.
+   * @returns the disclosure view; `consentId` and `mailStatus` appear after signing.
+   */
+  modelRiskStatus(request: GsModelRiskStatusRequest): Promise<GsModelRiskView> {
+    return authorizedJson({
+      endpoint: this.endpoints.resolve(),
+      path: '/api/v1/model-risk/status',
+      body: request,
+      session: this.auth,
+      ...(this.resolved.request === undefined ? {} : { request: this.resolved.request }),
+    })
+  }
+
+  /**
+   * Record one signed disclosure acknowledgment. The body carries signature
+   * strokes; the gateway resolves the signer identity from the authenticated account
+   * and is never logged.
+   * @param request - signed acknowledgment echoing the status revision.
+   * @returns the disclosure view after signing, including the consent id.
+   */
+  modelRiskSign(request: GsModelRiskSignRequest): Promise<GsModelRiskView> {
+    return authorizedJson({
+      endpoint: this.endpoints.resolve(),
+      path: '/api/v1/model-risk/sign',
+      body: request,
+      session: this.auth,
+      maxBytes: MAX_MODEL_RISK_RESPONSE_BYTES,
+      ...(this.resolved.request === undefined ? {} : { request: this.resolved.request }),
+    })
+  }
+
+  /**
+   * Download the signed disclosure PDF of one consent record.
+   * @param request - consent id returned by the sign call.
+   * @returns the base64-encoded PDF.
+   */
+  modelRiskDownload(request: GsModelRiskDownloadRequest): Promise<GsModelRiskDownloadResponse> {
+    return authorizedJson({
+      endpoint: this.endpoints.resolve(),
+      path: '/api/v1/model-risk/download',
+      body: request,
+      session: this.auth,
+      maxBytes: MAX_MODEL_RISK_RESPONSE_BYTES,
+      ...(this.resolved.request === undefined ? {} : { request: this.resolved.request }),
+    })
   }
 
   /**

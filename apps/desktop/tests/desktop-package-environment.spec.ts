@@ -117,6 +117,25 @@ describe('Desktop local packaging configuration', () => {
     })
   })
 
+  it('loads the optional PFX identity only from the Windows file', async () => {
+    await withDirectory(async (directory) => {
+      await writeFile(join(directory, '.env.windows'), 'DSH_DESKTOP_WINDOWS_PFX_FILE="keys/release cert.pfx"\r\nDSH_DESKTOP_WINDOWS_PFX_PASSWORD=" #!$%&literal "\r\n')
+      const parent = {
+        PATH: 'build-tools',
+        DSH_DESKTOP_WINDOWS_PFX_FILE: 'stale.pfx',
+        DSH_DESKTOP_WINDOWS_PFX_PASSWORD: 'stale-pfx-secret',
+      }
+      expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({
+        PATH: 'build-tools',
+        DSH_DESKTOP_WINDOWS_PFX_FILE: join(directory, 'keys', 'release cert.pfx'),
+        DSH_DESKTOP_WINDOWS_PFX_PASSWORD: ' #!$%&literal ',
+      })
+      expect(parent.DSH_DESKTOP_WINDOWS_PFX_PASSWORD).toBe('stale-pfx-secret')
+      await writeFile(join(directory, '.env.macos'), 'DSH_DESKTOP_WINDOWS_PFX_FILE=keys/release.pfx\n')
+      expect(() => loadDesktopPackageEnvironment('darwin', {}, directory)).toThrow(/unsupported setting DSH_DESKTOP_WINDOWS_PFX_FILE/u)
+    })
+  })
+
   it('requires the local file even when ambient configuration exists and rejects other-platform fields', async () => {
     await withDirectory(async (directory) => {
       expect(() => loadDesktopPackageEnvironment('win32', RELEASE, directory)).toThrow(/copy .*\.env.windows.example/u)

@@ -213,6 +213,32 @@ describe('Windows token signing', () => {
       DSH_DESKTOP_WINDOWS_CER_FILE: CERTIFICATE_FILE,
       DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'token-secret!',
       DSH_DESKTOP_WINDOWS_KEY_CONTAINER: 'te-container',
+      DSH_DESKTOP_WINDOWS_PFX_FILE: '',
+      DSH_DESKTOP_WINDOWS_PFX_PASSWORD: '',
+      DSH_DESKTOP_WINDOWS_SIGN_TARGET: 'C:\\release\\DeepSeek Harness.exe',
+      DSH_DESKTOP_WINDOWS_SIGN_APPEND: '',
+    })
+  })
+
+  it('passes the PFX identity to the signing command interpreter without token fields', () => {
+    expect(buildWindowsSigningEnvironment({
+      SystemRoot: 'C:\\Windows',
+      DSH_DESKTOP_WINDOWS_PFX_PASSWORD: 'inherited-pfx-secret',
+    }, {
+      certificateFile: CERTIFICATE_FILE,
+      signTool: 'C:\\tools\\signtool.exe',
+      path: 'C:\\release\\DeepSeek Harness.exe',
+      isNest: false,
+      pfxFile: 'C:\\keys\\release.pfx',
+      pfxPassword: 'pfx-secret!',
+    })).toEqual({
+      SystemRoot: 'C:\\Windows',
+      DSH_DESKTOP_WINDOWS_SIGNTOOL: 'C:\\tools\\signtool.exe',
+      DSH_DESKTOP_WINDOWS_CER_FILE: CERTIFICATE_FILE,
+      DSH_DESKTOP_WINDOWS_TOKEN_PIN: '',
+      DSH_DESKTOP_WINDOWS_KEY_CONTAINER: '',
+      DSH_DESKTOP_WINDOWS_PFX_FILE: 'C:\\keys\\release.pfx',
+      DSH_DESKTOP_WINDOWS_PFX_PASSWORD: 'pfx-secret!',
       DSH_DESKTOP_WINDOWS_SIGN_TARGET: 'C:\\release\\DeepSeek Harness.exe',
       DSH_DESKTOP_WINDOWS_SIGN_APPEND: '',
     })
@@ -238,7 +264,21 @@ describe('Windows token signing', () => {
     expect(text).toContain('setlocal DisableDelayedExpansion\r\n')
     expect(text).toContain('set "DSH_DESKTOP_WINDOWS_CER_FILE="\r\n')
     expect(text).toContain('set "DSH_DESKTOP_WINDOWS_TOKEN_PIN="\r\n')
+    expect(text).toContain('set "DSH_DESKTOP_WINDOWS_PFX_FILE="\r\n')
+    expect(text).toContain('set "DSH_DESKTOP_WINDOWS_PFX_PASSWORD="\r\n')
     expect(text).toContain('"%signTool%" sign /v /fd sha256 /f "%certificateFile%" /kc "[{{%tokenPin%}}]=%keyContainer%" /csp "eToken Base Cryptographic Provider" %appendSignature% "%targetFile%"\r\n')
+  })
+
+  it('keeps a PFX branch without the SafeNet key-container syntax in the CMD file', async () => {
+    const text = (await readFile(SIGN_SCRIPT)).toString('ascii')
+    const lines = text.split('\r\n')
+    const pfxLine = lines.find(line => line.includes('/f "%pfxFile%"'))
+    expect(pfxLine).toBeDefined()
+    expect(pfxLine).toContain('"%signTool%" sign /v /fd sha256 /f "%pfxFile%" /p "%pfxPassword%" %appendSignature% "%targetFile%"')
+    expect(pfxLine).not.toContain('/kc')
+    expect(pfxLine).not.toContain('/csp')
+    expect(pfxLine).toContain('set "pfxPassword="')
+    expect(lines.some(line => line.includes('if not "%pfxFile%"=="" goto pfx'))).toBe(true)
   })
 
   it('rejects incomplete signing identities and non-SHA-256 signing tasks', async () => {
@@ -297,12 +337,204 @@ describe('Windows token signing', () => {
     }
   })
 
+  it('accepts a PFX identity and rejects ambiguous or invalid PFX settings', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-windows-pfx-identity-'))
+    const certificateFile = join(directory, 'server.cer')
+    const signTool = join(directory, 'signtool.exe')
+    const pfxFile = join(directory, 'release.pfx')
+    await writeFile(certificateFile, 'code-signing-certificate-fixture')
+    await writeFile(signTool, 'fixture')
+    await writeFile(pfxFile, 'pkcs12-fixture')
+    try {
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile,
+        pfxPassword: 'pfx-secret!',
+      })).not.toThrow()
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile,
+        pfxPassword: 'pfx-secret!',
+        tokenPin: 'token-secret!',
+      })).toThrow(/exactly one Windows signing identity/u)
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile,
+        pfxPassword: 'pfx-secret!',
+        keyContainer: 'te-container',
+      })).toThrow(/exactly one Windows signing identity/u)
+      expect(() => createWindowsTokenSigner({
+        certificateFile: undefined,
+        signTool,
+        pfxFile,
+        pfxPassword: 'pfx-secret!',
+      })).toThrow(/DSH_DESKTOP_WINDOWS_CER_FILE/u)
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile,
+      })).toThrow(/DSH_DESKTOP_WINDOWS_PFX_PASSWORD/u)
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile: join(directory, 'missing.pfx'),
+        pfxPassword: 'pfx-secret!',
+      })).toThrow(/PFX.*missing|missing/u)
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile: certificateFile,
+        pfxPassword: 'pfx-secret!',
+      })).toThrow(/\.pfx or \.p12/u)
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile,
+        pfxPassword: 'pfx]secret',
+      })).toThrow(/cannot contain/u)
+      expect(() => createWindowsTokenSigner({
+        certificateFile,
+        signTool,
+        pfxFile,
+        pfxPassword: 'pfx"secret',
+      })).toThrow(/cannot contain/u)
+      validateDesktopPackageEnvironment({
+        DSH_DESKTOP_APP_ID: 'com.example.desktop', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com', DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef',
+        DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+        DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+        DSH_DESKTOP_WINDOWS_CER_FILE: certificateFile, DSH_DESKTOP_WINDOWS_SIGNTOOL: signTool,
+        DSH_DESKTOP_WINDOWS_PFX_FILE: pfxFile, DSH_DESKTOP_WINDOWS_PFX_PASSWORD: 'pfx-secret!',
+        DSH_DESKTOP_WINDOWS_SIGNATURE_CACHE_DIR: 'C:\\fixture\\signature-cache',
+      }, { platform: 'win32', arch: 'x64' })
+      expect(() => {
+        validateDesktopPackageEnvironment({
+          DSH_DESKTOP_APP_ID: 'com.example.desktop', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com', DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef',
+          DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+          DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+          DSH_DESKTOP_WINDOWS_CER_FILE: certificateFile, DSH_DESKTOP_WINDOWS_SIGNTOOL: signTool,
+          DSH_DESKTOP_WINDOWS_PFX_FILE: pfxFile, DSH_DESKTOP_WINDOWS_PFX_PASSWORD: 'pfx-secret!',
+          DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'token-secret!',
+          DSH_DESKTOP_WINDOWS_SIGNATURE_CACHE_DIR: 'C:\\fixture\\signature-cache',
+        }, { platform: 'win32', arch: 'x64' })
+      }).toThrow(/exactly one Windows signing identity/u)
+    }
+    finally {
+      await rm(directory, { recursive: true })
+    }
+  })
+
+  it('signs through the PFX branch without exposing the password to other subprocesses', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-sign-pfx-'))
+    const certificateFile = join(root, 'server.cer')
+    const signTool = join(root, 'signtool.exe')
+    const pfxFile = join(root, 'release.pfx')
+    const path = join(root, 'application.exe')
+    await writeFile(certificateFile, 'code-signing-certificate-fixture')
+    await writeFile(signTool, 'fixture')
+    await writeFile(pfxFile, 'pkcs12-fixture')
+    await writeFile(path, 'input')
+    const run = createPackagingRun(join(root, 'records'), {})
+    let hardware = 0
+    vi.mocked(execFile).mockImplementation((...args: unknown[]) => {
+      const command = args[0] as string
+      const argv = args[1] as string[]
+      const options = args[2] as { env: NodeJS.ProcessEnv }
+      const callback = args.at(-1) as (error: Error | null, stdout?: string, stderr?: string) => void
+      if (argv[0] === '/d') {
+        hardware++
+        expect(options.env.DSH_DESKTOP_WINDOWS_PFX_FILE).toBe(pfxFile)
+        expect(options.env.DSH_DESKTOP_WINDOWS_PFX_PASSWORD).toBe('pfx-secret!')
+        expect(options.env.DSH_DESKTOP_WINDOWS_TOKEN_PIN).toBe('')
+        expect(options.env.DSH_DESKTOP_WINDOWS_KEY_CONTAINER).toBe('')
+        writeFileSync(options.env.DSH_DESKTOP_WINDOWS_SIGN_TARGET!, 'signed:input')
+        callback(null, '', '')
+      } else {
+        expect(options.env.DSH_DESKTOP_WINDOWS_PFX_PASSWORD).toBeUndefined()
+        expect(options.env.DSH_DESKTOP_WINDOWS_PFX_FILE).toBeUndefined()
+        if (command === 'powershell.exe') {
+          const timestamped = readFileSync(options.env.DSH_RUNTIME_VERIFY_FILE!, 'utf8').endsWith(':timestamp')
+          callback(null, JSON.stringify({ status: 'Valid', timestamped, thumbprint: 'A'.repeat(40) }), '')
+        } else if (argv[0] === 'remove') {
+          const target = argv.at(-1)!
+          const content = readFileSync(target, 'utf8')
+          if (content.endsWith(':timestamp')) {
+            writeFileSync(target, content.replace(':timestamp', ''))
+            callback(null, '', '')
+          } else callback(Object.assign(new Error('normalization warning'), { code: 2 }))
+        } else {
+          expect(argv[0]).toBe('timestamp')
+          writeFileSync(argv.at(-1)!, 'signed:input:timestamp')
+          callback(null, '', '')
+        }
+      }
+      return undefined as unknown as ReturnType<typeof execFile>
+    })
+    try {
+      const sign = createWindowsTokenSigner({ certificateFile, signTool, pfxFile, pfxPassword: 'pfx-secret!',
+        runDirectory: run.directory, stateDirectory: join(root, 'state') })
+      await sign({ path, hash: 'sha256', isNest: false })
+      expect(await readFile(path, 'utf8')).toBe('signed:input:timestamp')
+      expect(hardware).toBe(1)
+      const records = await readFile(join(run.directory, 'events.jsonl'), 'utf8')
+      expect(records).not.toContain('pfx-secret!')
+    } finally {
+      vi.mocked(execFile).mockReset()
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 15_000)
+
+  it('redacts the PFX password from PFX signing failures', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-sign-pfx-failure-'))
+    const certificateFile = join(root, 'server.cer')
+    const signTool = join(root, 'signtool.exe')
+    const pfxFile = join(root, 'release.pfx')
+    const path = join(root, 'application.exe')
+    await writeFile(certificateFile, 'code-signing-certificate-fixture')
+    await writeFile(signTool, 'fixture')
+    await writeFile(pfxFile, 'pkcs12-fixture')
+    await writeFile(path, 'input')
+    const run = createPackagingRun(join(root, 'records'), {})
+    vi.mocked(execFile).mockImplementation((...args: unknown[]) => {
+      const argv = args[1] as string[]
+      const callback = args.at(-1) as (error: Error | null, stdout?: string, stderr?: string) => void
+      expect(argv[0]).toBe('/d')
+      callback(Object.assign(new Error('signing failed'), { code: 1, stderr: 'SignTool Error: pfx-secret! rejected' }))
+      return undefined as unknown as ReturnType<typeof execFile>
+    })
+    try {
+      const sign = createWindowsTokenSigner({ certificateFile, signTool, pfxFile, pfxPassword: 'pfx-secret!',
+        runDirectory: run.directory, stateDirectory: join(root, 'state') })
+      let failure: unknown
+      try {
+        await sign({ path, hash: 'sha256', isNest: false })
+      } catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(Error)
+      expect((failure as Error).message).toContain('<redacted>')
+      expect((failure as Error).message).not.toContain('pfx-secret!')
+      expect(execFile).toHaveBeenCalledTimes(1)
+      const records = await readFile(join(run.directory, 'events.jsonl'), 'utf8')
+      expect(records).toContain('sign-failure')
+      expect(records).not.toContain('pfx-secret!')
+      expect(existsSync(join(run.directory, 'fatal.json'))).toBe(true)
+    } finally {
+      vi.mocked(execFile).mockReset()
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 15_000)
+
   it('removes inherited credentials and redacts SignTool process failures', () => {
     expect(scrubWindowsSigningEnvironment({
       SystemRoot: 'C:\\Windows',
       DSH_DESKTOP_WINDOWS_CER_FILE: 'C:\\release\\server.cer',
       DSH_DESKTOP_WINDOWS_SIGNTOOL: 'C:\\tools\\signtool.exe',
       DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'token-secret',
+      DSH_DESKTOP_WINDOWS_PFX_FILE: 'C:\\keys\\release.pfx',
+      DSH_DESKTOP_WINDOWS_PFX_PASSWORD: 'pfx-secret',
       DEEPSEEK_API_KEY: 'api-secret',
       BUILD_PASSWORD: 'build-secret',
     })).toEqual({ SystemRoot: 'C:\\Windows' })

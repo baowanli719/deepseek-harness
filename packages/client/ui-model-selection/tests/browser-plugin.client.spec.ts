@@ -204,6 +204,36 @@ async function bench(locale: 'zh' | 'en' = 'zh') {
 const projection = (id: string) => ({ sessionId: sid(id) })
 
 describe('ui-model-selection dual entry', () => {
+  it('waits for authorization before submitting and keeps the original model on cancellation', async () => {
+    const b = await bench(); b.mint('authorized')
+    try {
+      let finish!: (accepted: boolean) => void
+      const guard = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve }))
+      const dispose = b.ctx.modelDirectories.registerSelectionGuard(guard)
+      const face = b.seat().inject!(sid('authorized'))
+      await b.ctx.modelDirectories.directoryFor(sid('authorized')).load()
+      const next = { provider: 'external', model: 'deepseek-v4-flash' }
+      const cancelled = face.select(next)
+      expect(b.calls.select).toBe(0); expect(b.hostCurrent().provider).toBe('deepseek-official')
+      finish(false); expect(await cancelled).toBeUndefined(); expect(b.calls.select).toBe(0)
+      const accepted = face.select(next); finish(true); expect((await accepted)?.ok).toBe(true)
+      expect(b.calls.select).toBe(1); expect(b.hostCurrent()).toEqual(next)
+      dispose(); expect(b.ctx.modelDirectories.requiresAuthorization).toBe(false)
+    } finally { await b.ctx.fiber.dispose() }
+  })
+  it('applies the same authorization to the slash-command picker', async () => {
+    const b = await bench(); b.mint('command-policy')
+    try {
+      const guard = vi.fn(async () => false)
+      b.ctx.modelDirectories.registerSelectionGuard(guard)
+      const input = projection('command-policy')
+      const options = await b.popup().options(input, new AbortController().signal)
+      const external = options.find(row => row.id.startsWith('external/'))!
+      await b.popup().onSelect(external, input)
+      expect(guard).toHaveBeenCalledOnce(); expect(b.calls.select).toBe(0)
+      expect(b.hostCurrent().provider).toBe('deepseek-official')
+    } finally { await b.ctx.fiber.dispose() }
+  })
   it('carries writer contention to the model seat and localizes the command failure', async () => {
     const b = await bench()
     b.mint('owned')

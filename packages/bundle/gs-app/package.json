@@ -65,6 +65,7 @@
     "@deepseek-ai/dsh-client-ui-brand-gs": "workspace:*",
     "@deepseek-ai/dsh-client-ui-account-gs": "workspace:*",
     "@deepseek-ai/dsh-client-ui-skills-gs": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-model-risk-gs": "workspace:*",
     "@deepseek-ai/dsh-gs-server-skills": "workspace:*",
     "@deepseek-ai/dsh-llm-gs-gateway": "workspace:*",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",

@@ -155,7 +155,8 @@ export function apply(ctx: ClientContext): void {
           if (selection === undefined) {
             throw new Error('this provider\'s catalog failed to load — pick a model from a loaded group')
           }
-          const result = await directory.select(selection)
+          const result = await models.select(session.sessionId, selection)
+          if (result === undefined) return
           if (!result.ok) {
             if (result.error.code === 'session/writer-held') throw new Error(t('error.sessionInUse'))
             throw result.error
@@ -172,17 +173,19 @@ export function apply(ctx: ClientContext): void {
     scope.slots.inject('conversation.input.model', () => scope.slots.register({
       name: 'conversation.input.model',
       locale: NS,
+      children: { 'model.option.accessory': { kind: 'single', scope: 'root' } },
       inject: (sessionId): ModelSelectInjected => {
         const directory = models.directoryFor(sessionId)
         const available = sessions.subagentAddress(sessionId) === undefined
         return {
           available,
+          authorizeCurrentSelection: models.requiresAuthorization,
           directory: directory.store,
           load: () => {
             if (available) directory.load().catch(() => { /* surfaced on the store */ })
           },
           select: (selection: ModelSelection) => available
-            ? directory.select(selection)
+            ? models.select(sessionId, selection)
             : Promise.resolve(undefined),
         }
       },

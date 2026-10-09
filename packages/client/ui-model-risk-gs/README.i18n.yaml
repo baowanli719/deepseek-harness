@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-model-risk-gs/README.md
+/:
+  en: 01f67721a5b80313
+  zh: d5eeb2fedeecf990
+/deepseek-ai-dsh-client-ui-model-risk-gs:
+  en: 31dc0d8cda5e2d08
+  zh: 6dfcbbc3c09c5d17
+/deepseek-ai-dsh-client-ui-model-risk-gs/summary:
+  en: b5474a7c964706f0
+  zh: 1a4d0afbd09ee95c
+/deepseek-ai-dsh-client-ui-model-risk-gs/table-of-contents:
+  en: 76368b6b1da79c80
+  zh: ddafa933c150c4d1
+/deepseek-ai-dsh-client-ui-model-risk-gs/use-this-package:
+  en: dafe2b11fad1b498
+  zh: 0f372b6bccc20bcf
+/deepseek-ai-dsh-client-ui-model-risk-gs/understand-the-implementation:
+  en: 440158ae51b91ff3
+  zh: 272b6db4004c11fb
+/deepseek-ai-dsh-client-ui-model-risk-gs/model-experience:
+  en: ae657777c02a986b
+  zh: 10573d05447368dd
+/deepseek-ai-dsh-client-ui-model-risk-gs/model-experience/kv-cache-effect:
+  en: 7a9960f271fe9c26
+  zh: d58b05abbe0f7064
+/deepseek-ai-dsh-client-ui-model-risk-gs/known-limitations-and-deferred-work:
+  en: 7fb56f158f0d8f66
+  zh: c070fa1f4f57e8b7
+/deepseek-ai-dsh-client-ui-model-risk-gs/known-limitations-and-deferred-work/dev-note:
+  en: d4e3c7cdace39204
+  zh: b93b39b0648e40da

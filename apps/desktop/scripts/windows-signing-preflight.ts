@@ -40,6 +40,8 @@ export async function preflightWindowsSigning(options: SigningPreflightOptions):
     signTool: environment.DSH_DESKTOP_WINDOWS_SIGNTOOL,
     keyContainer: environment.DSH_DESKTOP_WINDOWS_KEY_CONTAINER,
     tokenPin: environment.DSH_DESKTOP_WINDOWS_TOKEN_PIN,
+    pfxFile: environment.DSH_DESKTOP_WINDOWS_PFX_FILE,
+    pfxPassword: environment.DSH_DESKTOP_WINDOWS_PFX_PASSWORD,
     runDirectory,
     stateDirectory: options.stateDirectory,
   })

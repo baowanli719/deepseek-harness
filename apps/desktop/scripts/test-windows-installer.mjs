@@ -38,6 +38,8 @@ const sign = process.argv.includes('--signed') ? createWindowsTokenSigner({
   signTool: signingEnvironment.DSH_DESKTOP_WINDOWS_SIGNTOOL,
   tokenPin: signingEnvironment.DSH_DESKTOP_WINDOWS_TOKEN_PIN,
   keyContainer: signingEnvironment.DSH_DESKTOP_WINDOWS_KEY_CONTAINER,
+  pfxFile: signingEnvironment.DSH_DESKTOP_WINDOWS_PFX_FILE,
+  pfxPassword: signingEnvironment.DSH_DESKTOP_WINDOWS_PFX_PASSWORD,
   runDirectory: signingRun.directory,
 }) : undefined
 let succeeded = false

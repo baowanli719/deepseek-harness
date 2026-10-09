@@ -20,6 +20,7 @@ Each record names its packaging evidence and verification limits. A record does 
 
 | Packaged version | Product version | Record |
 | --- | --- | --- |
+| `2.2.0` | `2.2.0` | [Requirements, changes, and verification](releases/2.2.0/requirements-and-changes.md) |
 | `2.1.1-test.20261002.3` | `2.1.1` | [Requirements, changes, and verification](releases/2.1.1-test.20261002.3/requirements-and-changes.md) |
 
 <a id="version-source"></a>

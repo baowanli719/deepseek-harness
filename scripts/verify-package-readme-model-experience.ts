@@ -48,6 +48,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-account-gs': { kind: 'none', reason: 'The sidebar account menu renders identity and navigation without contributing model context.' },
   'packages/client/ui-brand-gs': { kind: 'none', reason: 'The sidebar and hero show product branding without contributing model context.' },
   'packages/client/ui-skills-gs': { kind: 'indirect', reason: 'The page changes Host-owned skill preferences and local files; the skill registry owns model-facing discovery.' },
+  'packages/client/ui-model-risk-gs': { kind: 'none', reason: 'The risk-disclosure dialog mediates user signing with the server without contributing model context.' },
   'packages/client/product-analytics': { kind: 'none', reason: 'Desktop analytics observes selected interactions without contributing model context or Session events.' },
   'packages/experimental/speech-to-text': { kind: 'none', reason: 'Routes transient recognition without adding model requests or Session events.' },
   'packages/experimental/api-speech-to-text': { kind: 'none', reason: 'Transports audio and preparation state; ordinary user submission owns model-visible text.' },

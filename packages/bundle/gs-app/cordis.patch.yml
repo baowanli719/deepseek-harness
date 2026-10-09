@@ -105,6 +105,13 @@
     - id: ui-skills-gs
       name: '@deepseek-ai/dsh-client-ui-skills-gs'
 
+    # Non-trusted-model risk disclosure: a lock in each model-list row
+    # authorizing selection through the electronic signature dialog, with server-side
+    # archiving, mail delivery, and PDF download through the gs-server loopback
+    # routes.
+    - id: ui-model-risk-gs
+      name: '@deepseek-ai/dsh-client-ui-model-risk-gs'
+
 # ── model-access posture ───────────────────────────────────────────────────
 #
 # The direct DeepSeek adapter would bypass the gsclaw gateway, and the Web

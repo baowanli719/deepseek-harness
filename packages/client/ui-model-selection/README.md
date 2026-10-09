@@ -55,6 +55,8 @@ When another writer owns the Session, model-selection failures tell the user to 
 
 -----
 
+Deployment plugins may register `model.option.accessory` to decorate each model row and `modelDirectories.registerSelectionGuard` to authorize choices before submission. Both the composer and `/model` use the guards. A false result cancels without changing the current model; with authorization enabled, the composer closes its menu before a dialog takes focus.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 

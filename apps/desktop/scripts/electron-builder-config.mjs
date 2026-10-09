@@ -106,6 +106,8 @@ export function createElectronBuilderConfig(
         signTool: env.DSH_DESKTOP_WINDOWS_SIGNTOOL,
         tokenPin: env.DSH_DESKTOP_WINDOWS_TOKEN_PIN,
         keyContainer: env.DSH_DESKTOP_WINDOWS_KEY_CONTAINER,
+        pfxFile: env.DSH_DESKTOP_WINDOWS_PFX_FILE,
+        pfxPassword: env.DSH_DESKTOP_WINDOWS_PFX_PASSWORD,
         preserveSignature: async path => {
           for (const [sourceRoot, destinationRoot] of [[join(buildPaths.runtime, 'primary-runtime'), primaryRuntimeDestination], [buildPaths.dsh, dshDestination]]) {
             if (destinationRoot !== undefined && await preserveWindowsRuntimeSignature(path, {

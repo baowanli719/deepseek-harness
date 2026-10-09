@@ -32,7 +32,7 @@ gs-worker（国盛办公AI）产品组合包：覆盖在 `dsh-base` + `dsh-web-a
 - **视觉通道**——插入 `gs-vision-bridge`（`@deepseek-ai/dsh-gs-app/vision-bridge`）。普通的 `mcp-client` 配置行无法表达这个挂载：子进程脚本路径派生自本组合包自身的模块 URL，而回环代理的 origin/令牌是每次启动的运行时值。桥接插件通过 `ctx.get` 读取可选的 `gsLlmGateway` 服务（由 `dsh-llm-gs-gateway` 提供），然后把 `@deepseek-ai/dsh-mcp-client` 以 stdio 挂载到组合包内的 `src/mcp-vision-server.ts`，注册 `mcp__vision__analyze_image`。每次启动的代理占位令牌只经由 mcp-client 的 `env` 豁口到达该子进程——绝不进入 `process.env` 或磁盘——代理在转发时把它换成真实的 gsclaw 访问令牌。没有网关服务时，桥接插件记录警告并留该工具不挂载，而不是让启动失败。
 - **模型访问姿态**——禁用 `llm-deepseek`（直连适配器会绕过 gsclaw 网关）与 `ui-settings-models`（Models 页面会把提供方密钥留在客户端），与桌面产品的仅代理姿态一致。
 - **品牌姿态**——禁用 `ui-brand-official`，启用 `ui-brand-gs`，通过 Host 的 gsclaw 品牌接口填充侧栏和会话首屏。
-- **办公界面与任务**——启用账户菜单、技能设置页、技能接口，以及定时任务服务和页面。
+- **办公界面与任务**——启用账户菜单、技能设置页、技能接口、非可信模型风险揭示入口（`ui-model-risk-gs`：模型列表锁图标在选择前要求电子签署，并经 gs-server loopback 路由下载存档 PDF），以及定时任务服务和页面。
 - **本地技能准入**——启动器在组合完所有 bundle、profile、home 和调用级补丁后、配置重载时，以及每次 Agent 预设挂载前应用 `sanitizeGsSkillEntries`。通用 `skill-filesystem` 行按 id 或包名禁用，包括改名与嵌套行。技能行只允许规范的注册表、工具、界面、内置徽章及 GS 提供器；冒用规范 id 的插件会被禁用。原生嵌套 Include 会被禁用，因为其独立加载的文件不经过产品策略。本地技能通过 GS 提供器从托管目录和 `~/.skills` 加载，发现和正文加载都检查服务端权限；服务端配置推送使目录失效，无需重启。
 
 技能接口返回偏好服务提供的服务端运行类型、受信任模型限制及各技能的不可调用原因，区分不支持的执行方式、未完成迁移和账号关闭开关；原有启用限制仍然生效。

@@ -402,6 +402,70 @@ export const GS_SERVER_LOCAL_SKILLS_PATH = '/api/gs-server/local-skills'
 /** Read the effective brand copy resolved by the Host brand store. */
 export const GS_SERVER_BRAND_PATH = '/api/gs-server/brand'
 
+/* ------------------------------------------------------------------ */
+/* Model-risk disclosure: status, signature, and signed-PDF download. */
+/* ------------------------------------------------------------------ */
+
+/** Query whether one provider/model pair requires a signed disclosure. */
+export const GS_SERVER_MODEL_RISK_STATUS_PATH = '/api/gs-server/model-risk/status'
+
+/** Record the handwritten-signature acknowledgment of one disclosure revision. */
+export const GS_SERVER_MODEL_RISK_SIGN_PATH = '/api/gs-server/model-risk/sign'
+
+/** Download the signed disclosure PDF by consent id. */
+export const GS_SERVER_MODEL_RISK_DOWNLOAD_PATH = '/api/gs-server/model-risk/download'
+
+/** One normalized point of a handwritten signature stroke. */
+export type GsModelRiskSignaturePoint = readonly [number, number]
+
+/** One stroke of a handwritten signature, as normalized coordinate points. */
+export type GsModelRiskStroke = readonly GsModelRiskSignaturePoint[]
+
+/** Exact body accepted by the model-risk status route. */
+export interface GsModelRiskStatusRequest {
+  readonly providerId: string
+  readonly modelId: string
+}
+
+/**
+ * Disclosure view shared by the status and sign responses: the current
+ * requirement, the revision the sign request must echo, and the disclosure
+ * copy. `consentId` and `mailStatus` appear only after a signature landed.
+ */
+export interface GsModelRiskView {
+  /** Whether the model requires a signed disclosure before use. */
+  readonly required: boolean
+  /** Opaque disclosure revision the sign request must echo back. */
+  readonly revision: string
+  readonly title: string
+  readonly text: string
+  /** Consent record id of the recorded signature; absent before signing. */
+  readonly consentId?: string
+  /** Server-side email delivery status of the signed PDF. */
+  readonly mailStatus?: string
+}
+
+/** Exact body accepted by the model-risk sign route. */
+export interface GsModelRiskSignRequest {
+  readonly providerId: string
+  readonly modelId: string
+  /** Revision returned by the status call; a changed revision is rejected. */
+  readonly revision: string
+  readonly acknowledged: true
+  /** Handwritten signature strokes, capped by the sign route body limit. */
+  readonly signature: readonly GsModelRiskStroke[]
+}
+
+/** Exact body accepted by the model-risk download route. */
+export interface GsModelRiskDownloadRequest {
+  readonly consentId: string
+}
+
+/** Success body of the model-risk download route. */
+export interface GsModelRiskDownloadResponse {
+  readonly pdfBase64: string
+}
+
 /** Renderer-safe brand view; always concrete after default/cache resolution. */
 export interface GsBrandView {
   readonly name: string

@@ -94,6 +94,7 @@
     { "path": "./packages/client/ui-brand-gs" },
     { "path": "./packages/client/ui-account-gs" },
     { "path": "./packages/client/ui-skills-gs" },
+    { "path": "./packages/client/ui-model-risk-gs" },
     { "path": "./packages/client/ui-approval" },
     { "path": "./packages/client/ui-chat/tsconfig.client.json" },
     { "path": "./packages/client/ui-conversation/tsconfig.client.json" },

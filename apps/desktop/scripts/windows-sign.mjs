@@ -53,6 +53,42 @@ function resolveTokenIdentity(input) {
   return { keyContainer, tokenPin }
 }
 
+function resolvePfxIdentity(input) {
+  const candidate = input.pfxFile?.trim()
+  if (!candidate) {
+    throw new Error('DSH_DESKTOP_WINDOWS_PFX_FILE must identify the PKCS#12 private-key file')
+  }
+  let path
+  try {
+    path = realpathSync(candidate)
+    if (!statSync(path).isFile()) throw new Error('not a file')
+  }
+  catch {
+    throw new Error(`Windows PFX code-signing file is missing: ${candidate}`)
+  }
+  if (!/\.(?:pfx|p12)$/iu.test(path)) {
+    throw new Error(`DSH_DESKTOP_WINDOWS_PFX_FILE must name a .pfx or .p12 file: ${path}`)
+  }
+  const pfxPassword = input.pfxPassword
+  if (pfxPassword === undefined) {
+    throw new Error('DSH_DESKTOP_WINDOWS_PFX_PASSWORD must contain the PKCS#12 private-key password (use an explicit empty value for an unencrypted file)')
+  }
+  if (/[\]"\r\n]/u.test(pfxPassword)) {
+    throw new Error('DSH_DESKTOP_WINDOWS_PFX_PASSWORD cannot contain "]", quotes, or line breaks because the signing CMD uses them as delimiters')
+  }
+  return { pfxFile: path, pfxPassword }
+}
+
+function resolveSigningIdentity(input) {
+  if (input.pfxFile?.trim()) {
+    if (input.tokenPin !== undefined || input.keyContainer !== undefined) {
+      throw new Error('Configure exactly one Windows signing identity: DSH_DESKTOP_WINDOWS_PFX_FILE excludes the SafeNet token settings')
+    }
+    return resolvePfxIdentity(input)
+  }
+  return resolveTokenIdentity(input)
+}
+
 function resolveCertificateFile(value) {
   const candidate = value?.trim()
   if (!candidate) {
@@ -142,7 +178,7 @@ export function createRedactedWindowsSigningError(error, path, secrets) {
  * Build the minimal CMD environment for one Electron artifact.
  *
  * @param {NodeJS.ProcessEnv} environment Parent environment.
- * @param {{ certificateFile: string, signTool: string, path: string, isNest: boolean, tokenPin: string, keyContainer: string }} input Validated signing identity and task.
+ * @param {{ certificateFile: string, signTool: string, path: string, isNest: boolean, tokenPin?: string, keyContainer?: string, pfxFile?: string, pfxPassword?: string }} input Validated signing identity and task.
  * @returns {NodeJS.ProcessEnv} Scrubbed environment plus fields consumed and cleared by the signing CMD.
  */
 export function buildWindowsSigningEnvironment(environment, input) {
@@ -150,23 +186,25 @@ export function buildWindowsSigningEnvironment(environment, input) {
     ...scrubWindowsSigningEnvironment(environment),
     DSH_DESKTOP_WINDOWS_SIGNTOOL: input.signTool,
     DSH_DESKTOP_WINDOWS_CER_FILE: input.certificateFile,
-    DSH_DESKTOP_WINDOWS_TOKEN_PIN: input.tokenPin,
-    DSH_DESKTOP_WINDOWS_KEY_CONTAINER: input.keyContainer,
+    DSH_DESKTOP_WINDOWS_TOKEN_PIN: input.tokenPin ?? '',
+    DSH_DESKTOP_WINDOWS_KEY_CONTAINER: input.keyContainer ?? '',
+    DSH_DESKTOP_WINDOWS_PFX_FILE: input.pfxFile ?? '',
+    DSH_DESKTOP_WINDOWS_PFX_PASSWORD: input.pfxPassword ?? '',
     DSH_DESKTOP_WINDOWS_SIGN_TARGET: input.path,
     DSH_DESKTOP_WINDOWS_SIGN_APPEND: input.isNest ? '1' : '',
   }
 }
 
 /**
- * Serialize SafeNet signing and stop all queued tasks after the first failure.
+ * Serialize Windows signing and stop all queued tasks after the first failure.
  *
- * @param {{ certificateFile?: string, signTool?: string, tokenPin?: string, keyContainer?: string, commandInterpreter?: string, runDirectory?: string, stateDirectory?: string, preserveSignature?: (path: string) => Promise<boolean> }} options Release identity, supervised run, verified-copy preservation, and test-only isolated interlock directory.
+ * @param {{ certificateFile?: string, signTool?: string, tokenPin?: string, keyContainer?: string, pfxFile?: string, pfxPassword?: string, commandInterpreter?: string, runDirectory?: string, stateDirectory?: string, preserveSignature?: (path: string) => Promise<boolean> }} options Release identity, supervised run, verified-copy preservation, and test-only isolated interlock directory.
  * @returns {(configuration: { path: string, hash: string, isNest: boolean }) => Promise<void>} The signing hook.
  */
 export function createWindowsTokenSigner(options) {
   const { path: certificateFile, certificate } = resolveCertificateFile(options.certificateFile)
   const signTool = resolveSignTool(options.signTool)
-  const { keyContainer, tokenPin } = resolveTokenIdentity(options)
+  const identity = resolveSigningIdentity(options)
   const commandInterpreter = options.commandInterpreter
     ?? process.env.ComSpec
     ?? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe')
@@ -178,7 +216,7 @@ export function createWindowsTokenSigner(options) {
       }
       if (configuration.isNest) throw new Error('Windows release signing does not support appended signatures')
       if (await options.preserveSignature?.(configuration.path)) return
-      const secrets = [tokenPin]
+      const secrets = ['pfxFile' in identity ? identity.pfxPassword : identity.tokenPin]
       const runDirectory = options.runDirectory ?? process.env.DSH_DESKTOP_PACKAGING_RUN_DIR
       if (!runDirectory) throw new Error('Windows hardware signing requires a supervised packaging run')
       const { inspectWindowsRuntimeSignature: inspect } = await import('./windows-runtime-signature.mjs')
@@ -209,8 +247,7 @@ export function createWindowsTokenSigner(options) {
                   signTool,
                   path,
                   isNest: false,
-                  tokenPin,
-                  keyContainer,
+                  ...identity,
                 }),
                 windowsHide: true,
               })

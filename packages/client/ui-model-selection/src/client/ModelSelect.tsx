@@ -37,7 +37,7 @@ import {
   IconCheckOutlineRegular, IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconCloseFillRegular,
   IconDataOutlineRegular, IconWarningOutlineRegular, Input, rankByName, StateDot, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
 import css from './ModelSelect.module.css'
 import { orderModelProviders } from './provider-order.ts'
@@ -62,14 +62,15 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, t }:
-  ModelSelectInjected & { locked: boolean } & PropsLocale<'model'>,
+  { locked, available, directory, load, select, t, renderSlot, authorizeCurrentSelection }:
+  ModelSelectInjected & { locked: boolean } & PropsLocale<'model'> & Partial<PropsRenderSlots<'model.option.accessory'>>,
 ) {
   const state = useSyncExternalStore(
     fn => directory.subscribe(fn),
     () => directory.getSnapshot(),
   )
   const [open, setOpen] = useState(false)
+  const [authorizing, setAuthorizing] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
@@ -137,7 +138,7 @@ export function ModelSelect(
       })),
     ], [reasoning, t])
   const { pending } = state
-  const busy = pending !== null
+  const busy = pending !== null || authorizing
 
   const reload = (): void => {
     lastActionRef.current = 'load'
@@ -386,11 +387,14 @@ export function ModelSelect(
     // Disabled option rows cannot retain focus while a selection is pending.
     setSelectionFocus(true)
     triggerRef.current?.focus()
-    void select(selection).then(settleSelection)
+    setAuthorizing(true)
+    // Close the portaled menu before an authorization dialog takes focus.
+    if (authorizeCurrentSelection === true) close(true)
+    void select(selection).then(settleSelection).finally(() => { setAuthorizing(false) })
   }
 
   const choose = (selection: ModelSelection): void => {
-    if (state.current?.provider === selection.provider && state.current.model === selection.model) {
+    if (authorizeCurrentSelection !== true && state.current?.provider === selection.provider && state.current.model === selection.model) {
       closeAfterSelection()
       return
     }
@@ -587,6 +591,7 @@ export function ModelSelect(
                             <span className={css.optionCopy}>
                               <span className={css.modelName}>{model.name}</span>
                             </span>
+                            {renderSlot?.('model.option.accessory', { selection: { provider: group.id, model: model.id } })}
                             <span className={css.check}>
                               {pending?.provider === group.id && pending.model === model.id
                                 ? <StateDot state="ongoing" />
