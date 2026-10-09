@@ -1281,7 +1281,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-gs-server`
 
-- `source`: [`packages/api/gs-server/src/index.ts:101`](../packages/api/gs-server/src/index.ts)
+- `source`: [`packages/api/gs-server/src/index.ts:106`](../packages/api/gs-server/src/index.ts)
 
 ```ts config-catalog
 /** Deployment and host choices for the gsclaw-server client. */
@@ -4526,6 +4526,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-client-ui-jobs` | — | [`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-layout` | — | [`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-message-feedback` | — | [`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-model-risk-gs` | — | [`packages/client/ui-model-risk-gs/src/index.ts`](../packages/client/ui-model-risk-gs/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-model-selection` | — | [`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-open-in-app` | — | [`packages/client/ui-open-in-app/src/index.ts`](../packages/client/ui-open-in-app/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-permission-presets` | — | [`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts) |

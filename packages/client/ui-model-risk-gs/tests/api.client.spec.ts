@@ -55,7 +55,7 @@ describe('createModelRiskApi', () => {
     expect(requestBody(init)).toEqual({ providerId: 'gscloud', modelId: 'm1' })
   })
 
-  it('posts the signature with revision, identity, acknowledgement, and strokes', async () => {
+  it('posts the signature with revision, acknowledgement, and strokes', async () => {
     const fetchMock = stubFetch(() => jsonResponse(200, { ...VIEW, consentId: 'c-1', mailStatus: 'pending' }))
     const api = createModelRiskApi()
     const view = await api.sign({

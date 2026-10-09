@@ -165,6 +165,30 @@ async logout(): Promise<GsAuthSnapshot>
 brandView(): GsBrandView
 
 /**
+ * Fetch the model-risk disclosure status of one provider/model pair; the
+ * caller blocks model use on `required` until a signature lands.
+ * @param request - provider and model identifiers.
+ * @returns the disclosure view; `consentId` and `mailStatus` appear after signing.
+ */
+modelRiskStatus(request: GsModelRiskStatusRequest): Promise<GsModelRiskView>
+
+/**
+ * Record one signed disclosure acknowledgment. The body carries signature
+ * strokes; the gateway resolves the signer identity from the authenticated account
+ * and is never logged.
+ * @param request - signed acknowledgment echoing the status revision.
+ * @returns the disclosure view after signing, including the consent id.
+ */
+modelRiskSign(request: GsModelRiskSignRequest): Promise<GsModelRiskView>
+
+/**
+ * Download the signed disclosure PDF of one consent record.
+ * @param request - consent id returned by the sign call.
+ * @returns the base64-encoded PDF.
+ */
+modelRiskDownload(request: GsModelRiskDownloadRequest): Promise<GsModelRiskDownloadResponse>
+
+/**
  * Validate and persist one runtime endpoint override.
  * @param value - new endpoint URL.
  * @returns the normalized persisted endpoint.

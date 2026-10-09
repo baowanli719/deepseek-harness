@@ -56,7 +56,11 @@ function mailStatus(value: unknown): GsModelRiskView['mailStatus'] {
   return value === 'sent' || value === 'failed' || value === 'pending' ? value : undefined
 }
 
-/** Validate one status wire body into the view. */
+/**
+ * Validate one status wire body into the view.
+ * @param value - untrusted status response body.
+ * @returns the validated current disclosure and optional archived consent.
+ */
 export function parseStatusView(value: unknown): GsModelRiskView {
   const row = record(value)
   if (row === undefined || typeof row.required !== 'boolean') throw invalid('status')
@@ -80,7 +84,11 @@ export function parseStatusView(value: unknown): GsModelRiskView {
   }
 }
 
-/** Validate one download wire body. */
+/**
+ * Validate one download wire body.
+ * @param value - untrusted PDF download response body.
+ * @returns the validated base64 PDF payload.
+ */
 export function parseDownloadResponse(value: unknown): GsModelRiskDownloadResponse {
   const row = record(value)
   if (row === undefined || typeof row.pdfBase64 !== 'string') throw invalid('download')

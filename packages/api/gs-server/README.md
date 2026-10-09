@@ -23,6 +23,8 @@ The gs-worker office Agent's gsclaw-server client: the `gsServer` Cordis service
 
 `GsAuthUser` is the token-free account projection (`id`, `username`, `displayName`, `role`). `GsClientConfig` is the validated server policy snapshot for Agent limits, features, settings pages, permissions, skills, models, app updates, notices, and optional branding. Their wire fields are declared in `src/contract.ts`; session and configuration events carry these projections without access or refresh tokens.
 
+The model-risk protocol in `src/contract.ts` uses `GsModelRiskStatusRequest` to name the provider and model, `GsModelRiskView` for the current disclosure and optional archived consent, `GsModelRiskSignRequest` for the revision, acknowledgment, and normalized signature strokes, and `GsModelRiskDownloadRequest`/`GsModelRiskDownloadResponse` for consent-id lookup and base64 PDF transfer. Signing has no client identity fields; the gateway resolves the authenticated account's name and email.
+
 Authentication commits are bound to a generation and serialized with credential writes. Logout invalidates in-flight login, restore, refresh, and configuration pulls before removing local credentials; `gs-server/session-ended` notifies consumers. Changing endpoints first ends the old session. Invalid explicit endpoint configuration fails startup; HTTP is accepted only for loopback and the exact shipped deployment endpoint; other endpoints require HTTPS.
 
 Compose the plugin on the Host with a `stateDir` and the client version it reports to the gateway:

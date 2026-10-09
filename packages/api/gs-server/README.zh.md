@@ -23,6 +23,8 @@ gs-worker 办公 Agent 的 gsclaw-server 客户端：`gsServer` Cordis 服务负
 
 `GsAuthUser` 是不含令牌的账户投影（`id`、`username`、`displayName`、`role`）。`GsClientConfig` 是经验证的服务器策略快照，涵盖 Agent 限制、功能、设置页面、权限、技能、模型、应用更新、通知及可选品牌内容。传输字段定义于 `src/contract.ts`；会话和配置事件传递这些投影，不包含访问或刷新令牌。
 
+`src/contract.ts` 中的模型风险协议以 `GsModelRiskStatusRequest` 指定提供方和模型，以 `GsModelRiskView` 返回当前揭示书及可选的存档签署记录，以 `GsModelRiskSignRequest` 提交 revision、确认和归一化签名笔画，并以 `GsModelRiskDownloadRequest`/`GsModelRiskDownloadResponse` 按签署编号查询和传输 base64 PDF。签署不含客户端身份字段；网关读取当前认证账号的姓名和邮箱。
+
 认证提交绑定代次，并与凭据写入串行执行。登出先使正在进行的登录、恢复、刷新与配置拉取失效，再删除本地凭据，并通过 `gs-server/session-ended` 通知消费方。切换端点先结束旧会话。显式端点配置无效时启动失败；仅回环地址及出厂部署端点允许 HTTP；其他端点必须使用 HTTPS。
 
 在 Host 侧组合该插件，提供 `stateDir` 和上报给网关的客户端版本：

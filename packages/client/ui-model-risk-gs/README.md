@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Untrusted models show a lock at the right of their model-list row; signed models show a neutral open lock, and trusted models show no lock. Choosing an unsigned model opens the server disclosure before changing the session model. The user reads the text, acknowledges it, and signs by hand; selection proceeds only after the server returns a consent id. Cancellation or signing failure preserves the previous model. The server resolves the name and receiving email from the authenticated account and employee directory; the client has no identity fields and submits none. Signed receipts offer archived-PDF download. Requests use the Host loopback routes; the access token remains in the Host.
+Untrusted model-list rows show locks; signed models show neutral open locks, and trusted models show none. Choosing an unsigned model requires reading, acknowledging, and signing the server disclosure before selection; cancellation or failure preserves the previous model. The server resolves the name and email from the authenticated account and employee directory, with no client identity fields. Signed receipts offer archived-PDF download through Host loopback routes; the access token remains in the Host.
 
 ## Table of Contents
 

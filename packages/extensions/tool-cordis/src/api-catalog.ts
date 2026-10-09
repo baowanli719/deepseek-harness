@@ -1350,6 +1350,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the frozen brand view.',
       },
       {
+        signature: 'modelRiskStatus(request: GsModelRiskStatusRequest): Promise<GsModelRiskView>',
+        description: 'Fetch the model-risk disclosure status of one provider/model pair; the caller blocks model use on `required` until a signature lands.',
+        parameters: [{ name: 'request', description: 'provider and model identifiers.' }],
+        returns: 'the disclosure view; `consentId` and `mailStatus` appear after signing.',
+      },
+      {
+        signature: 'modelRiskSign(request: GsModelRiskSignRequest): Promise<GsModelRiskView>',
+        description: 'Record one signed disclosure acknowledgment. The body carries signature strokes; the gateway resolves the signer identity from the authenticated account and is never logged.',
+        parameters: [{ name: 'request', description: 'signed acknowledgment echoing the status revision.' }],
+        returns: 'the disclosure view after signing, including the consent id.',
+      },
+      {
+        signature: 'modelRiskDownload(request: GsModelRiskDownloadRequest): Promise<GsModelRiskDownloadResponse>',
+        description: 'Download the signed disclosure PDF of one consent record.',
+        parameters: [{ name: 'request', description: 'consent id returned by the sign call.' }],
+        returns: 'the base64-encoded PDF.',
+      },
+      {
         signature: 'async setEndpointOverride(value: string): Promise<string>',
         description: 'Validate and persist one runtime endpoint override.',
         parameters: [{ name: 'value', description: 'new endpoint URL.' }],
