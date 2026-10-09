@@ -255,13 +255,13 @@ describe('model picker consent flow', () => {
     })
     const api = createModelRiskApi(), controller = new ModelRiskController(api)
     const directory = createSnapshotStore<ModelDirectoryState>({
-      current: { provider: 'private', model: 'p' }, routable: true, retainedEffort: undefined,
+      current: { provider: 'private', model: 'p' }, routable: true,
       groups: [{ id: 'private', name: 'private', models: [{ id: 'p', name: '私密模型' }] }, { id: 'gscloud', name: 'gscloud', models: [{ id: 'm1', name: '外部模型' }] }],
       failures: [], status: 'ready', pending: null, error: null,
     })
     render(<ModelSelect locked={false} available authorizeCurrentSelection directory={directory} load={() => {}}
-      t={makeTranslate(modelZh)} renderSlot={(_, owner: { selection: ModelSelection }) =>
-        <ModelRiskBadge selection={owner.selection} {...api} t={makeTranslate(zh)} />}
+      t={makeTranslate(modelZh)} renderSlot={(_, owner: object) =>
+        <ModelRiskBadge selection={(owner as { selection: ModelSelection }).selection} {...api} t={makeTranslate(zh)} />}
       select={async (picked) => {
         if (!await controller.authorize(SID, picked)) return undefined
         directory.update((state) => { state.current = picked })
