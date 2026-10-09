@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: the ui-session standard-prop merges (sessionId, useSessions).
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type { GsModelRiskView } from './contract.ts'
-import { isRevisionConflict, type ModelRiskApi } from './api.ts'
+import { isRevisionConflict, ModelRiskRequestError, type ModelRiskApi } from './api.ts'
 import { NS } from './locale.ts'
 import css from './ModelRisk.module.css'
 import type { ModelRiskController } from './controller.ts'
@@ -154,6 +154,10 @@ export function ModelRiskDialog({ selection, t, readStatus, sign, downloadPdf, o
       else setError(t('signFailed'))
     })
       .catch((cause: unknown) => {
+        if (cause instanceof ModelRiskRequestError && cause.status === 400 && cause.message === '请填写姓名、邮箱并确认已阅读') {
+          setError(t('serverUpdateRequired'))
+          return
+        }
         if (!isRevisionConflict(cause)) {
           setError(cause instanceof Error && cause.message !== '' ? cause.message : t('signFailed'))
           return

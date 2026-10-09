@@ -126,8 +126,6 @@ describe('requested model disclosure', () => {
     const { onSigned } = mount()
     await screen.findByRole('button', { name: zh.sign })
     expect(screen.queryByRole('textbox')).toBeNull()
-    expect(screen.queryByText(zh.fullName)).toBeNull()
-    expect(screen.queryByText(zh.email)).toBeNull()
     expect(onSigned).not.toHaveBeenCalled()
     signInk(); fireEvent.click(screen.getByRole('button', { name: zh.sign }))
     await screen.findByRole('button', { name: zh.downloadPdf })
@@ -152,6 +150,16 @@ describe('requested model disclosure', () => {
     const { onSigned } = mount(); await screen.findByRole('button', { name: zh.sign })
     signInk(); fireEvent.click(screen.getByRole('button', { name: zh.sign }))
     await screen.findByRole('alert'); expect(onSigned).not.toHaveBeenCalled()
+  })
+  it('explains that a legacy server must be updated without requesting client identity or authorizing', async () => {
+    const calls = stubServer({ status: json(200, VIEW), sign: json(400, { code: 'risk_sign_failed', error: '请填写姓名、邮箱并确认已阅读' }) })
+    const { onSigned } = mount(); await screen.findByRole('button', { name: zh.sign })
+    signInk(); fireEvent.click(screen.getByRole('button', { name: zh.sign }))
+    expect((await screen.findByRole('alert')).textContent).toBe(zh.serverUpdateRequired)
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(calls.find(row => row.path.endsWith('/sign'))?.body).not.toHaveProperty('fullName')
+    expect(calls.find(row => row.path.endsWith('/sign'))?.body).not.toHaveProperty('email')
+    expect(onSigned).not.toHaveBeenCalled()
   })
   it('retries an unavailable protocol without releasing the selected model', async () => {
     let offline = true
