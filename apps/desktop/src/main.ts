@@ -1280,7 +1280,11 @@ async function main(): Promise<void> {
       const loginBackend = gsLoginBackend
       if (gsDesktop && loginBackend === undefined) throw new Error('gs login: backend unavailable')
       welcomeWindow = gsDesktop
-        ? await openGsLoginWindow(locale, desktopClientVersion(), requireGsLoginBackend(loginBackend), enterWorkspace)
+        ? await openGsLoginWindow(locale, desktopClientVersion(), requireGsLoginBackend(loginBackend), async () => {
+          // The workspace document loaded while signed out and read its account state at mount; reload it.
+          navigation = undefined
+          await enterWorkspace()
+        })
         : await openWelcomeWindow(locale, {
           analytics: track,
           analyticsEnabled: () => Promise.resolve(analyticsEnabled),

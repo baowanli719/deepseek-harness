@@ -224,9 +224,13 @@ it.each([false, true])('shows startup immediately and selects the GS login gate 
     expect(state.gsLoginOpened).not.toHaveBeenCalled()
   } else {
     expect(state.gsLoginOpened).toHaveBeenCalledOnce()
+    const loadsBeforeEnter = state.loadWorkspace.mock.calls.length
     const enter = state.gsLoginOpened.mock.calls[0]?.[3] as () => Promise<void>
     await enter()
     expect(state.showWorkspace).toHaveBeenCalledTimes(showsBeforeReady + 1)
+    // Sign-in reloaded the workspace document that loaded while signed out.
+    expect(state.loadWorkspace).toHaveBeenCalledTimes(loadsBeforeEnter + 1)
+    expect(state.loadWorkspace).toHaveBeenLastCalledWith('dsh-app://app/')
   }
   state.gsSignedIn = false
 })
