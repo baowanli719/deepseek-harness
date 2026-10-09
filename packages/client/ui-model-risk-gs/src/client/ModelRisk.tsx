@@ -223,7 +223,7 @@ export function ModelRiskDialog({ selection, t, readStatus, sign, downloadPdf, o
     {view?.required !== true ? null : signed ? <>
       <p>{statusError === '' ? t('signedReady') : ''}{mail}</p>
       <p>
-        <button type="button" className={css.action} disabled={busy} onClick={download}>
+        <button type="button" className={clsx(css.action, css.download)} disabled={busy} onClick={download}>
           {busy ? t('working') : t('downloadPdf')}
         </button>
       </p>
