@@ -26,7 +26,7 @@ Untrusted model-list rows show locks; signed models show neutral open locks, and
 
 The GS browser composition mounts this plugin by name. It registers the model-row lock in `model.option.accessory` and hosts the requested-model dialog in `conversation.input.activity`, with no composer icon. A `modelDirectories.registerSelectionGuard` registration waits for consent before the model selector or `/model` command submits a choice.
 
-The disclosure names the requested model; the session keeps its previous model until authorization succeeds. Rows read server status each time the menu opens and retry on window focus. Selecting a row reads the current disclosure and signing state again.
+The disclosure names the requested model; the session keeps its previous model until authorization succeeds. Rows read server status each time the menu opens and retry on window focus. Selecting a row reads the current disclosure and signing state again. A current server receipt permits switching directly without a dialog; a missing receipt requires signing, including after the agreement changes.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation

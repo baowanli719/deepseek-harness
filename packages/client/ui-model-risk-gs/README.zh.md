@@ -26,7 +26,7 @@ kind: "package-reference"
 
 本包是 GS 组合的浏览器插件，由 bundle 的 `cordis.patch.yml` 挂载。它在 `model.option.accessory` 注册模型行锁图标，并在 `conversation.input.activity` 承载仅在选择时显示的对话框。`modelDirectories.registerSelectionGuard` 在模型选择器及 `/model` 命令提交选择前等待签署结果。
 
-协议使用用户请求的目标模型，原会话模型直到授权成功才改变。模型行每次菜单打开时读取服务端状态，窗口聚焦时重试；模型选择再次读取当前协议与签署状态。
+协议使用用户请求的目标模型，原会话模型直到授权成功才改变。模型行每次菜单打开时读取服务端状态，窗口聚焦时重试；模型选择再次读取当前协议与签署状态。服务端返回当前有效签署记录时直接切换，不弹窗；缺少记录时须签署，协议更新后也会重新要求签署。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现

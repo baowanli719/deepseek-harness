@@ -20,7 +20,7 @@ export class ModelRiskController {
   constructor(readonly api: ModelRiskApi) {}
 
   /**
-   * Read current server policy and request a signature when required.
+   * Read current server policy; open a dialog only when consent is missing or status is unavailable.
    * @param sessionId - choosing session.
    * @param selection - requested model.
    * @returns whether the model may be selected.
@@ -31,11 +31,7 @@ export class ModelRiskController {
     try {
       const status = await this.api.readStatus({ providerId: selection.provider, modelId: selection.model })
       if (generation !== this.generation) return false
-      if (!status.required) return true
-      if (status.consentId !== undefined) {
-        this.requests.set({ sessionId, selection })
-        return true
-      }
+      if (!status.required || status.consentId !== undefined) return true
     } catch (cause: unknown) {
       // The dialog exposes a retry; an unavailable policy never authorizes selection.
       void cause

@@ -231,13 +231,20 @@ describe('selection authorization', () => {
     await waitFor(() => { expect(controller.requests.getSnapshot()).not.toBeNull() })
     controller.signed(); expect(await next).toBe(true)
   })
-  it('permits trusted models directly and offers stored receipts for signed models', async () => {
+  it('permits trusted and signed models without opening a receipt dialog', async () => {
     let signed = false
     stubServer({ status: () => json(200, signed ? SIGNED : { required: false }) })
     const controller = new ModelRiskController(createModelRiskApi())
     expect(await controller.authorize(SID, selection)).toBe(true); expect(controller.requests.getSnapshot()).toBeNull()
     signed = true; expect(await controller.authorize(SID, selection)).toBe(true)
-    expect(controller.requests.getSnapshot()?.selection).toEqual(selection)
+    expect(controller.requests.getSnapshot()).toBeNull()
+    expect(await controller.authorize(SID, { provider: 'another-cloud', model: 'm2' })).toBe(true)
+    expect(controller.requests.getSnapshot()).toBeNull()
+    signed = false
+    stubServer({ status: json(200, { ...VIEW, revision: 'rev-2' }) })
+    const renewed = controller.authorize(SID, selection)
+    await waitFor(() => { expect(controller.requests.getSnapshot()?.selection).toEqual(selection) })
+    controller.close(); expect(await renewed).toBe(false)
   })
   it('keeps a failed policy read pending for dialog retry', async () => {
     stubServer({ status: json(503, { error: 'offline' }) }); const controller = new ModelRiskController(createModelRiskApi())
@@ -264,7 +271,7 @@ describe('model picker consent flow', () => {
     const api = createModelRiskApi(), controller = new ModelRiskController(api)
     const directory = createSnapshotStore<ModelDirectoryState>({
       current: { provider: 'private', model: 'p' }, routable: true,
-      groups: [{ id: 'private', name: 'private', models: [{ id: 'p', name: '私密模型' }] }, { id: 'gscloud', name: 'gscloud', models: [{ id: 'm1', name: '外部模型' }] }],
+      groups: [{ id: 'private', name: 'private', models: [{ id: 'p', name: '私密模型' }] }, { id: 'gscloud', name: 'gscloud', models: [{ id: 'm1', name: '外部模型' }, { id: 'm2', name: '其他云端模型' }] }],
       failures: [], status: 'ready', pending: null, error: null,
     })
     render(<ModelSelect locked={false} available authorizeCurrentSelection directory={directory} load={() => {}}
@@ -277,18 +284,31 @@ describe('model picker consent flow', () => {
       }} />)
     fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
-    await screen.findByRole('img', { name: zh.lockTitleUnsigned })
+    await screen.findAllByRole('img', { name: zh.lockTitleUnsigned })
     const rows = screen.getAllByRole('menuitemradio').map(row => ({ name: row.querySelector('span')?.textContent, lock: row.querySelector('[role=img]')?.getAttribute('aria-label') ?? null }))
     await expect(`${JSON.stringify(rows, null, 2)}\n`).toMatchFileSnapshot('./expected/model-risk-picker.json')
     fireEvent.click(screen.getByRole('menuitemradio', { name: /外部模型/ }))
     await waitFor(() => { expect(controller.requests.getSnapshot()?.selection).toEqual(selection) })
     expect(directory.getSnapshot().current?.provider).toBe('private')
-    render(<ModelRiskDialog selection={selection} {...api} t={makeTranslate(zh)}
+    const dialog = render(<ModelRiskDialog selection={selection} {...api} t={makeTranslate(zh)}
       onClose={() => { controller.close() }} onSigned={() => { controller.signed() }} />)
     await screen.findByRole('button', { name: zh.sign }); signInk(); fireEvent.click(screen.getByRole('button', { name: zh.sign }))
     await waitFor(() => { expect(directory.getSnapshot().current).toEqual(selection) })
     expect(calls.find(row => row.path.endsWith('/sign'))?.body).not.toHaveProperty('email')
     expect(calls.find(row => row.path.endsWith('/sign'))?.body).not.toHaveProperty('fullName')
     controller.close()
+    dialog.unmount()
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /其他云端模型/ }))
+    await waitFor(() => { expect(directory.getSnapshot().current).toEqual({ provider: 'gscloud', model: 'm2' }) })
+    expect(controller.requests.getSnapshot()).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(calls.filter(row => row.path.endsWith('/sign'))).toHaveLength(1)
+    const output = {
+      selected: screen.getByRole('button', { name: /选择模型/ }).textContent,
+      dialog: screen.queryByRole('dialog')?.textContent ?? null,
+    }
+    await expect(`${JSON.stringify(output, null, 2)}\n`).toMatchFileSnapshot('./expected/model-risk-signed-switch.json')
   })
 })
