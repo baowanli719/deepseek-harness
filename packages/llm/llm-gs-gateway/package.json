@@ -27,12 +27,16 @@
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@deepseek-ai/dsh-config-editor": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-gs-server": "workspace:*",
     "@deepseek-ai/dsh-sensitive-policy": "workspace:*",
     "@deepseek-ai/dsh-settings": "workspace:*"
   },
   "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-config-editor": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-sensitive-policy": {
       "optional": true
     }

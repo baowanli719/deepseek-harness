@@ -832,6 +832,17 @@ describe('Web session model selection', () => {
       error: { code: 'session/attachment-invalid', details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' } },
     })
 
+    const visionAdmission = ctx.provide('visionToolAdmission', {
+      canHandle: () => true,
+      projectTextInput: options => options.messages,
+    })
+    expectValue(await remote.prompt(promptRequest({ sessionId, mode: 'queue', content: [image] })))
+    expect(followup).toHaveBeenCalledOnce()
+    followup.mockClear()
+    visionAdmission()
+    expect(await remote.prompt(promptRequest({ sessionId, mode: 'queue', content: [image] })))
+      .toMatchObject({ ok: false, error: { details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' } } })
+
     expectValue(await remote.selectModel(request({
       sessionId, provider: 'image-capable', model: 'vision',
     })))

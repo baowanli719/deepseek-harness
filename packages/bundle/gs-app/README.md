@@ -41,6 +41,8 @@ The vision tool supplies image understanding to the text model without a user-fa
 
 ### gs-vision-bridge config
 
+The bundle includes `dsh-vision-router` 3.0.3 with the GS product patch and Sharp. Its visual tools accept pasted or uploaded images on the original text-model route, preserve durable image references, and provide complete attachment IDs plus `vision_describe` guidance only at text-model dispatch. The gateway mirrors the live loopback endpoint and in-memory credential reference into the plugin configuration on login, startup, and ClientConfig pushes. The composer hides the Vision mode icon and label in desktop tool mode. Anonymous fallback, provider twins, direct DeepSeek takeover, and plugin update checks are disabled. Disabling or unloading visual tools restores text-model image rejection. Desktop includes the patched plugin in its immutable local package set.
+
 | Field | Default | Meaning |
 |---|---|---|
 | `serverName` | `vision` | MCP namespace; the tool appears as `mcp__<serverName>__analyze_image` |

@@ -1,0 +1,277 @@
+diff --git a/lib/desktop-tool-mode.js b/lib/desktop-tool-mode.js
+new file mode 100644
+--- /dev/null
++++ b/lib/desktop-tool-mode.js
+@@ -0,0 +1,24 @@
++// GS keeps server model identities and uses Vision only as auxiliary tools.
++export function desktopToolConfig(config = {}) {
++  if (config.desktopToolMode !== true) return config
++  return { ...config, autoWrapProviders: false, wrappedProviders: [],
++    wrapperRoute: '', chainRoute: '', routing: false, stealth: false,
++    rewriteImages: false, freeFallback: false, onboardingSeen: true,
++    providers: [], provider: '', fallbacks: [], backgroundBenchmarking: 'off' }
++}
++
++export function installDesktopToolAdmission(ctx, config, rewriteImageBlocks) {
++  if (config.desktopToolMode !== true) return
++  const enabled = () => {
++    const settings = ctx.get('settings')?.get?.('vision-router')
++    return (settings?.tool ?? config.tool) !== false &&
++      (settings?.httpProviders ?? config.httpProviders ?? []).length > 0
++  }
++  ctx.provide('visionToolAdmission', {
++    canHandle(agent) { return !!agent?.session && enabled() },
++    projectTextInput(options) {
++      return options.sessionId && enabled()
++        ? rewriteImageBlocks(options.messages).messages : options.messages
++    },
++  })
++}
+diff --git a/lib/public-config.js b/lib/public-config.js
+--- a/lib/public-config.js
++++ b/lib/public-config.js
+@@ -15,6 +15,9 @@
+     if (!coreConfig || typeof coreConfig.set !== 'function') {
+         throw new TypeError('Vision Router public config requires a Schemastery object schema');
+     }
++    coreConfig.set('desktopToolMode', z.boolean().default(false));
++    coreConfig.set('updateCheck', z.boolean().default(true));
++    coreConfig.set('maxImageBodyBytes', z.number().step(1).min(0).default(0));
+     coreConfig.set('progressiveTools', z.boolean().default(false));
+     // Keep provider/task/turn timeout layers coherent. The whole-turn budget is
+     // an optional safety cap: 0 remains unlimited for long-running agent turns.
+diff --git a/lib/public-entry.js b/lib/public-entry.js
+--- a/lib/public-entry.js
++++ b/lib/public-entry.js
+@@ -1,5 +1,7 @@
+ import './abort-signal-compat.js'
+ import * as base from '../entry.js'
++import { rewriteImageBlocks } from '../index.js'
++import { desktopToolConfig, installDesktopToolAdmission } from './desktop-tool-mode.js'
+ import { createVisionToggleRootHardening } from './vision-toggle-root-hardening.js'
+ import { contextWithVisionRoutingTopologyRefresh } from './vision-routing-topology-refresh.js'
+ import { createVisionProviderTransport } from './vision-provider-transport.js'
+@@ -34,6 +36,7 @@
+  * settings therefore leave DSH/Host as the sole network authority.
+  */
+ export function apply(ctx, config = {}) {
++  config = desktopToolConfig(config)
+   // Cordis effect() is a required plugin-fiber primitive across the entire
+   // supported DSH window, not an optional capability. Refuse malformed/partial
+   // Hosts before any DVR route, wrapper, transport, watcher or global mutation
+@@ -83,6 +86,13 @@
+     const result = base.apply(runtimeCtx, hardening.config, { providerTransport: transport })
+     installLegacyGlobalProxyBoundary(runtimeCtx, hardening.config)
+     hardening.installClientBoundary()
++    if (result && typeof result.then === 'function') {
++      return result.then(value => {
++        installDesktopToolAdmission(runtimeCtx, config, rewriteImageBlocks)
++        return value
++      })
++    }
++    installDesktopToolAdmission(runtimeCtx, config, rewriteImageBlocks)
+     return result
+   } catch (error) {
+     void releaseTransport().catch(() => {})
+diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -42,6 +42,7 @@
+
+ export * from './lib/vision-resilience.js'
+
++import { desktopToolConfig } from './lib/desktop-tool-mode.js'
+ import z from '@deepseek-ai/schemastery'
+
+ import path from 'node:path'
+@@ -286,6 +287,7 @@
+         model: z.string(),
+         apiKeyEnv: z.string().default(''),
+         maxTokens: z.number().step(1).min(1).default(4096),
++        maxImageBodyBytes: z.number().step(1).min(0).default(0),
+       }),
+     )
+     .default([]),
+@@ -537,7 +539,8 @@
+   })
+   // Live configuration: composition entry at boot, then the resolved settings
+   // section once the settings service mounts (installSettingsSection below).
+-  let current = () => config
++  let readCurrent = () => config
++  const current = () => desktopToolConfig({ ...readCurrent(), desktopToolMode: config.desktopToolMode === true })
+   const coreVisionSurfaceRuntime = runtime?.coreVisionSurface
+   const coreVisionFlag = (name, fallback) => {
+     if (
+@@ -1049,7 +1052,7 @@
+         yield { type: 'finish', reason: { kind: 'stop' } }
+       },
+     }
+-    ctx.llm.registerAdapter([HTTP_ROUTE], httpAdapter)
++    if (config.desktopToolMode !== true) ctx.llm.registerAdapter([HTTP_ROUTE], httpAdapter)
+
+   }
+
+@@ -4820,7 +4823,7 @@
+     const scope = sctx.settings.register('vision-router', Config, {
+       base: config,
+     })
+-    current = () => scope.get()
++    readCurrent = () => scope.get()
+     // With the settings document now visible, reconcile the routing mounts
+     // (wrapper route, chain route) against the resolved values.
+     syncRoutingMounts()
+@@ -4838,7 +4841,7 @@
+       if (typeof disposeWatch === 'function') disposeWatch()
+       disposeWatch = undefined
+       // The settings provider went away: fall back to the composition entry.
+-      current = () => config
++      readCurrent = () => config
+     }
+     if (typeof sctx.effect !== 'function') {
+       // No lifecycle seam: this injection's context owns the source, so there is
+diff --git a/lib/runtime-composition.js b/lib/runtime-composition.js
+--- a/lib/runtime-composition.js
++++ b/lib/runtime-composition.js
+@@ -5,6 +5,7 @@
+ // implementation details. Keep the mature installers below in their historical
+ // order so entry.js can remain the thin public schema/export boundary.
+
++import { desktopToolConfig } from './desktop-tool-mode.js'
+ import { installVisionRouterFileLogging } from './file-logger.js'
+ import { contextWithDelegatedReplay } from './replay-delegation.js'
+ import { contextWithReplayEnvelopeV2Compat } from './replay-envelope-v2-compat.js'
+@@ -81,7 +82,7 @@
+   try {
+     const settings = ctx?.get?.('settings')
+     const current = settings?.get?.('vision-router')
+-    if (current && typeof current === 'object' && !Array.isArray(current)) return current
++    if (current && typeof current === 'object' && !Array.isArray(current)) return desktopToolConfig({ ...current, desktopToolMode: fallback.desktopToolMode === true })
+   } catch {
+     // Before Settings mounts, the normalized composition config is authoritative.
+   }
+@@ -442,7 +443,7 @@
+     coreVisionSurfaceRuntime.finishSchemaBootstrap()
+   }
+   const installPostCoreRuntime = () => {
+-    installVisionMaintenanceRoutes(coreRequestAuthorityCtx, { logger: logging.logger })
++    if (runtimeConfig.updateCheck !== false) installVisionMaintenanceRoutes(coreRequestAuthorityCtx, { logger: logging.logger })
+     finishSchemaBootstrapOnce()
+     installWrapperDirectoryAlias(attachmentCompatCtx, runtimeConfig, logging.logger)
+   }
+diff --git a/lib/session-vision-mode-authority.js b/lib/session-vision-mode-authority.js
+--- a/lib/session-vision-mode-authority.js
++++ b/lib/session-vision-mode-authority.js
+@@ -196,11 +196,12 @@
+     const sessionPolicy = parseSessionVisionPolicy(options.sessionPolicy);
+     const config = liveConfig(ctx, fallbackConfig);
+     const routeEnabled = routeOwnedByVisionRouter(ctx, route, config, options.visionPolicy);
+-    const enabled = sessionPolicy?.enabled ?? routeEnabled;
++    const toolMode = ctx?.get?.('visionToolAdmission')?.canHandle(agent) === true;
++    const enabled = toolMode || (sessionPolicy?.enabled ?? routeEnabled);
+     return Object.freeze({
+         enabled,
+         route: route ? Object.freeze({ ...route }) : undefined,
+-        reason: sessionPolicy !== undefined
++        reason: toolMode ? 'desktop-vision-tools' : sessionPolicy !== undefined
+             ? 'session-policy'
+             : routeEnabled
+                 ? 'vision-router-route'
+diff --git a/lib/core-primitives.js b/lib/core-primitives.js
+--- a/lib/core-primitives.js
++++ b/lib/core-primitives.js
+@@ -2209,6 +2209,67 @@
+   return out
+ }
+
++const INLINE_IMAGE_DATA_URI = /^data:([^;,]+);base64,(.+)$/
++
++/**
++ * gs-worker desktop: both LLM proxy hops cap request bodies at 4 MiB, and
++ * the pixel-budget downscale never fires for small-but-dense PNGs whose raw
++ * bytes already exceed the cap. Bound the TOTAL raw inline-image bytes of one
++ * request instead: re-encode oversized images as JPEG with a descending
++ * quality ladder, then halve dimensions as a last resort; fail closed with
++ * VISION_IMAGE_PREPROCESS_FAILED when the budget cannot be met.
++ */
++async function boundInlineImageBytes(messages, totalBudget) {
++  const parts = []
++  for (const message of messages ?? []) {
++    const content = message ? message.content : undefined
++    if (!Array.isArray(content)) continue
++    for (const part of content) {
++      if (!part || part.type !== 'image_url') continue
++      const url = part.image_url && part.image_url.url
++      const match = typeof url === 'string' ? INLINE_IMAGE_DATA_URI.exec(url) : null
++      if (match) parts.push({ part, bytes: Buffer.from(match[2], 'base64') })
++    }
++  }
++  if (parts.length === 0) return
++  const total = parts.reduce((sum, entry) => sum + entry.bytes.length, 0)
++  if (total <= totalBudget) return
++  const fail = (cause) => {
++    const error = new Error('VISION_IMAGE_PREPROCESS_FAILED: inline images exceed the request byte budget')
++    error.code = 'VISION_IMAGE_PREPROCESS_FAILED'
++    if (cause !== undefined) error.cause = cause
++    throw error
++  }
++  const sharp = await loadSharp().catch(() => undefined)
++  if (sharp === undefined) fail()
++  const perImage = Math.floor(totalBudget / parts.length)
++  for (const entry of parts) {
++    if (entry.bytes.length <= perImage) continue
++    let output
++    for (const quality of [80, 65, 50, 35]) {
++      output = await sharp(entry.bytes, { failOn: 'none' }).jpeg({ quality }).toBuffer().catch(() => undefined)
++      if (output && output.length <= perImage) break
++      output = undefined
++    }
++    let width
++    const meta = await sharp(entry.bytes, { failOn: 'none' }).metadata().catch(() => undefined)
++    width = meta && typeof meta.width === 'number' ? meta.width : undefined
++    while (output === undefined && width !== undefined && width > 640) {
++      width = Math.floor(width / 2)
++      output = await sharp(entry.bytes, { failOn: 'none' })
++        .resize({ width, withoutEnlargement: true })
++        .jpeg({ quality: 60 })
++        .toBuffer()
++        .catch(() => undefined)
++      if (output && output.length > perImage) output = undefined
++    }
++    if (output === undefined || output.length > perImage) fail()
++    entry.bytes = output
++    entry.part.image_url.url = `data:image/jpeg;base64,${output.toString('base64')}`
++  }
++  if (parts.reduce((sum, entry) => sum + entry.bytes.length, 0) > totalBudget) fail()
++}
++
+ export async function callOpenAICompatible(provider, messages, options = {}) {
+   const headers = {
+     'content-type': 'application/json',
+@@ -2230,7 +2291,7 @@
+   const reasoningEffort = options.reasoningEffort ?? provider.reasoningEffort
+   const body = {
+     model: provider.model,
+-    messages,
++    messages: provider.maxImageBodyBytes > 0 ? structuredClone(messages) : messages,
+     max_tokens: options.maxTokens ?? provider.maxTokens ?? 4096,
+     stream: false,
+     // Local backends may carry explicit sampling options. Existing callers
+@@ -2241,6 +2302,7 @@
+       ? { reasoning_effort: reasoningEffort }
+       : {}),
+   }
++  if (provider.maxImageBodyBytes > 0) await boundInlineImageBytes(body.messages, provider.maxImageBodyBytes)
+   const url = `${provider.baseURL.replace(/\/$/, '')}/chat/completions`
+   const request = () =>
+     fetchWithOpenAICompatibility(
+diff --git a/lib/client-presentation-boundary-main.js b/lib/client-presentation-boundary-main.js
+--- a/lib/client-presentation-boundary-main.js
++++ b/lib/client-presentation-boundary-main.js
+@@ -1224,6 +1224,7 @@
+           });
+         }
+
++        if (visionConfig.desktopToolMode === true) return null;
+         var button = React.createElement('button', {
+           type: 'button',
+           'data-vision-router-mode-toggle': 'true',

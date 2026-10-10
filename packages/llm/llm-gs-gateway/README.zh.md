@@ -35,6 +35,8 @@ kind: "package-reference"
 - `defaultModelNamespace`——接收服务端默认模型的 `agent-default-model` 挂载的 settings 命名空间（默认 `agent-default-model`）。
 - `credentialRef`——镜像档案中每次启动的代理令牌所经引用的凭证名（默认 `DSH_GS_LLM_PROXY_TOKEN`）。
 - `maxBodyBytes`——代理接受的最大 chat-completions 请求体（默认 4 MiB）。
+- `visionRouterNamespace`——通过 ConfigEditor 配置的可选 Vision Router 行（默认留空；GS 使用 `vision-router`）。其后端使用本次启动的 `/vision` 回环端点和凭证引用；服务器在每次请求时解析专属模型。
+- `visionMaxTokens` / `visionMaxImageBodyBytes`——视觉回答 token 上限与内联图片原始字节总预算（默认 `4096` / `2800000`）。字节预算为 base64 与请求封装留出空间，保持在代理上限内。
 
 ### 接入每次启动的令牌
 

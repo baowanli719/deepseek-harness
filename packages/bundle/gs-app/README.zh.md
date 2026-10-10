@@ -41,6 +41,8 @@ gs-worker（国盛办公AI）产品组合包：覆盖在 `dsh-base` + `dsh-web-a
 
 ### gs-vision-bridge 配置
 
+组合包包含带 GS 产品补丁的 `dsh-vision-router` 3.0.3 与 Sharp。视觉工具支持在原有文本模型路由上粘贴或上传图片，保留持久图片引用，仅在文本模型请求分发时提供完整附件 ID 和 `vision_describe` 调用提示。网关在登录、启动及 ClientConfig 推送时，把本次启动的回环地址与内存凭证引用镜像到插件配置。桌面工具模式下，输入框隐藏识图模式的图标和文字。匿名回退、提供方影子路由、DeepSeek 直连接管和插件更新检查均禁用。禁用或卸载视觉工具后，文本模型恢复拒绝图片。桌面把已应用补丁的插件纳入不可变本地包集合。
+
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `serverName` | `vision` | MCP 命名空间；工具以 `mcp__<serverName>__analyze_image` 出现 |

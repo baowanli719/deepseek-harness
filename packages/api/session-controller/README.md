@@ -108,6 +108,8 @@ No direct effect; model requests remain owned by the Agent and LLM packages.
 
 ## Known Limitations and Deferred Work
 
+Text-model image prompts are admitted only while an active `visionToolAdmission` provider can handle the session. Otherwise prompt admission returns `MODEL_DOES_NOT_SUPPORT_IMAGES`; the selected provider and model never change as part of admission.
+
 <a id="known-limitations-and-deferred-work"></a>
 
 - The image byte cap does not validate decoded dimensions or pixel count.

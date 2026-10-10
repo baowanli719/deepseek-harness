@@ -50,6 +50,24 @@
     # config. Every agent LLM call crosses this gateway.
     - id: llm-gs-gateway
       name: '@deepseek-ai/dsh-llm-gs-gateway'
+      config:
+        visionRouterNamespace: vision-router
+
+    # Server-managed visual tools preserve the selected primary model.
+    # The gateway mirrors the live loopback endpoint; the server chooses its
+    # dedicated visionModel for each call, independently of the model picker.
+    - id: vision-router
+      name: dsh-vision-router
+      config:
+        desktopToolMode: true
+        progressiveTools: false
+        freeFallback: false
+        updateCheck: false
+        autoWrapProviders: false
+        rewriteImages: false
+        onboardingSeen: true
+        downscaleMaxPixels: 2000000
+        maxImageBodyBytes: 2800000
 
     # Sensitive-data compliance: private sessions are restricted to trusted
     # model routes and lose egress-capable tools, every model request carries

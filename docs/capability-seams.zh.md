@@ -9,6 +9,9 @@
 
 ```mermaid
 flowchart LR
+  pkg_llm["llm"]
+  svc_visionToolAdmission["ctx.visionToolAdmission<br/>Auxiliary visual-tool admission"]
+  pkg_session_controller["session-controller"]
   pkg_gs_server["gs-server"]
   svc_gsServer["ctx.gsServer<br/>GS account and authenticated server access"]
   pkg_llm_gs_gateway["llm-gs-gateway"]
@@ -57,7 +60,6 @@ flowchart LR
   pkg_llm_deepseek["llm-deepseek"]
   pkg_client_file_upload["client-file-upload"]
   svc_fileUploads["ctx.fileUploads<br/>Agent-scoped staged file uploads"]
-  pkg_llm["llm"]
   svc_llm["ctx.llm<br/>LLM adapter registry"]
   pkg_llm_replay["llm-replay"]
   pkg_agent_loop["agent-loop"]
@@ -362,6 +364,7 @@ flowchart LR
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
   pkg_llm --> svc_llm
+  pkg_llm --> svc_visionToolAdmission
   pkg_llm_deepseek --> svc_llm
   pkg_llm_gs_gateway --> svc_gsLlmGateway
   pkg_llm_pi_ai --> svc_llm
@@ -593,6 +596,8 @@ flowchart LR
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_visionToolAdmission --> pkg_llm
+  svc_visionToolAdmission --> pkg_session_controller
   svc_web --> pkg_tool_web
   svc_webServer --> pkg_client_connection
   svc_webServer --> pkg_client_hmr
@@ -607,6 +612,7 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.visionToolAdmission` | `seam` | [`llm`](../packages/llm/llm) | - | [`llm`](../packages/llm/llm), `session-controller` | - | GS 组合包内的 Vision Router 接纳上传图片，并提供文本模型调用视觉工具的提示，保留持久会话历史。 |
 | `ctx.gsServer` | `core` | [`gs-server`](../packages/api/gs-server) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway), [`gs-server-skills`](../packages/skill/gs-server-skills), [`sensitive-policy`](../packages/guard/sensitive-policy) | - | 负责账户代次、加密凭据持久化，以及到配置 GS 端点的认证请求。 |
 | `ctx.gsLlmGateway` | `service` | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | 通过认证服务器访问及敏感请求归属标记注册 GS 模型和视觉适配器。 |
 | `ctx.gsServerSkillCatalog` | `core` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | `ui-skills-gs` | - | 读取当前认证账号的技能目录；加载技能时重新检查账号、偏好和隐私策略。 |

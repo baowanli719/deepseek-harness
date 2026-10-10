@@ -108,6 +108,11 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'visionToolAdmission', pkg: 'llm', title: 'Auxiliary visual-tool admission',
+    mode: 'seam', consumers: ['llm', 'session-controller'],
+    note: 'The GS-bundled Vision Router admits uploaded images and projects text-model tool guidance without rewriting durable history.',
+  },
+  {
     key: 'gsServer', pkg: 'gs-server', title: 'GS account and authenticated server access',
     mode: 'core', consumers: ['llm-gs-gateway', 'gs-server-skills', 'sensitive-policy'],
     note: 'Owns account generations, secure credential persistence, and authenticated requests to the configured GS endpoint.',

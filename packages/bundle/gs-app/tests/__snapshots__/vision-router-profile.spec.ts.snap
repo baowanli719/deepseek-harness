@@ -1,0 +1,37 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`automatically configures and executes the installed plugin without changing the primary model > server-managed vision request 1`] = `
+{
+  "max_tokens": 4096,
+  "messages": [
+    {
+      "content": [
+        {
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jH1sAAAAASUVORK5CYII=",
+          },
+          "type": "image_url",
+        },
+        {
+          "text": "描述图片",
+          "type": "text",
+        },
+      ],
+      "role": "user",
+    },
+  ],
+  "model": "server-vision",
+  "stream": false,
+}
+`;
+
+exports[`automatically configures and executes the installed plugin without changing the primary model > text model attachment guidance 1`] = `
+[
+  [
+    {
+      "text": "[attached image: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] The current model cannot see images. To examine it, call vision_describe with attachmentIds: ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] and a specific question.",
+      "type": "text",
+    },
+  ],
+]
+`;

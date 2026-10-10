@@ -55,6 +55,8 @@
     }
   },
   "dependencies": {
+    "dsh-vision-router": "3.0.3",
+    "sharp": "^0.35.4",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-gs-server": "workspace:*",
     "@deepseek-ai/dsh-host-webserver": "workspace:*",
@@ -80,6 +82,8 @@
     "@deepseek-ai/cordis": "workspace:~"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-credentials-local": "workspace:*",
+    "@deepseek-ai/dsh-launch-environment": "workspace:*",
     "@deepseek-ai/dsh-fs-sandbox": "workspace:*",
     "@deepseek-ai/dsh-tool-fs": "workspace:*",
     "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*",

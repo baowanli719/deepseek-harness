@@ -12,7 +12,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
 import { parseArgs } from 'node:util'
 import * as yaml from 'js-yaml'
 import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot'
@@ -26,6 +27,7 @@ import {
 } from '../src/core-package-set.ts'
 import { capture } from '../../../scripts/release/process.ts'
 import { tarballFiles } from '../../../scripts/release/tarball.ts'
+import { pnpmInvocation } from '../../../scripts/pnpm-invocation.ts'
 import { resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { DEFAULT_DESKTOP_PROFILE, DESKTOP_PROFILE_ENV } from './desktop-release-environment.mjs'
 
@@ -197,6 +199,21 @@ function main(): void {
   const inputs = (values.from ?? defaultInputs).map(path => resolve(REPOSITORY_ROOT, path))
   const output = values.out === undefined ? buildPaths.packageSet : resolve(REPOSITORY_ROOT, values.out)
   const extraRoots = desktopProfilePackageRoots(process.env)
+  if (extraRoots.includes('@deepseek-ai/dsh-gs-app')) {
+    // Package the installed, patched plugin into the immutable local package
+    // set; fetching the registry tarball here would lose the product patch.
+    const localRequire = createRequire(join(REPOSITORY_ROOT, 'packages/bundle/gs-app/package.json'))
+    const pluginDir = dirname(localRequire.resolve('dsh-vision-router/package.json'))
+    const pluginOutput = join(buildPaths.root, 'packed', 'gs-plugins')
+    mkdirSync(pluginOutput, { recursive: true })
+    for (const file of readdirSync(pluginOutput)) {
+      if (file.endsWith('.tgz')) rmSync(join(pluginOutput, file))
+    }
+    const invocation = pnpmInvocation(['--config.manage-package-manager-versions=false', '--config.ignore-scripts=true',
+      '--dir', pluginDir, 'pack', '--pack-destination', pluginOutput])
+    capture(invocation.command, invocation.args)
+    inputs.push(pluginOutput)
+  }
   prepareDesktopPackageSet(inputs, output, extraRoots)
   console.log(`desktop package set: prepared ${output}${extraRoots.length === 0 ? '' : ` with profile roots ${extraRoots.join(', ')}`}`)
 }

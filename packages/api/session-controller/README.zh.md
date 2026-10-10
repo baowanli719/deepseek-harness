@@ -108,6 +108,8 @@ GUI 模型选择要求确切提供方／模型对出现在可用目录中；不�
 
 ## 已知限制与延期工作
 
+文本模型的图片提示词仅在激活的 `visionToolAdmission` 提供方能够处理该会话时准入。否则提示词准入返回 `MODEL_DOES_NOT_SUPPORT_IMAGES`；准入过程不会改变选定的提供方与模型。
+
 <a id="known-limitations-and-deferred-work"></a>
 
 - 图片字节上限不校验解码后的尺寸或像素数。

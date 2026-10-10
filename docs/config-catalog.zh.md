@@ -1709,7 +1709,7 @@ export interface Config extends ProtocolConfig {
 ## `@deepseek-ai/dsh-llm-gs-gateway`
 
 - `inject`: `gsServer` · `settings`
-- `source`: [`packages/llm/llm-gs-gateway/src/index.ts:66`](../packages/llm/llm-gs-gateway/src/index.ts)
+- `source`: [`packages/llm/llm-gs-gateway/src/index.ts:69`](../packages/llm/llm-gs-gateway/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration: deployment-owned names and bounds of the gateway adapter. */
@@ -1718,6 +1718,12 @@ export interface Config {
   providerNamespace: string
   /** Settings namespace of the `agent-default-model` mount receiving the server default model (default `agent-default-model`). */
   defaultModelNamespace: string
+  /** Optional managed Vision Router settings namespace; empty leaves visual tools unconfigured. */
+  visionRouterNamespace: string
+  /** Maximum answer tokens for the managed visual backend. */
+  visionMaxTokens: number
+  /** Aggregate inline-image raw-byte budget, leaving headroom under the proxy body limit. */
+  visionMaxImageBodyBytes: number
   /** Credential reference the per-boot proxy token resolves through (default `DSH_GS_LLM_PROXY_TOKEN`). */
   credentialRef: string
   /** Maximum chat-completions request body the proxy accepts (default 4 MiB). */

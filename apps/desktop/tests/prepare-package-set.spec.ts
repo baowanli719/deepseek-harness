@@ -102,9 +102,10 @@ describe('desktop package-set profile roots', () => {
       ['@deepseek-ai/dsh-base', packed('@deepseek-ai/dsh-base')],
       ['@deepseek-ai/dsh-web-app', packed('@deepseek-ai/dsh-web-app')],
       ['@deepseek-ai/dsh-gs-app', packed('@deepseek-ai/dsh-gs-app', {
-        dependencies: { '@deepseek-ai/dsh-gs-server': '^1.0.0' },
+        dependencies: { '@deepseek-ai/dsh-gs-server': '^1.0.0', 'dsh-vision-router': '3.0.3' },
       })],
       ['@deepseek-ai/dsh-gs-server', packed('@deepseek-ai/dsh-gs-server')],
+      ['dsh-vision-router', packed('dsh-vision-router')],
     ])
     expect(selectDesktopPackageClosure(available, [
       '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-gs-app',
@@ -115,6 +116,7 @@ describe('desktop package-set profile roots', () => {
       '@deepseek-ai/dsh-gs-app',
       '@deepseek-ai/dsh-gs-server',
       '@deepseek-ai/dsh-web-app',
+      'dsh-vision-router',
     ])
   })
 

@@ -1013,6 +1013,7 @@ flowchart TD
   pkg_tool_workflow --> pkg_system_prompt
   pkg_tool_workflow --> pkg_tools
   pkg_tool_workflow --> pkg_workflow
+  pkg_llm_gs_gateway --> pkg_config_editor
   pkg_llm_gs_gateway --> pkg_gs_server
   pkg_llm_gs_gateway --> pkg_sensitive_policy
   pkg_llm_gs_gateway --> pkg_settings
@@ -1674,7 +1675,7 @@ flowchart TD
 | [`tool-terminal`](../packages/terminal/tool-terminal) | `terminal` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`terminal`](../packages/terminal/terminal), [`tools`](../packages/core/tools) |
 | [`llm-replay`](../packages/test-support/llm-replay) | `test-support` | [`compaction`](../packages/compaction/compaction), [`deepseek-llm-api-extensions`](../packages/llm/deepseek-llm-api-extensions), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |
 | [`tool-workflow`](../packages/workflow/tool-workflow) | `workflow` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow) |
-| [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | `llm` | [`gs-server`](../packages/api/gs-server), [`sensitive-policy`](../packages/guard/sensitive-policy), [`settings`](../packages/settings/settings) |
+| [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | `llm` | [`config-editor`](../packages/boot/config-editor), [`gs-server`](../packages/api/gs-server), [`sensitive-policy`](../packages/guard/sensitive-policy), [`settings`](../packages/settings/settings) |
 | [`plugin-package-inventory-deepseek`](../packages/llm/plugin-package-inventory-deepseek) | `llm` | [`agent`](../packages/core/agent), [`agent-preset-registry`](../packages/preset/agent-preset-registry), [`deepseek-llm-api-extensions`](../packages/llm/deepseek-llm-api-extensions), [`session`](../packages/core/session) |
 | [`token-meter`](../packages/llm/token-meter) | `llm` | [`compaction`](../packages/compaction/compaction), [`compaction-image-offload`](../packages/compaction/compaction-image-offload), [`llm`](../packages/llm/llm), [`llm-retry`](../packages/llm/llm-retry), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection) |
 | [`gs-server-skills`](../packages/skill/gs-server-skills) | `skill` | [`gs-server`](../packages/api/gs-server), [`home-paths`](../packages/util/home-paths), [`sensitive-policy`](../packages/guard/sensitive-policy), [`skill`](../packages/skill/skill), [`tools`](../packages/core/tools) |

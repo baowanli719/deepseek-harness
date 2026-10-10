@@ -26,6 +26,40 @@ import { GS_LLM_GATEWAY_PROVIDER_ID_PATTERN } from './proxy.ts'
 /** Credential reference the per-boot proxy token resolves through. */
 export const GS_LLM_GATEWAY_CREDENTIAL_REF = 'DSH_GS_LLM_PROXY_TOKEN'
 
+/** Server-managed visual backend; model is an opaque placeholder resolved by the dedicated server endpoint. */
+export interface GsVisionRouterSettings {
+  readonly httpProviders: readonly {
+    readonly name: string
+    readonly baseURL: string
+    readonly model: string
+    readonly apiKeyEnv: string
+    readonly maxTokens: number
+    readonly maxImageBodyBytes: number
+  }[]
+  readonly freeFallback: false
+  readonly onboardingSeen: true
+  readonly desktopToolMode: true
+}
+
+/**
+ * Configure visual tools through the dedicated gateway; actual model identity and credentials remain server-owned.
+ * @param proxyOrigin - live loopback origin of this boot.
+ * @param credentialRef - in-memory proxy token reference.
+ * @param bounds - deployment-owned output and aggregate image-byte limits.
+ * @returns the owned visual-tool settings section.
+ */
+export function planGsVisionRouterSettings(
+  proxyOrigin: string,
+  credentialRef: string,
+  bounds: { readonly visionMaxTokens: number; readonly visionMaxImageBodyBytes: number },
+): GsVisionRouterSettings {
+  return {
+    httpProviders: [{ name: 'gsclaw-vision', baseURL: `${proxyOrigin}/vision`, model: 'server-vision',
+      apiKeyEnv: credentialRef, maxTokens: bounds.visionMaxTokens, maxImageBodyBytes: bounds.visionMaxImageBodyBytes }],
+    freeFallback: false, onboardingSeen: true, desktopToolMode: true,
+  }
+}
+
 /** Model-id guard: ids land in request bodies, never in proxy URLs. */
 const MODEL_ID_PATTERN = /^[^\s/\\]{1,256}$/u
 

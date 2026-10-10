@@ -52,6 +52,10 @@ describe('gs-desktop profile composition', () => {
     expect(vision?.name).toBe('@deepseek-ai/dsh-gs-app/vision-bridge')
     expect(vision?.config).not.toHaveProperty('modelId')
     expect(vision?.config).not.toHaveProperty('providerId')
+    expect(byId.get('vision-router')).toMatchObject({ name: 'dsh-vision-router', config: {
+      desktopToolMode: true, freeFallback: false, updateCheck: false, onboardingSeen: true,
+    } })
+    expect(byId.get('llm-gs-gateway')?.config).toMatchObject({ visionRouterNamespace: 'vision-router' })
   })
 
   it('wires gs-server state beside the profile and reports the build version', () => {

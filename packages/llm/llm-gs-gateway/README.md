@@ -37,6 +37,8 @@ Every deployment-owned name and bound is a Config field:
 - `defaultModelNamespace` — settings namespace of the `agent-default-model` mount receiving the server default model (default `agent-default-model`).
 - `credentialRef` — credential reference the per-boot proxy token resolves through in mirrored profiles (default `DSH_GS_LLM_PROXY_TOKEN`).
 - `maxBodyBytes` — maximum chat-completions request body the proxy accepts (default 4 MiB).
+- `visionRouterNamespace` — optional Vision Router row configured through ConfigEditor (default empty; GS uses `vision-router`). Its backend uses the live `/vision` loopback endpoint and credential reference; the server resolves the dedicated model on each request.
+- `visionMaxTokens` / `visionMaxImageBodyBytes` — visual-answer token limit and aggregate raw inline-image byte budget (defaults `4096` / `2800000`). The byte budget leaves room for base64 and the request envelope under the proxy cap.
 
 ### Wire the per-boot token
 

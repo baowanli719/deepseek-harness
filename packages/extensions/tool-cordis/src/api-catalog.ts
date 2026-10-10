@@ -3769,6 +3769,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'visionToolAdmission',
+    summary: 'Auxiliary visual-tool provider; durable images remain unchanged while text-only requests receive tool handles.',
+    description: 'Auxiliary visual-tool provider; durable images remain unchanged while text-only requests receive tool handles.',
+    methods: [
+      {
+        signature: 'canHandle(agent: { readonly session: { readonly id: string } }): boolean',
+        description: 'Whether visual tools can consume this session\'s uploaded images.',
+        parameters: [{ name: 'agent', description: 'session-bearing prompt initiator.' }],
+        returns: 'true only while the provider is activated and enabled.',
+      },
+      {
+        signature: 'projectTextInput(options: { readonly sessionId?: string; readonly messages: readonly RequestMessage[] }): readonly RequestMessage[]',
+        description: 'Project immutable request images to text handles naming the visual tools.',
+        parameters: [{ name: 'options', description: 'session-bound request and complete message history.' }],
+        returns: 'request-only messages; durable message objects must remain unchanged.',
+      },
+    ],
+  },
+  {
     key: 'web',
     summary: 'The web access service.',
     description: 'The web access service. Registered as `ctx.web` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.',

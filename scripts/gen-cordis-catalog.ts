@@ -50,6 +50,7 @@ export { REGION_BEGIN, REGION_END }
  * errors, so the partition can never silently drift from the service API.
  */
 export const SERVICE_PAGE: Record<string, string> = {
+  visionToolAdmission: 'llm-streaming.md',
   gsLlmGateway: 'llm-streaming.md',
   gsServer: 'boot.md',
   gsServerSkillCatalog: 'skills.md',
@@ -354,6 +355,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   LlmDiscoveredModel: 'llm-streaming.md',
   ResolvedRetryPolicy: 'llm-streaming.md',
   Message: 'llm-streaming.md',
+  RequestMessage: 'llm-streaming.md',
   MessageSource: 'llm-streaming.md',
   MessageFeedbackDeleteRequest: 'feedback.md',
   MessageFeedbackDeleteResult: 'feedback.md',

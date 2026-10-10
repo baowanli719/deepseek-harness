@@ -7,6 +7,9 @@ A service can be a core spine service, a swappable capability seam, a bundle/com
 
 ```mermaid
 flowchart LR
+  pkg_llm["llm"]
+  svc_visionToolAdmission["ctx.visionToolAdmission<br/>Auxiliary visual-tool admission"]
+  pkg_session_controller["session-controller"]
   pkg_gs_server["gs-server"]
   svc_gsServer["ctx.gsServer<br/>GS account and authenticated server access"]
   pkg_llm_gs_gateway["llm-gs-gateway"]
@@ -55,7 +58,6 @@ flowchart LR
   pkg_llm_deepseek["llm-deepseek"]
   pkg_client_file_upload["client-file-upload"]
   svc_fileUploads["ctx.fileUploads<br/>Agent-scoped staged file uploads"]
-  pkg_llm["llm"]
   svc_llm["ctx.llm<br/>LLM adapter registry"]
   pkg_llm_replay["llm-replay"]
   pkg_agent_loop["agent-loop"]
@@ -360,6 +362,7 @@ flowchart LR
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
   pkg_llm --> svc_llm
+  pkg_llm --> svc_visionToolAdmission
   pkg_llm_deepseek --> svc_llm
   pkg_llm_gs_gateway --> svc_gsLlmGateway
   pkg_llm_pi_ai --> svc_llm
@@ -591,6 +594,8 @@ flowchart LR
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_visionToolAdmission --> pkg_llm
+  svc_visionToolAdmission --> pkg_session_controller
   svc_web --> pkg_tool_web
   svc_webServer --> pkg_client_connection
   svc_webServer --> pkg_client_hmr
@@ -605,6 +610,7 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.visionToolAdmission` | `seam` | [`llm`](../packages/llm/llm) | - | [`llm`](../packages/llm/llm), `session-controller` | - | The GS-bundled Vision Router admits uploaded images and projects text-model tool guidance without rewriting durable history. |
 | `ctx.gsServer` | `core` | [`gs-server`](../packages/api/gs-server) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway), [`gs-server-skills`](../packages/skill/gs-server-skills), [`sensitive-policy`](../packages/guard/sensitive-policy) | - | Owns account generations, secure credential persistence, and authenticated requests to the configured GS endpoint. |
 | `ctx.gsLlmGateway` | `service` | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | Registers GS model and vision adapters using authenticated server access and sensitive request attribution. |
 | `ctx.gsServerSkillCatalog` | `core` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | `ui-skills-gs` | - | Reads the authenticated account catalog; skill loading rechecks current account, preferences, and privacy policy. |

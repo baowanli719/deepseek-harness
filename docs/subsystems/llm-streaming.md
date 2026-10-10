@@ -1095,6 +1095,30 @@ Types: [FileAttachmentRef](attachment.md)
 
 Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 
+<a id="ctxvisiontooladmission--visiontooladmission"></a>
+
+### `ctx.visionToolAdmission` — `VisionToolAdmission`
+
+Auxiliary visual-tool provider; durable images remain unchanged while text-only requests receive tool handles.
+
+```ts cordis-catalog
+/**
+ * Whether visual tools can consume this session's uploaded images.
+ * @param agent - session-bearing prompt initiator.
+ * @returns true only while the provider is activated and enabled.
+ */
+canHandle(agent: { readonly session: { readonly id: string } }): boolean
+
+/**
+ * Project immutable request images to text handles naming the visual tools.
+ * @param options - session-bound request and complete message history.
+ * @returns request-only messages; durable message objects must remain unchanged.
+ */
+projectTextInput(options: { readonly sessionId?: string; readonly messages: readonly RequestMessage[] }): readonly RequestMessage[]
+```
+
+Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
+
 <a id="llm-events"></a>
 
 ### `llm/*` events

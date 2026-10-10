@@ -27,6 +27,7 @@
  * @module @deepseek-ai/dsh-llm-gs-gateway
  */
 import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-config-editor'
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -36,7 +37,7 @@ import type { GsClientConfig } from '@deepseek-ai/dsh-gs-server'
 // service itself is resolved optionally at runtime through `ctx.get`.
 import type {} from '@deepseek-ai/dsh-sensitive-policy'
 import { GsLlmGatewayProxy } from './proxy.ts'
-import { GS_LLM_GATEWAY_CREDENTIAL_REF, planGsLlmGatewayModels } from './models.ts'
+import { GS_LLM_GATEWAY_CREDENTIAL_REF, planGsLlmGatewayModels, planGsVisionRouterSettings } from './models.ts'
 
 export * from './types.ts'
 export {
@@ -51,6 +52,7 @@ export {
   GS_LLM_GATEWAY_CREDENTIAL_REF,
   gsLlmGatewayLaunchEnvironment,
   planGsLlmGatewayModels,
+  planGsVisionRouterSettings,
 } from './models.ts'
 export type {
   GsLlmGatewayDefaultModel,
@@ -58,6 +60,7 @@ export type {
   GsLlmGatewayModelPlanInput,
   GsLlmGatewayProviderModel,
   GsLlmGatewayProviderProfile,
+  GsVisionRouterSettings,
 } from './models.ts'
 
 const BIN_NAME = 'llm-gs-gateway'
@@ -68,6 +71,12 @@ export interface Config {
   providerNamespace: string
   /** Settings namespace of the `agent-default-model` mount receiving the server default model (default `agent-default-model`). */
   defaultModelNamespace: string
+  /** Optional managed Vision Router settings namespace; empty leaves visual tools unconfigured. */
+  visionRouterNamespace: string
+  /** Maximum answer tokens for the managed visual backend. */
+  visionMaxTokens: number
+  /** Aggregate inline-image raw-byte budget, leaving headroom under the proxy body limit. */
+  visionMaxImageBodyBytes: number
   /** Credential reference the per-boot proxy token resolves through (default `DSH_GS_LLM_PROXY_TOKEN`). */
   credentialRef: string
   /** Maximum chat-completions request body the proxy accepts (default 4 MiB). */
@@ -77,6 +86,9 @@ export interface Config {
 export const Config = z.object({
   providerNamespace: z.string().default('llm-pi-ai'),
   defaultModelNamespace: z.string().default('agent-default-model'),
+  visionRouterNamespace: z.string().default(''),
+  visionMaxTokens: z.number().step(1).min(1).default(4096),
+  visionMaxImageBodyBytes: z.number().step(1).min(1).default(2800000),
   credentialRef: z.string().default(GS_LLM_GATEWAY_CREDENTIAL_REF),
   maxBodyBytes: z.number().step(1).min(1).default(4 * 1024 * 1024),
 })
@@ -121,7 +133,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       credentialRef: config.credentialRef,
     })
     for (const warning of plan.warnings) ctx.logger.warn('%s: %s', BIN_NAME, warning)
-    const fingerprint = JSON.stringify([plan.providers ?? null, plan.defaultModel ?? null])
+    const visionRouter = config.visionRouterNamespace === '' ? undefined
+      : planGsVisionRouterSettings(proxy.origin, config.credentialRef, config)
+    const fingerprint = JSON.stringify([plan.providers ?? null, plan.defaultModel ?? null, visionRouter ?? null])
     if (fingerprint === lastMirror) return
     // The mirror owns both namespaces outright: the providers dict replaces
     // the whole volatile section, and the default-model row follows the
@@ -134,6 +148,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         { op: 'set', path: ['provider'], value: plan.defaultModel.provider },
         { op: 'set', path: ['model'], value: plan.defaultModel.model },
       ])
+    }
+    if (visionRouter !== undefined) {
+      const editor = ctx.get('configEditor')
+      if (editor === undefined) throw new Error('llm-gs-gateway: managed visual tools require configEditor')
+      const entry = editor.entries().find(row => row.options.id === config.visionRouterNamespace)
+      if (entry === undefined) throw new Error(`llm-gs-gateway: missing visual-tool entry ${config.visionRouterNamespace}`)
+      await editor.edit(entry, current => ({ ...current, ...visionRouter }))
     }
     lastMirror = fingerprint
   }
