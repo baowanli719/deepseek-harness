@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for publishing-gs-client.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/cookbook/publishing-gs-client.md
+/cookbook-publishing-a-gs-client-update:
+  en: d7a08cb4b1378ef4
+  zh: 22d451683a09173a
+/cookbook-publishing-a-gs-client-update/summary:
+  en: fc137c6b360636c1
+  zh: ad4185935ae060d8
+/cookbook-publishing-a-gs-client-update/table-of-contents:
+  en: 43976d6ec0ae82e1
+  zh: a299854a443f97e2
+/cookbook-publishing-a-gs-client-update/1-prepare-the-release:
+  en: a55bd1736703d3ca
+  zh: ba70a7866d8ee9c5
+/cookbook-publishing-a-gs-client-update/2-inspect-the-current-notice:
+  en: 918628db1a8b9241
+  zh: f4b00d37ee8e4cd6
+/cookbook-publishing-a-gs-client-update/3-upload-and-verify-the-installer:
+  en: b8145bd50ac1ea17
+  zh: f4912035db3f7da0
+/cookbook-publishing-a-gs-client-update/4-publish-the-update-notice:
+  en: 665634ea36ba90bd
+  zh: d0ac190caac77712
+/cookbook-publishing-a-gs-client-update/5-verify-publication-and-recover:
+  en: e33be44e450127f4
+  zh: b43d7ff1917b09b6
+/cookbook-publishing-a-gs-client-update/dev-note:
+  en: d41c6dbdd3dbb7ea
+  zh: b01f274ea9221bfe

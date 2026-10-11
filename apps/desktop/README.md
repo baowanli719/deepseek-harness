@@ -182,6 +182,8 @@ The browser-login waiting page offers a copy-link action for the current pending
 
 The welcome window follows system appearance with the design’s Platform light/dark colors and shows the 600 × 700 entry layout and the API-key form, with native window controls, a draggable title area, a local brand SVG, system sans-serif fallbacks, and locally bundled Montserrat Light for non-button text. The window uses macOS menu vibrancy or Windows acrylic with the onboarding window tint: 40% white in light mode and 50% rgb(24 25 28) in dark mode. The local React welcome entry bundles React and the shared `StateDot` loading indicator with its CSS; it uses the isolated preload without loading the main Web application. The entry, sign-in status and API-key pages share a fixed bottom action row; the back-to-sign-in link sits below it. Buttons share the platform motion timings, and Reduce Motion disables their transitions. The OS owns blur strength and outer corners. macOS Reduce Transparency suppresses translucency, and Increase Contrast forces that setting on. Save and continue writes to the development credential store; Set up later opens the real workspace without saving a key or completion flag. The generated project links the declared workspace dependency closure as well as pnpm’s hoisted packages, so unhoisted configured plugins remain resolvable. [The window note](../../.agents/notes/implemented/architecture/2026-09-08-desktop-welcome-window-material.md) owns the material and onboarding decisions.
 
+<a id="desktop-packaging"></a>
+
 ## Package
 
 <a id="release-versions"></a>
@@ -439,6 +441,8 @@ An unpacked artifact contains Electron, the materialized dsh production tree, pn
 ## Updates
 
 <a id="gs-server-updates"></a>
+
+See [Publishing a GS client update](../../docs/cookbook/publishing-gs-client.md) for file-server uploads, download verification, update notices, and recovery.
 
 GS release versions, notes, platform download URLs, and availability come from the authenticated server configuration. Login and refresh configuration changes trigger a credential-free Host IPC signal and an active release check; startup, periodic, and manual checks also pull the current notice. A strictly newer release for the current platform opens a native notification once per version in an application lifetime. The notification and the GS sidebar action show the server notes and require confirmation before downloading. A future availability date permits only a notice.
 

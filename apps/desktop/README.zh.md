@@ -184,6 +184,8 @@ Desktop 在 Host 启动后、打开工作区前检查模型 API Key 引用是否
 
 欢迎窗口使用设计稿的 Platform light/dark 颜色跟随系统外观，展示 600 × 700 的入口布局和 API Key 表单，包含原生窗口控件、可拖动标题区域、本地品牌 SVG、系统无衬线字体回退，以及非按钮文字使用的本地 Montserrat Light 字体。窗口使用 macOS menu vibrancy 或 Windows acrylic，叠加 onboarding 的窗口背景色：浅色模式为 40% 白色，深色模式为 50% rgb(24 25 28)。本地 React 欢迎入口将 React、公共 `StateDot` 加载指示器及其 CSS 一起打包；它通过隔离 preload 工作，不加载主 Web 应用。入口、登录状态和 API Key 页面共用固定的底部操作行；“返回登录”链接位于操作行下方。按钮共用平台的过渡时序，开启“减少动态效果”会禁用过渡。操作系统控制模糊强度和外部圆角。macOS 的“降低透明度”会抑制半透明效果，“增强对比度”会强制开启该设置。“保存并继续”写入开发环境的凭证存储；“稍后配置”打开真实工作区，不保存密钥或完成标记。生成的开发项目同时链接已声明的 workspace 依赖闭包和 pnpm 提升的包，因此未提升的配置插件仍能解析。[窗口记录](../../.agents/notes/implemented/architecture/2026-09-08-desktop-welcome-window-material.zh.md)负责材质与引导决策。
 
+<a id="desktop-packaging"></a>
+
 ## 打包
 
 <a id="release-versions"></a>
@@ -441,6 +443,8 @@ macOS 打包在组装 App 时、代码签名前写入 `Contents/Resources/app-up
 ## 更新
 
 <a id="gs-server-updates"></a>
+
+文件服务器上传、下载校验、更新通知及故障恢复流程见[发布 GS 客户端更新](../../docs/cookbook/publishing-gs-client.zh.md)。
 
 GS 的发布版本、更新说明、各平台下载地址及开放时间来自认证后的服务端配置。登录和刷新带来的配置变化通过不含凭据的 Host IPC 信号触发主动检查；启动、定时及手动检查也会拉取当前通知。当前平台适用且严格高于已安装版本的更新，会在每次应用运行期间按版本去重并自动弹出原生通知。通知和 GS 侧栏操作展示服务端说明，确认后才下载。开放时间尚未到达时仅提醒。
 
