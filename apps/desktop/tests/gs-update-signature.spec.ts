@@ -2,30 +2,72 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, it, onTestFinished, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
 const { execute } = vi.hoisted(() => ({ execute: vi.fn() }))
 vi.mock('node:child_process', async () => {
   const { promisify } = await import('node:util')
   return { execFile: Object.assign(vi.fn(), { [promisify.custom]: execute }) }
 })
-import { verifyGsUpdateSignature } from '../src/gs-update-signature.ts'
+import { parseCertificateSubject, samePublisherSubject, verifyGsUpdateSignature } from '../src/gs-update-signature.ts'
 
-it('requires valid installed and downloaded signatures, timestamp, and the same certificate', async () => {
+const SUBJECT = 'CN=Example Technology Co.\\, Ltd., O=Example Technology Co.\\, Ltd., C=CN'
+
+it('requires valid installed and downloaded signatures, timestamp, and the same publisher subject', async () => {
   const root = await mkdtemp(join(tmpdir(), 'gs-signature-'))
   onTestFinished(() => rm(root, { recursive: true, force: true }))
   const path = join(root, 'download.exe')
   await writeFile(path, 'fixture')
-  const identity = 'A'.repeat(40)
-  const valid = { installedValid: true, downloadValid: true, timestamped: true, installedSigner: identity, downloadSigner: identity }
+  const valid = { installedValid: true, downloadValid: true, timestamped: true, installedSigner: SUBJECT, downloadSigner: SUBJECT }
   execute.mockResolvedValue({ stdout: JSON.stringify(valid), stderr: '' })
   await expect(verifyGsUpdateSignature(path, 'win32', 'installed.exe')).resolves.toBeUndefined()
-  for (const change of [{ installedValid: false }, { downloadValid: false }, { timestamped: false }, { downloadSigner: 'B'.repeat(40) }]) {
+  for (const change of [
+    { installedValid: false },
+    { downloadValid: false },
+    { timestamped: false },
+    { downloadSigner: 'CN=Other Technology Co.\\, Ltd., O=Other Technology Co.\\, Ltd., C=CN' },
+    { downloadSigner: 'not a distinguished name' },
+  ]) {
     execute.mockResolvedValue({ stdout: JSON.stringify({ ...valid, ...change }), stderr: '' })
     await expect(verifyGsUpdateSignature(path, 'win32', 'installed.exe')).rejects.toThrow('identity')
   }
   expect(execute.mock.calls[0]?.[2]).toMatchObject({ windowsHide: true, timeout: 60_000 })
   execute.mockReset()
+})
+
+it('accepts a renewed certificate that keeps the installed publisher subject', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'gs-signature-'))
+  onTestFinished(() => rm(root, { recursive: true, force: true }))
+  const path = join(root, 'download.exe')
+  await writeFile(path, 'fixture')
+  // Renewal can reorder or extend the subject; only the CN, O, and C identity must persist.
+  const renewed = 'O=Example Technology Co.\\, Ltd., C=CN, CN=Example Technology Co.\\, Ltd., serialNumber=91000000MA1X00000X'
+  execute.mockResolvedValue({ stdout: JSON.stringify({
+    installedValid: true, downloadValid: true, timestamped: true, installedSigner: SUBJECT, downloadSigner: renewed,
+  }), stderr: '' })
+  await expect(verifyGsUpdateSignature(path, 'win32', 'installed.exe')).resolves.toBeUndefined()
+  execute.mockReset()
+})
+
+describe('parseCertificateSubject', () => {
+  it('parses attributes case-insensitively and preserves escaped characters', () => {
+    expect(parseCertificateSubject('cn=Example, o=Example\\, Inc., C=CN'))
+      .toEqual(new Map([['CN', 'Example'], ['O', 'Example, Inc.'], ['C', 'CN']]))
+    expect(parseCertificateSubject('no equals sign')).toBeUndefined()
+    expect(parseCertificateSubject('=value')).toBeUndefined()
+    expect(parseCertificateSubject('CN=trailing\\')).toBeUndefined()
+  })
+})
+
+describe('samePublisherSubject', () => {
+  it('matches the CN, O, and C identity only', () => {
+    expect(samePublisherSubject(SUBJECT, SUBJECT)).toBe(true)
+    expect(samePublisherSubject(SUBJECT, 'C=CN, O=Example Technology Co.\\, Ltd., CN=Example Technology Co.\\, Ltd.')).toBe(true)
+    expect(samePublisherSubject(SUBJECT, 'CN=Example Technology Co.\\, Ltd., C=CN')).toBe(false)
+    expect(samePublisherSubject(SUBJECT, 'CN=, O=Example Technology Co.\\, Ltd., C=CN')).toBe(false)
+    expect(samePublisherSubject(SUBJECT, 'CN=example technology co.\\, ltd., O=Example Technology Co.\\, Ltd., C=CN')).toBe(false)
+    expect(samePublisherSubject(SUBJECT, 'garbage')).toBe(false)
+  })
 })
 
 it('requires matching macOS Team IDs and successful Gatekeeper assessment', async () => {
