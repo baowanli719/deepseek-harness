@@ -30,7 +30,7 @@ it('boots a real profile with cached models and commits the restored plan after 
     { id: 'config-editor', name: 'cordis:editor' },
     { id: 'settings', name: 'cordis:settings' },
     { id: 'llm-pi-ai', name: 'cordis:provider' },
-    { id: 'agent-default-model', name: 'cordis:model', config: { provider: 'local', model: 'previous' } },
+    { id: 'agent-default-model', name: 'cordis:model', config: { provider: 'gs-cloud-vision', model: 'qwen-max' } },
     { id: 'llm-gs-gateway', name: 'cordis:gateway' },
   ] }]))
   await writeFile(join(dir, 'cordis.yml'), '[]\n')
@@ -61,6 +61,7 @@ it('boots a real profile with cached models and commits the restored plan after 
   await vi.waitFor(() => {
     expect(ctx.settings.describe().find(row => row.ns === 'agent-default-model')?.value)
       .toMatchObject({ provider: 'gs-cloud', model: 'qwen-max' })
+    expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'gs-cloud', model: 'qwen-max' })
   })
   expect(await readFile(profile.patchPath, 'utf8')).toContain('gs-cloud')
   const origin = ctx.gsLlmGateway.origin

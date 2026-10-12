@@ -4,7 +4,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import { Menu, IconSettingsOutlineMedium, IconSkillOutlineMedium, IconInfoOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Menu, IconSettingsOutlineMedium, IconSkillOutlineMedium, IconInfoOutlineMedium, IconChevronDownOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './Account.module.css'
 import { zh, en, type Key } from './locales.ts'
@@ -65,6 +65,7 @@ function AccountLauncher({ wide, openSettings, openSection, t }: AccountProps) {
   const initial = Array.from(name.trim())[0]?.toLocaleUpperCase() ?? '?'
   return <>
     <Menu
+      className={`${css.anchor} ${wide ? '' : css.railAnchor}`}
       open={open}
       onClose={() => { setOpen(false) }}
       side="top"
@@ -93,6 +94,7 @@ function AccountLauncher({ wide, openSettings, openSection, t }: AccountProps) {
         onClick={() => { setOpen(value => !value) }}>
         <span className={css.avatar} aria-hidden="true">{initial}</span>
         {wide && <span className={css.identity}><strong>{name}</strong>{role !== '' && <small>{role}</small>}</span>}
+        {wide && <IconChevronDownOutlineRegular size={16} className={css.chevron} aria-hidden="true" />}
       </button>}
     />
     {failed && <span className={css.error} role="alert">{t('logoutFailed')}</span>}

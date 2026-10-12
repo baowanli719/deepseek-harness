@@ -24,7 +24,7 @@ The sidebar footer shows the gsclaw account name and opens a menu for settings, 
 <a id="use-this-package"></a>
 ## Use this package
 
-The avatar and identity form one clickable account row without a separate expand arrow. Hover and the expanded menu use the same background feedback; the button retains its localized accessibility name, menu semantics, and keyboard focus outline in both sidebar widths.
+The expanded sidebar's account row is centered at 90% of the footer's available width, with equal space on both sides. Its single chevron points down when closed and rotates up when the menu opens; reduced motion disables the transition. The collapsed sidebar shows only the avatar. Hover and the expanded menu use the same background feedback; the button retains its localized accessibility name, menu semantics, and keyboard focus outline in both sidebar widths.
 
 The Skills and About menu entries use their matching navigation icons. About presents the product mark through a brand slot, localized product information, office capabilities, enterprise service ownership, and the client build version.
 
