@@ -405,7 +405,7 @@ Windows 打包命令通过 `DESKTOP_PACKAGING_RECORD` 输出 `.desktop-build/pac
 
 Windows 打包将 7-Zip 过滤器固定为 `BCJ`，以兼容内置的 NSIS 解码器。这样可以保留 x64 安装包中由依赖携带的 ARM64 二进制文件；自动 ARM64 过滤会生成该解码器无法解压的条目。
 
-NSIS 在安装阶段清理临时解压目录，完成后才显示完成页或自动启动应用。已安装的生产依赖保持为普通文件；启动时不会再次解压。安装仍会写入完整的应用目录树。
+NSIS 在安装阶段清理临时解压目录，完成后才显示完成页或自动启动应用。所有用户安装请求提权前，等待中的父进程释放对已安装目录的句柄，让管理员子进程可以替换该目录。已安装的生产依赖保持为普通文件；启动时不会再次解压。安装仍会写入完整的应用目录树。
 
 在 `.env.windows` 中填写 `DSH_DESKTOP_WINDOWS_CER_FILE`（公开叶证书）和 `DSH_DESKTOP_WINDOWS_SIGNTOOL`（SafeNet 兼容的 SignTool），然后只配置一种签名身份。使用 SafeNet USB Token 时，设置 `DSH_DESKTOP_WINDOWS_KEY_CONTAINER`（匹配的私钥容器）和 `DSH_DESKTOP_WINDOWS_TOKEN_PIN`（Token Password）；私钥仍保留在 USB Token。使用无 USB Token 的软件代码签名证书时，设置 `DSH_DESKTOP_WINDOWS_PFX_FILE`（包含证书和私钥的 PKCS#12 `.pfx` 或 `.p12` 文件）和 `DSH_DESKTOP_WINDOWS_PFX_PASSWORD`（私钥口令；显式空值对应未加密文件）。同时配置两种身份会使配置检查失败。不要把证书、PFX 文件或本地凭据文件提交到 Git。
 

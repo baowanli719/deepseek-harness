@@ -29,7 +29,8 @@ try {
   $brokenArchive = Join-Path $scratch 'broken.7z'
   [System.IO.File]::WriteAllText($brokenArchive, 'invalid archive')
 
-  foreach ($mode in @('first', 'upgrade', 'locked', 'missing-stage', 'broken', 'cancelled')) {
+  $successfulModes = @('first', 'upgrade', 'parent-released')
+  foreach ($mode in @('first', 'upgrade', 'locked', 'missing-stage', 'broken', 'cancelled', 'parent-held', 'parent-released')) {
     $caseRoot = Join-Path $scratch $mode
     $target = Join-Path $caseRoot 'Application'
     New-Item -ItemType Directory -Path $caseRoot | Out-Null
@@ -50,6 +51,16 @@ try {
     if ($mode -eq 'cancelled') { $compileArgs += '/DCANCELLED' }
     Invoke-Checked $Makensis ($compileArgs + $fixture)
     if ($null -ne $SignExecutable) { & $SignExecutable $probe }
+    if ($mode -in @('parent-held', 'parent-released')) {
+      # Both processes use the production directory transaction; the held parent is the negative control.
+      $parentProbe = Join-Path $caseRoot 'parent.exe'
+      $parentArgs = $compileArgs | Where-Object { $_ -notlike '/DOUTPUT_FILE=*' }
+      $parentArgs += @("/DOUTPUT_FILE=$parentProbe", "/DPARENT_INSTALLER=$probe")
+      if ($mode -eq 'parent-released') { $parentArgs += '/DRELEASE_PARENT' }
+      Invoke-Checked $Makensis ($parentArgs + $fixture)
+      if ($null -ne $SignExecutable) { & $SignExecutable $parentProbe }
+      $probe = $parentProbe
+    }
     $handle = $null
     $process = $null
     try {
@@ -62,7 +73,7 @@ try {
         $process.WaitForExit()
         throw "Directory smoke $mode did not exit within 60 seconds"
       }
-      $expectedExit = if ($mode -in @('first', 'upgrade')) { 0 } else { 2 }
+      $expectedExit = if ($mode -in $successfulModes) { 0 } else { 2 }
       if ($process.ExitCode -ne $expectedExit) {
         throw "Directory smoke $mode exited with $($process.ExitCode), expected $expectedExit"
       }
@@ -70,11 +81,11 @@ try {
       if ($null -ne $handle) { $handle.Dispose() }
       if ($null -ne $process) { $process.Dispose() }
     }
-    $expectedAsset = if ($mode -in @('first', 'upgrade')) { 'new asset' } else { 'old asset' }
+    $expectedAsset = if ($mode -in $successfulModes) { 'new asset' } else { 'old asset' }
     if ([System.IO.File]::ReadAllText((Join-Path $target 'asset.txt')) -ne $expectedAsset) {
       throw "Directory smoke $mode changed the wrong version"
     }
-    $expectObsolete = $mode -notin @('first', 'upgrade')
+    $expectObsolete = $mode -notin $successfulModes
     if ((Test-Path -LiteralPath (Join-Path $target 'obsolete.txt')) -ne $expectObsolete) {
       throw "Directory smoke $mode did not preserve the expected old-only file state"
     }

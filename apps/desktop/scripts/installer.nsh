@@ -212,6 +212,7 @@ ManifestDPIAware true
       ${EndIf}
     ${EndIf}
   !endif
+  !insertmacro dshReleaseInstallDirectory
 !macroend
 
 !macro customInstallMode
