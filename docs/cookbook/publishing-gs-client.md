@@ -143,3 +143,5 @@ If authentication returns 401, obtain the release token for the selected environ
 ## Dev Note
 
 The Windows 2.2.0 test installer was uploaded and its notice was read back on 2026-10-11. Its 304,914,491 bytes had matching local/server SHA-256, anonymous HEAD returned 200, and Range returned 206 with matching prefix bytes. Packaged-runtime, native Sharp, vision-plugin loading, build identity, and hidden composer-control checks passed. Publication verification did not launch a signed-in client or verify the live vision backend. These observations describe that test artifact; they do not qualify a signed production release.
+
+The 2.2.2 Windows package was built unsigned on 2026-10-12 because the signing certificate was unavailable on the packaging host: `gs-worker-2.2.2-win-x64-unsigned.exe`, 307,843,114 bytes. Its runtime, Office conversion, and skill CLI checks passed. It must be distributed for manual installation with an unsigned label in the notes; clients cannot install it through the update flow, and clients that install it cannot install later updates until a signed build replaces them.
