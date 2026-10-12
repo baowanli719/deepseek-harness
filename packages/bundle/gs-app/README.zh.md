@@ -9,9 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-`agent-policy` 插件按最新服务端 Agent 配置限制沙箱与审批解析。本地预设及获批升权不能超过该限制。未登录或仅计划策略拒绝工具；read-only 与 tool-mediated 策略将文件系统限制为只读。敏感与机密分类进入持久私密状态。GS 组合关闭外部会话反馈遥测及其反馈控件。
-
-gs-worker（国盛办公AI）产品组合包：覆盖在 `dsh-base` + `dsh-web-app` 之上的补丁层，接入 gsclaw-server 集成、模型网关适配器、敏感数据合规、服务端技能、视觉通道与国盛证券办公助理人格。它组合进出厂的 `gs-desktop` 档案模板（`@deepseek-ai/dsh-app-boot`）：`pnpm dsh --profile gs-desktop`。
+国盛办公助理可通过模型网关创建 Word 文档、使用服务端管理的技能并理解图片。出厂的 `gs-desktop` 档案包含本组合包：`pnpm dsh --profile gs-desktop`。私密会话支持 Python、命令、联网与外部 MCP 工具，文件访问遵循本地选择的权限。身份认证、仅计划限制与可信模型路由仍然生效。
 
 ## 目录
 
@@ -24,6 +22,12 @@ gs-worker（国盛办公AI）产品组合包：覆盖在 `dsh-base` + `dsh-web-a
 
 <a id="what-the-patch-does"></a>
 ## 补丁做了什么
+
+`create_word_document` 工具根据标题、正文与表格生成本地 `.docx`，私密会话也可使用。它不执行脚本、不发起外部请求，也不修改 Windows ACL。有效文件策略仍然生效：只读与仅计划会话不能创建文档。输出要求目录已存在；工作区可写模式限定在当前工作区，完全权限允许外部路径。不覆盖已有文件，不支持编辑文档或渲染预览。模型收到生成路径后可通过 `present` 交付；新增工具 schema 及调用、结果进入常规工具记录与缓存。
+
+GS 组合在私密会话中保留命令、联网与外部 MCP 工具，Python 可通过本地命令工具运行。`gs-agent-policy.config.privateFullAccess: true` 让私密会话遵循本地选择的文件权限预设：“完全权限”允许子进程及工作区外文件访问，无需修改 Windows 沙箱 ACL；本地选择的只读或工作区可写预设仍然生效。普通会话保留服务端文件权限上限。未登录与服务端仅计划策略仍拒绝工具。可信模型路由、持久私密状态、敏感审计头及信任吊销取消机制继续生效。外部会话反馈遥测及其反馈控件关闭。
+
+Word 输出从完整临时文件进行独占复制，因此可写的 exFAT/FAT32 目标目录无需支持硬链接。已有目标文件会被拒绝覆盖。复制期间目标文件可能可见；仅在复制成功后交付。
 
 `cordis.patch.yml` 在 base 与 Web 组合包层之后应用：
 

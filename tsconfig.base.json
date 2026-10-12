@@ -96,6 +96,7 @@
       "@deepseek-ai/dsh-gs-app/vision-bridge": ["./packages/bundle/gs-app/src/vision-bridge.ts"],
       "@deepseek-ai/dsh-gs-app/skills-routes": ["./packages/bundle/gs-app/src/skills-routes.ts"],
       "@deepseek-ai/dsh-gs-app/agent-policy": ["./packages/bundle/gs-app/src/agent-policy.ts"],
+      "@deepseek-ai/dsh-gs-app/word-document": ["./packages/bundle/gs-app/src/word-document.ts"],
       "@deepseek-ai/dsh-client-ui-brand-gs": ["./packages/client/ui-brand-gs/src"],
       "@deepseek-ai/dsh-client-ui-account-gs": ["./packages/client/ui-account-gs/src"],
       "@deepseek-ai/dsh-client-ui-skills-gs": ["./packages/client/ui-skills-gs/src"],

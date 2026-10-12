@@ -22,7 +22,8 @@ function requestPath(input: RequestInfo | URL): string {
 
 function requestBody(init: RequestInit | undefined): unknown {
   const body = init?.body
-  return typeof body === 'string' ? JSON.parse(body) as unknown : undefined
+  const parsed: unknown = typeof body === 'string' ? JSON.parse(body) : undefined
+  return parsed
 }
 
 function stubFetch(handler: (path: string, body: unknown) => Response | Promise<Response>) {

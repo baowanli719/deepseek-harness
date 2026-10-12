@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { ChildProcess, execFile } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -470,7 +470,7 @@ describe('Windows token signing', () => {
           callback(null, '', '')
         }
       }
-      return undefined as unknown as ReturnType<typeof execFile>
+      return new ChildProcess()
     })
     try {
       const sign = createWindowsTokenSigner({ certificateFile, signTool, pfxFile, pfxPassword: 'pfx-secret!',
@@ -502,7 +502,7 @@ describe('Windows token signing', () => {
       const callback = args.at(-1) as (error: Error | null, stdout?: string, stderr?: string) => void
       expect(argv[0]).toBe('/d')
       callback(Object.assign(new Error('signing failed'), { code: 1, stderr: 'SignTool Error: pfx-secret! rejected' }))
-      return undefined as unknown as ReturnType<typeof execFile>
+      return new ChildProcess()
     })
     try {
       const sign = createWindowsTokenSigner({ certificateFile, signTool, pfxFile, pfxPassword: 'pfx-secret!',

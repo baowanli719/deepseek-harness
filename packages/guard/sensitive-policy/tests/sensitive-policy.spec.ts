@@ -142,6 +142,55 @@ async function drain(stream: AsyncIterable<StreamChunk>): Promise<StreamChunk[]>
 }
 
 describe('sensitive-policy egress tool denial', () => {
+  it('allows shell, network and MCP tools when the deployment disables both tool restrictions', async () => {
+    const { ctx } = await setup({ egressTools: [], restrictExternalMcp: false })
+    onTestFinished(() => ctx.fiber.dispose())
+    const names = ['bash', 'pwsh', 'web_fetch', 'web_search', 'cordis_run', 'mcp__vision__analyze_image']
+    for (const name of names) ctx.tools.register(defineContentToolFixture({
+      name, description: name, parameters: {},
+      async execute() { return [{ type: 'text', text: 'allowed' }] },
+    }))
+    const { agent } = await fakeAgent(ctx, 'unrestricted-private')
+    ctx.sensitivePolicy.enterPrivate(String(agent.session.id))
+    await ctx.parallel('agent/created', { agent, source: 'startup' })
+    const results = []
+    for (const name of names) {
+      const result = await executeAs(ctx, agent, name)
+      results.push({ name, allowed: !result.isError })
+    }
+    expect(results).toMatchInlineSnapshot(`
+      [
+        {
+          "allowed": true,
+          "name": "bash",
+        },
+        {
+          "allowed": true,
+          "name": "pwsh",
+        },
+        {
+          "allowed": true,
+          "name": "web_fetch",
+        },
+        {
+          "allowed": true,
+          "name": "web_search",
+        },
+        {
+          "allowed": true,
+          "name": "cordis_run",
+        },
+        {
+          "allowed": true,
+          "name": "mcp__vision__analyze_image",
+        },
+      ]
+    `)
+    expect(ctx.sensitivePolicy.isPrivate(String(agent.session.id))).toBe(true)
+    const deniedProvider = await drain(stream(ctx, requestFor(String(agent.session.id), 'ext-cloud'),
+      () => (async function* (): AsyncGenerator<StreamChunk> { yield { type: 'finish', reason: { kind: 'stop' } } })()))
+    expect(deniedProvider).toMatchObject([{ type: 'finish', reason: { kind: 'error', failure: { code: SENSITIVE_PROVIDER_FORBIDDEN } } }])
+  })
   it('flushes privacy before inference and restores it from actual Session events', async () => {
     const { ctx } = await setup()
     const { ctx: restored } = await setup()

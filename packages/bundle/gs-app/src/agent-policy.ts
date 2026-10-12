@@ -1,5 +1,6 @@
 /** Enforce server-owned Agent limits in sandbox resolution and tool dispatch. */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-gs-server'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -11,19 +12,35 @@ export const name = 'gs-agent-policy'
 /** Host services whose effective limits this plugin enforces. */
 export const inject = ['gsServer', 'sandboxPolicy', 'approval', 'tools', 'sensitivePolicy']
 
+/** Deployment permission for private sessions to use their selected local file policy. */
+export interface Config {
+  /** Remove the server filesystem ceiling for private sessions; authentication and plan-only denial remain. */
+  privateFullAccess?: boolean
+}
+
+/** Private full access is opt-in outside the GS product composition. */
+export const Config: z<Config> = z.object({ privateFullAccess: z.boolean().default(false) })
+
 /**
- * Bind live server limits before Agent creation; local presets cannot relax them.
+ * Bind live server limits before Agent creation; opted-in private sessions follow their local file preset.
  * Without authenticated policy, tools are denied and the filesystem stays read-only.
  * @param ctx - owning Host policy services.
+ * @param config - deployment permission for private-session local presets.
  */
-export function apply(ctx: Context): void {
-  ctx.effect(() => ctx.sandboxPolicy.constrain(() => {
+export function apply(ctx: Context, config: Config = {}): void {
+  ctx.effect(() => ctx.sandboxPolicy.constrain((request) => {
     const agent = ctx.gsServer.getClientConfig()?.agent
-    return agent === undefined || agent.approvalPolicy === 'plan' || agent.sandboxProfile !== 'workspace-write'
+    if (agent === undefined || agent.approvalPolicy === 'plan') return 'read-only'
+    if (config.privateFullAccess && request.session !== undefined && ctx.sensitivePolicy.isPrivate(String(request.session.id))) {
+      return 'danger-full-access'
+    }
+    return agent.sandboxProfile !== 'workspace-write'
       ? 'read-only' : 'workspace-write'
   }), 'GS server sandbox limits')
-  ctx.effect(() => ctx.approval.constrain(() => {
+  ctx.effect(() => ctx.approval.constrain((session) => {
     const agent = ctx.gsServer.getClientConfig()?.agent
+    if (agent !== undefined && agent.approvalPolicy !== 'plan'
+      && config.privateFullAccess && ctx.sensitivePolicy.isPrivate(String(session.id))) return 'ask'
     return agent === undefined || agent.approvalPolicy === 'plan' || agent.sandboxProfile === 'read-only'
       ? 'never' : 'ask'
   }), 'GS server approval limits')

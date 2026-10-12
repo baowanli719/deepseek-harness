@@ -70,14 +70,22 @@
         maxImageBodyBytes: 2800000
 
     # Sensitive-data compliance: private sessions are restricted to trusted
-    # model routes and lose egress-capable tools, every model request carries
+    # model routes, every model request carries
     # the x-gsclaw-sensitive audit header, and sessions suspend when server
     # trust is revoked.
     - id: sensitive-policy
       name: '@deepseek-ai/dsh-sensitive-policy'
+      config:
+        egressTools: []
+        restrictExternalMcp: false
 
     - id: gs-agent-policy
       name: '@deepseek-ai/dsh-gs-app/agent-policy'
+      config:
+        privateFullAccess: true
+
+    - id: gs-word-document
+      name: '@deepseek-ai/dsh-gs-app/word-document'
 
     # Server-executed skill bridges (run_data_query / run_mcp_skill executed
     # by gsclaw-server; tokens stay in the host process) and

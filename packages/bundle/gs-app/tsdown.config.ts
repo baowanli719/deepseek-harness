@@ -8,7 +8,7 @@ import { defineConfig } from 'tsdown'
  */
 export default defineConfig([
   {
-    entry: ['lib/types/prompt-language.js', 'lib/types/prompt-policy.js', 'lib/types/skill-policy.js', 'lib/types/agent-policy.js'],
+    entry: ['lib/types/prompt-language.js', 'lib/types/prompt-policy.js', 'lib/types/skill-policy.js', 'lib/types/agent-policy.js', 'lib/types/word-document.js'],
     outDir: 'lib', format: ['esm'], platform: 'node', target: 'es2024',
     fixedExtension: false, dts: false, clean: false,
   },

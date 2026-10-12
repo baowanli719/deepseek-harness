@@ -2716,12 +2716,14 @@ export interface JsonRpcConfig {
  * Plugin config, validated by the same-named schemastery schema.
  */
 export interface Config {
+  /** Whether private sessions deny external MCP tools; defaults to true. */
+  restrictExternalMcp?: boolean
   /**
    * Egress-capable tool names denied to private sessions (default
    * {@link DEFAULT_EGRESS_TOOLS}). Entries are resolved against the live
    * registry at restriction time, so naming a tool no composition registered
    * is valid. An empty list removes configured-tool denial; external MCP
-   * denial, trusted-route enforcement, and audit marking remain active.
+   * denial (unless restrictExternalMcp is false), trusted-route enforcement, and audit marking remain active.
    */
   egressTools?: string[]
 }

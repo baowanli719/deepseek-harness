@@ -9,9 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The `agent-policy` plugin limits sandbox and approval resolution using live server Agent configuration. Local presets and approved escalations cannot exceed it. Missing authentication or plan-only policy denies tools; read-only and tool-mediated policies cap filesystem access at read-only. Sensitive and confidential classifications enter durable privacy. The GS composition disables external session-feedback telemetry and its feedback controls.
-
-The gs-worker (国盛办公AI) product bundle: a patch layer over `dsh-base` + `dsh-web-app` wiring gsclaw-server integration, the model-gateway adapter, sensitive-data compliance, server skills, the vision channel, and the 国盛证券办公助理 persona. It composes into the shipped `gs-desktop` profile template (`@deepseek-ai/dsh-app-boot`): `pnpm dsh --profile gs-desktop`.
+GS office assistants can create Word documents, use server-managed skills and understand images through the model gateway. The shipped `gs-desktop` profile includes this bundle: `pnpm dsh --profile gs-desktop`. Private sessions support Python, shell, network and external MCP tools under the selected local file permissions. Authentication, plan-only restrictions and trusted-model routing remain enforced.
 
 ## Table of Contents
 
@@ -24,6 +22,12 @@ The gs-worker (国盛办公AI) product bundle: a patch layer over `dsh-base` + `
 
 <a id="what-the-patch-does"></a>
 ## What the patch does
+
+The `create_word_document` tool creates local `.docx` files from a title, paragraphs and tables, including in private sessions. It runs no scripts or external requests and makes no Windows ACL changes. Effective file policy applies: read-only and plan-only sessions cannot create documents. Output requires an existing directory; workspace-write confines it to the current workspace, while full access permits external paths. Existing files are never replaced. It does not edit documents or render previews. The model receives the created path for delivery through `present`; the additional tool schema and call/result enter the ordinary tool transcript and cache.
+
+The GS composition keeps shell, network and external MCP tools available in private sessions. Python can run through the local shell. `gs-agent-policy.config.privateFullAccess: true` lets private sessions use their selected local file preset: full access permits subprocesses and files outside the workspace without Windows sandbox ACL edits; a locally selected read-only or workspace-write preset still applies. Standard sessions retain server filesystem ceilings. Missing authentication and server plan-only policy still deny tools. Trusted model routes, durable privacy, sensitive audit headers and trust-revocation cancellation remain active. External session-feedback telemetry and its feedback controls are disabled.
+
+Word output uses an exclusive copy from a completed temporary file, so writable exFAT/FAT32 destinations do not require hard links. Existing destinations are refused. The destination may be visible while copying; delivery occurs only after the copy succeeds.
 
 `cordis.patch.yml` applies after the base and Web bundle layers:
 

@@ -195,7 +195,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // The isolated Node bootstrap is a separately launched bundle.
   '@deepseek-ai/dsh-ptc-runtime-node': ['lib/process.js'],
   // The vision bridge is a Loader row module and its stdio MCP server a child-process entry.
-  '@deepseek-ai/dsh-gs-app': ['lib/vision-bridge.js', 'lib/skills-routes.js', 'lib/agent-policy.js',
+  '@deepseek-ai/dsh-gs-app': ['lib/vision-bridge.js', 'lib/skills-routes.js', 'lib/agent-policy.js', 'lib/word-document.js',
     'lib/prompt-language.js', 'lib/prompt-policy.js', 'lib/skill-policy.js', 'lib/mcp-vision-server.js'],
   // The Host entry starts its sibling Worker by URL rather than a package export.
   '@deepseek-ai/dsh-experimental-inspector': ['lib/worker.js'],

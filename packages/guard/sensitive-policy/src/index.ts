@@ -16,7 +16,7 @@
  * - `tools.guard` (monotonic, evaluated after every `tools/pre-execute`
  *   listener): private sessions lose the configured egress-capable
  *   tools at the execution gate, and `agent/created` also restricts them off
- *   the session's visible surface. All external MCP tools are denied too.
+ *   the session's visible surface. External MCP denial is configured independently.
  * - `gsServerSkillGate.mountPrivateLane` (optional, provided by
  *   `@deepseek-ai/dsh-gs-server-skills`): every private session's agent —
  *   however it became private — gets the gated trusted-only server-skill lane
@@ -127,24 +127,28 @@ export const DEFAULT_EGRESS_TOOLS: string[] = [
  * Plugin config, validated by the same-named schemastery schema.
  */
 export interface Config {
+  /** Whether private sessions deny external MCP tools; defaults to true. */
+  restrictExternalMcp?: boolean
   /**
    * Egress-capable tool names denied to private sessions (default
    * {@link DEFAULT_EGRESS_TOOLS}). Entries are resolved against the live
    * registry at restriction time, so naming a tool no composition registered
    * is valid. An empty list removes configured-tool denial; external MCP
-   * denial, trusted-route enforcement, and audit marking remain active.
+   * denial (unless restrictExternalMcp is false), trusted-route enforcement, and audit marking remain active.
    */
   egressTools?: string[]
 }
 
 /** Runtime schema for {@link Config}. */
 export const Config: z<Config> = z.object({
+  restrictExternalMcp: z.boolean().default(true),
   egressTools: z.array(z.string()).default([...DEFAULT_EGRESS_TOOLS]),
 })
 
 /** The config after default materialization (direct construction bypasses the Loader schema). */
 interface ResolvedConfig {
   readonly egressTools: readonly string[]
+  readonly restrictExternalMcp: boolean
 }
 
 /**
@@ -154,7 +158,10 @@ interface ResolvedConfig {
  * @returns the complete effective config.
  */
 function resolveConfig(config?: Config): ResolvedConfig {
-  return { egressTools: config?.egressTools ?? [...DEFAULT_EGRESS_TOOLS] }
+  return {
+    egressTools: config?.egressTools ?? [...DEFAULT_EGRESS_TOOLS],
+    restrictExternalMcp: config?.restrictExternalMcp ?? true,
+  }
 }
 
 /**
@@ -244,7 +251,9 @@ export function apply(ctx: Context, config?: Config): void {
   // the same gate.
   ctx.effect(() => ctx.tools.guard((exec) => {
     const agent = exec.agent
-    if (agent === undefined || (!egressTools.has(exec.name) && !exec.name.startsWith('mcp__'))) return undefined
+    if (agent === undefined || (!egressTools.has(exec.name) && !(resolved.restrictExternalMcp && exec.name.startsWith('mcp__')))) {
+      return undefined
+    }
     const state = core.stateOf(String(agent.session.id))
     if (state.inferencePolicy !== 'trusted-only') return undefined
     return `tool "${exec.name}" is unavailable in a private session: sensitive-data policy restricts egress-capable tools`

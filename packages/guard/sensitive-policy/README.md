@@ -33,7 +33,7 @@ Add the plugin to a composition that also mounts `@deepseek-ai/dsh-gs-server` (t
 
 ### When to choose it
 
-Choose it when sessions may carry sensitive business data and the deployment must prove that such traffic never leaves trusted model routes or egress tools. Avoid it when the composition has no gsclaw-server integration — the trust source is `gsServer`, and without it no provider route verifies as trusted — or when private sessions must keep unrestricted egress.
+Choose it when sessions may carry sensitive business data and the deployment requires trusted model routes with configurable tool restrictions. Avoid it without gsclaw-server integration: without `gsServer`, no provider route verifies as trusted.
 
 ### Setting it up
 
@@ -43,15 +43,18 @@ Mount with defaults or override the egress list:
 - name: '@deepseek-ai/dsh-sensitive-policy'
   # config:
   #   egressTools: [bash, pwsh, web_fetch, web_search]
+  #   restrictExternalMcp: true
 ```
 
 `egressTools` (default [`DEFAULT_EGRESS_TOOLS`](src/index.ts)) names the egress-capable tools an explicitly-private session loses. Entries are resolved against the live registry at restriction time, so naming an unregistered tool is valid; an explicit empty list lifts the egress lockdown tier while trusted-route enforcement and the audit header stay on. The audit header name (`x-gsclaw-sensitive`) and value (`1`) are protocol constants and are not configurable.
 
 ### What you get
 
+`restrictExternalMcp` defaults to true. Set it to false together with `egressTools: []` to keep shell, network and external MCP tools available in private sessions while preserving trusted model routes, durable privacy and audit marking. The GS product bundle selects this configuration.
+
 - A `sensitivePolicy` service (`SensitivePolicyCore`) holding each session's policy state: `enterPrivate(sessionId)` locks a session to trusted-only egress (never undone), `stateOf`/`isPrivate` read it, and sensitivity (`unclassified` → `potential` → `sensitive`) only rises.
 - At the model-call boundary (`llm/stream`): a private session's request on an untrusted route is refused with a terminal `session_provider_forbidden` error before the adapter runs; an allowed request's provider route is recorded, and the gsclaw model-gateway proxy stamps the `x-gsclaw-sensitive: 1` audit header on its wire request.
-- At tool execution, every private session denies configured egress tools and all external `mcp__` tools, including vision. Scoped restrictions also hide configured tools; execution guards cover direct calls and PTC sub-dispatches.
+- At tool execution, every private session denies configured egress tools; external `mcp__` tools, including vision, are denied when `restrictExternalMcp` is true. Scoped restrictions also hide configured tools; execution guards cover direct calls and PTC sub-dispatches.
 - When the optional `gsServerSkillGate` service is composed (`@deepseek-ai/dsh-gs-server-skills`): every private session's agent — however the session became private — gets the gated trusted-only server-skill lane mounted into its scoped context (`agent.ctx`), at `agent/created` for an already-private session or mid-flight on the live agent when a transition turns the session private. Mounting is idempotent per session, a missing gate is a no-op, and the scoped registration unwinds with the agent, so trust-revocation cancellation tears the lane down with it.
 - On `gs-server/trust-revoked`: every private session with observed model traffic is suspended (its live agent is cancelled with a `hook` cause) without re-judging the possibly stale cache. On `gs-server/client-config-changed`: each private session's recorded provider is re-judged against the fresh trust metadata, and newly untrusted ones suspend.
 

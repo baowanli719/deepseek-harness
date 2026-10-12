@@ -85,6 +85,8 @@ describe('gs-desktop profile composition', () => {
     expect(byId.get('ui-message-feedback')?.disabled).toBe(true)
     expect(byId.get('command-feedback')?.disabled).toBe(true)
     expect(byId.get('gs-agent-policy')?.name).toBe('@deepseek-ai/dsh-gs-app/agent-policy')
+    expect(byId.get('gs-agent-policy')?.config).toEqual({ privateFullAccess: true })
+    expect(byId.get('sensitive-policy')?.config).toEqual({ egressTools: [], restrictExternalMcp: false })
   })
 
   it('enables the scheduled task service and page for the desktop product', () => {

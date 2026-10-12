@@ -33,7 +33,7 @@ kind: "package-reference"
 
 ### 何时选择
 
-当会话可能承载敏感业务数据，且部署方必须证明此类流量绝不离开可信模型路由或外发工具时，选择它。当组合没有 gsclaw-server 集成时——信任来源是 `gsServer`，没有它任何提供方路由都无法被验证为可信——或当私密会话必须保留不受限的外发能力时，避免使用它。
+当会话可能承载敏感业务数据，且部署方需要可信模型路由及可配置的工具限制时，选择它。当组合没有 gsclaw-server 集成时，避免使用它：没有 `gsServer`，任何提供方路由都无法被验证为可信。
 
 ### 设置
 
@@ -43,15 +43,18 @@ kind: "package-reference"
 - name: '@deepseek-ai/dsh-sensitive-policy'
   # config:
   #   egressTools: [bash, pwsh, web_fetch, web_search]
+  #   restrictExternalMcp: true
 ```
 
 `egressTools`（默认见 [`DEFAULT_EGRESS_TOOLS`](src/index.ts)）列出显式私密会话会失去的外发型工具。条目在限制发生时对照实时注册表解析，因此列出未注册的工具也是合法的；显式传入空列表会解除外发锁 tier，而可信路由强制与审计头仍然生效。审计头的名称（`x-gsclaw-sensitive`）与取值（`1`）是协议常量，不可配置。
 
 ### 你将得到
 
+`restrictExternalMcp` 默认为 true。将它设为 false，并设置 `egressTools: []`，即可在私密会话中保留命令、联网与外部 MCP 工具，同时保留可信模型路由、持久私密状态与审计标记。GS 产品组合选择此配置。
+
 - 一个 `sensitivePolicy` 服务（`SensitivePolicyCore`），保存每个会话的策略状态：`enterPrivate(sessionId)` 将会话锁定为仅可信出口（永不撤销），`stateOf`/`isPrivate` 读取状态，敏感度（`unclassified` → `potential` → `sensitive`）只升不降。
 - 在模型调用边界（`llm/stream`）：私密会话在不可信路由上的请求会在适配器运行前被拒，返回终结性的 `session_provider_forbidden` 错误；获准的请求会记录其提供方路由，并由 gsclaw 模型网关代理在其网线请求上盖上 `x-gsclaw-sensitive: 1` 审计头。
-- 在工具执行时，所有私密会话都拒绝配置的外发工具及全部外部 `mcp__` 工具，包括视觉工具。作用域限制还隐藏配置的工具；执行守卫覆盖直接调用与 PTC 子派发。
+- 在工具执行时，所有私密会话都拒绝配置的外发工具；当 `restrictExternalMcp` 为 true 时，还拒绝外部 `mcp__` 工具，包括视觉工具。作用域限制还隐藏配置的工具；执行守卫覆盖直接调用与 PTC 子派发。
 - 当组合了可选的 `gsServerSkillGate` 服务（`@deepseek-ai/dsh-gs-server-skills`）时：每个私密会话的 Agent——无论会话如何变为私密——都会把受门控的 trusted-only 服务端技能通道挂载进其作用域上下文（`agent.ctx`）：对已处于私密的会话在 `agent/created` 时挂载；会话在运行中转为私密时，则在存活 Agent 上即时挂载。挂载按会话幂等，缺少门控服务时为空操作，且作用域注册随 Agent 一并卸载，因此信任吊销导致的取消会连带拆除该通道。
 - 在 `gs-server/trust-revoked` 时：所有已有模型流量的私密会话都会被挂起（其存活 Agent 以 `hook` 原因被取消），且不会再去重判可能已过期的缓存。在 `gs-server/client-config-changed` 时：按最新的信任元数据重判每个私密会话记录的提供方，新落入不可信的会话随即挂起。
 
