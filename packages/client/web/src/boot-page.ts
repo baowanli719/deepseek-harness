@@ -34,10 +34,12 @@ export class BootPage {
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)
-    this.wordmark = div(css.wordmark, 'HARNESS')
+    const metadata = (name: string): string | undefined => container.ownerDocument
+      .querySelector<HTMLMetaElement>(`meta[name="dsh-boot-${name}"]`)?.content
+    this.wordmark = div(css.wordmark, metadata('wordmark') ?? 'HARNESS')
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
-    this.hint = div(css.hint, 'Loading plugins…')
+    this.hint = div(css.hint, metadata('hint') ?? 'Loading plugins…')
     this.card.append(this.wordmark, this.spinner, this.hint)
     this.root.append(this.card)
     container.append(this.root)

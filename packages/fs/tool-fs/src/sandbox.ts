@@ -104,7 +104,7 @@ export class FsSandboxController {
         signal: exec.signal,
       },
     )
-    return { ...policy, mode: approvedMode }
+    return this.policy?.resolve({ ...exec.agent ? { session: exec.agent.session } : {}, mode: approvedMode })
   }
 
   /**

@@ -244,6 +244,105 @@ interface Config {
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxgsserverskillcatalog--gsserverskillcatalog"></a>
+
+### `ctx.gsServerSkillCatalog` — `GsServerSkillCatalog`
+
+Host-plane share of the effective server catalog. The provider publishes it; the bridge tools read it to decide visibility and to resolve revisions.
+
+```ts cordis-catalog
+/**
+ * Latest effective snapshot; empty while signed out or unsynced.
+ * @returns the immutable effective catalog projection.
+ */
+snapshot(): GsServerSkillCatalogSnapshot
+
+/**
+ * Subscribe to catalog changes.
+ * @param listener - invoked synchronously after each accepted snapshot update.
+ * @returns the unsubscribe function.
+ */
+subscribe(listener: () => void): () => void
+
+/** Invalidate cached catalogs and definitions after a `definition_changed`. */
+invalidate(): void
+
+/**
+ * One available remote entry of the requested runtime type, if still listed.
+ * Trusted-only entries never resolve on this lane: a direct bridge call by
+ * name must not reach the execute endpoint.
+ * @param name - exact skill name from the catalog.
+ * @param runtimeType - executable runtime type to match.
+ * @returns the catalog entry, or undefined.
+ */
+resolveRemote(name: string, runtimeType: GsServerRuntimeType): GsServerSkillRemoteEntry | undefined
+
+/**
+ * One gated trusted-only entry of the requested runtime type, if still
+ * listed. Only the gated lane's execute path consults it, after its own
+ * private-session check.
+ * @param name - exact skill name from the catalog.
+ * @param runtimeType - executable runtime type to match.
+ * @returns the catalog entry, or undefined.
+ */
+resolveGated(name: string, runtimeType: GsServerRuntimeType): GsServerSkillRemoteEntry | undefined
+```
+
+Source: [`packages/skill/gs-server-skills/src/types.ts`](../../packages/skill/gs-server-skills/src/types.ts)
+
+<a id="ctxgsserverskillgate--gsserverskillgate"></a>
+
+### `ctx.gsServerSkillGate` — `GsServerSkillGate`
+
+Provider-side face of the `gsServerSkillGate` service: the mount point of the gated trusted-only lane. `@deepseek-ai/dsh-sensitive-policy` consumes it as an optional service through `ctx.get` under its own structural declaration, so this name stays free of that package's `GsServerSkillGateFace`.
+
+```ts cordis-catalog
+/**
+ * Mount the gated trusted-only lane into one private agent's scoped context.
+ * The lane re-checks `sensitivePolicy.isPrivate(sessionId)` per load; the
+ * scoped registration unwinds with the agent.
+ * @param scope - the private agent's scoped context.
+ */
+mountPrivateLane(scope: Context): void
+```
+
+Source: [`packages/skill/gs-server-skills/src/types.ts`](../../packages/skill/gs-server-skills/src/types.ts)
+
+<a id="ctxgsserverskillpreferences--serverskillpreferences"></a>
+
+### `ctx.gsServerSkillPreferences` — `ServerSkillPreferences`
+
+Account-scoped server skill switches, stored as one JSON file per skill under the account hash so the previous gs-worker's files keep applying.
+
+```ts cordis-catalog
+/**
+ * Effective switch of one delivered skill for the current account.
+ * @param skill - catalog entry carrying the server default.
+ * @param key - account key override; defaults to the current account.
+ * @returns whether the skill is enabled; a missing or damaged preference
+ *   falls back to the server default.
+ */
+async enabledFor(skill: Pick<GsSkillCatalogEntry, 'name' | 'defaultEnabled'>, key: string | undefined = this.options.accountKey()): Promise<boolean>
+
+/**
+ * Settings-page rows of the current effective catalog; each row carries its
+ * switch, availability, and the machine reason when unavailable.
+ * @returns the rows, or an empty list while signed out or against a
+ *   pre-capability server.
+ */
+async list(): Promise<readonly ServerSkillPreferenceRow[]>
+
+/**
+ * Persist one skill's switch for the current account; only a currently
+ * delivered, available skill accepts a write.
+ * @param name - exact skill name from the catalog.
+ * @param enabled - the new switch.
+ */
+async setEnabled(name: string, enabled: boolean): Promise<void>
+```
+
+Source: [`packages/skill/gs-server-skills/src/preferences.ts`](../../packages/skill/gs-server-skills/src/preferences.ts)
+
 <a id="ctxsessionskillcatalog--sessionskillcatalog"></a>
 
 ### `ctx.sessionSkillCatalog` — `SessionSkillCatalog`

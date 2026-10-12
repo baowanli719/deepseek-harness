@@ -3,7 +3,10 @@
 import { join, resolve } from 'node:path'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
-const BUILD_ROOT = join(APP_ROOT, '.desktop-build')
+// A host file indexer or virus scanner can hold packaged outputs (app.asar) open
+// without delete sharing and block every rebuild; relocating the build root outside
+// the watched tree keeps such hosts buildable. Unset keeps the in-repo default.
+const BUILD_ROOT = process.env.DSH_DESKTOP_BUILD_ROOT?.trim() || join(APP_ROOT, '.desktop-build')
 const SUPPORTED_TARGETS = new Set(['mac-arm64', 'mac-x64', 'win-x64'])
 
 /**

@@ -28,6 +28,7 @@ kind: "package-group"
 |---|---|
 | [`repeat-tool-reminder/`](repeat-tool-reminder/README.zh.md) | 在模型重复完全相同的工具调用时提醒它，使其改变方法或结束任务 |
 | [`timeout-policy/`](timeout-policy/README.zh.md) | 为声明了限时的工具调用设置超时，让模型得到清晰错误而不是无限等待 |
+| [`sensitive-policy/`](sensitive-policy/README.zh.md) | 把私密会话约束在可信模型路由内、在执行器拒绝其外发工具，并在服务端信任吊销时挂起它们 |
 
 -----
 

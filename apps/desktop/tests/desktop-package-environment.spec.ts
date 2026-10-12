@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -23,6 +23,14 @@ async function withDirectory(action: (directory: string) => Promise<void>): Prom
 }
 
 describe('Desktop local packaging configuration', () => {
+  it('prepares unsigned macOS builds without policy or signing credentials while validating application settings', () => {
+    expect(() => { validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'com.example.desktop' },
+      MACOS, { unsigned: true }) }).not.toThrow()
+    expect(() => { validateDesktopPackageEnvironment({}, MACOS, { unsigned: true }) }).toThrow(/DSH_DESKTOP_APP_ID/u)
+    expect(() => { validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'com.example.desktop',
+      DSH_DESKTOP_MACOS_PACK_CONCURRENCY: '0' }, MACOS, { unsigned: true }) }).toThrow()
+  })
+
   it('takes cache concurrency from the Windows file and defaults to four without ambient overrides', async () => {
     await withDirectory(async (directory) => {
       const parent = { DSH_DESKTOP_WINDOWS_SIGNATURE_CACHE_CONCURRENCY: '8' }
@@ -106,6 +114,25 @@ describe('Desktop local packaging configuration', () => {
       expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({ ...origins, DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: windowsPolicy })
       expect(loadDesktopPackageEnvironment('darwin', parent, directory)).toEqual({ ...origins, DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: macPolicy })
       expect(parent).toEqual({ DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: 'stale-policy' })
+    })
+  })
+
+  it('loads the optional PFX identity only from the Windows file', async () => {
+    await withDirectory(async (directory) => {
+      await writeFile(join(directory, '.env.windows'), 'DSH_DESKTOP_WINDOWS_PFX_FILE="keys/release cert.pfx"\r\nDSH_DESKTOP_WINDOWS_PFX_PASSWORD=" #!$%&literal "\r\n')
+      const parent = {
+        PATH: 'build-tools',
+        DSH_DESKTOP_WINDOWS_PFX_FILE: 'stale.pfx',
+        DSH_DESKTOP_WINDOWS_PFX_PASSWORD: 'stale-pfx-secret',
+      }
+      expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({
+        PATH: 'build-tools',
+        DSH_DESKTOP_WINDOWS_PFX_FILE: join(directory, 'keys', 'release cert.pfx'),
+        DSH_DESKTOP_WINDOWS_PFX_PASSWORD: ' #!$%&literal ',
+      })
+      expect(parent.DSH_DESKTOP_WINDOWS_PFX_PASSWORD).toBe('stale-pfx-secret')
+      await writeFile(join(directory, '.env.macos'), 'DSH_DESKTOP_WINDOWS_PFX_FILE=keys/release.pfx\n')
+      expect(() => loadDesktopPackageEnvironment('darwin', {}, directory)).toThrow(/unsupported setting DSH_DESKTOP_WINDOWS_PFX_FILE/u)
     })
   })
 
@@ -200,5 +227,34 @@ it('owns macOS tuning in the local file and validates it before signing credenti
     expect(env.DSH_DESKTOP_MACOS_NOTARIZATION_PROXY).toBe('')
     expect(() =>{  validateDesktopPackageEnvironment({ ...RELEASE, DSH_DESKTOP_MACOS_PACK_CONCURRENCY: '' }, MACOS) }).toThrow('PACK_CONCURRENCY')
     expect(() =>{  validateDesktopPackageEnvironment({ ...RELEASE, DSH_DESKTOP_MACOS_NOTARIZATION_PROXY: 'socks5://localhost:8080' }, MACOS) }).toThrow('NOTARIZATION_PROXY')
+  })
+})
+
+describe('Desktop product identity settings', () => {
+  it('takes product identity from the platform file and strips ambient values', async () => {
+    await withDirectory(async (directory) => {
+      await mkdir(join(directory, 'brand', 'gs'), { recursive: true })
+      await writeFile(join(directory, '.env.windows'), [
+        'DSH_DESKTOP_APP_ID=com.enterprise.officeagent',
+        'DSH_DESKTOP_PRODUCT_NAME=gs-worker',
+        'DSH_DESKTOP_ARTIFACT_BASENAME=gs-worker',
+        'DSH_DESKTOP_BRAND_DIR=brand/gs',
+        'DSH_DESKTOP_PROFILE=gs-desktop',
+        '',
+      ].join('\n'))
+      const parent = {
+        DSH_DESKTOP_PRODUCT_NAME: 'stale-product', DSH_DESKTOP_ARTIFACT_BASENAME: 'stale-artifact',
+        DSH_DESKTOP_BRAND_DIR: 'stale-brand', DSH_DESKTOP_PROFILE: 'stale-profile',
+        dsh_desktop_profile: 'case-insensitive-stale-profile',
+      }
+      expect(loadDesktopPackageEnvironment('win32', parent, directory)).toEqual({
+        DSH_DESKTOP_APP_ID: 'com.enterprise.officeagent',
+        DSH_DESKTOP_PRODUCT_NAME: 'gs-worker',
+        DSH_DESKTOP_ARTIFACT_BASENAME: 'gs-worker',
+        DSH_DESKTOP_BRAND_DIR: join(directory, 'brand', 'gs'),
+        DSH_DESKTOP_PROFILE: 'gs-desktop',
+      })
+      expect(parent.DSH_DESKTOP_PROFILE).toBe('stale-profile')
+    })
   })
 })

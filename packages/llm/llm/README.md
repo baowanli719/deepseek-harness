@@ -115,6 +115,7 @@ File detection reads current content, including tool-role result content, on eve
 - **Replay state travels only within one adapter** — assistant replay state rides along only when the same adapter instance owns the historical and target routes; otherwise it is dropped before dispatch.
 - **Prepared calls are one-shot** — a prepared call can be dispatched exactly once, and its call-config fields must match the prepared config.
 - **Image projection follows the captured route** — durable `ImageBlock` references become route-specific request versions only for image-capable models; text-only models receive stable placeholders.
+- **Auxiliary visual tools** — an active `visionToolAdmission` provider may project text-model images into complete attachment IDs and tool guidance. The runtime still removes image blocks before text-model dispatch and leaves durable history unchanged; without the provider it uses the ordinary placeholders.
 - **File projection is unconditional** — no provider receives file bytes; every route gets one deterministic handle line per `FileBlock`, and the model reads the saved copy with its file tools on demand.
 - **Protocol ordering** — `usage` precedes `finish`, tool arguments stay raw JSON strings, and nothing follows the terminal `finish`.
 - **Registry mutations are atomic** — route and directory registration validates the whole candidate set before anything moves, so a refused change leaves the previous state serving.
@@ -141,7 +142,7 @@ Read these pages when the package-level contract is not enough. They move from t
 <a id="model-experience"></a>
 ## Model Experience
 
-None, as the LLM service adds no content; adapters choose when to add the shared image descriptors and per-image placeholders exported by this package.
+Indirectly, through request-projection owners that render image descriptors, text-model placeholders, and optional visual-tool guidance containing complete attachment IDs while retaining the logged image references.
 
 #### KV Cache effect
 

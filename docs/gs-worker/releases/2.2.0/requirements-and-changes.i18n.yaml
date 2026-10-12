@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for requirements-and-changes.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/gs-worker/releases/2.2.0/requirements-and-changes.md
+/gs-worker-requirements-and-changes-2-2-0:
+  en: 8b87ba033b08a8b2
+  zh: c319494b4efb8e6c
+/gs-worker-requirements-and-changes-2-2-0/summary:
+  en: 596faac0c2a219d6
+  zh: 0f021e2516dc6cad
+/gs-worker-requirements-and-changes-2-2-0/table-of-contents:
+  en: cbf0333f5bd090dd
+  zh: 1b2c1ab96f6f6c37
+/gs-worker-requirements-and-changes-2-2-0/version-and-scope:
+  en: a49bcbad99b3710d
+  zh: d680b405ee1fc776
+/gs-worker-requirements-and-changes-2-2-0/requirements-and-delivery:
+  en: 4ca49744f473f972
+  zh: 427eaa087b70926b
+/gs-worker-requirements-and-changes-2-2-0/changes-by-area:
+  en: 2efebd09cae2468b
+  zh: 5081c4197e02b0e3
+/gs-worker-requirements-and-changes-2-2-0/server-deployment-coordination:
+  en: 131813671bcf2af9
+  zh: 83854ff863657eb6
+/gs-worker-requirements-and-changes-2-2-0/verification-record:
+  en: f631b79b07c4d1f7
+  zh: 5223d2bc901ae79c
+/gs-worker-requirements-and-changes-2-2-0/delivery-conditions:
+  en: 30d0438a3b146045
+  zh: fd284cefe415334d

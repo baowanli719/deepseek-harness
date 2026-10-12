@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { BootPage } from '../src/boot-page.ts'
 
-afterEach(() => { document.body.innerHTML = '' })
+afterEach(() => { document.body.innerHTML = ''; document.head.innerHTML = '' })
 
 function mount() {
   const el = document.createElement('div')
@@ -11,6 +11,19 @@ function mount() {
 }
 
 describe('BootPage', () => {
+  it('shows carrier brand and localized loading copy as text before injections', () => {
+    for (const [name, content] of [['wordmark', '国盛办公AI<script>'], ['hint', '正在启动…']]) {
+      const meta = document.createElement('meta')
+      meta.name = `dsh-boot-${name}`
+      meta.content = content!
+      document.head.append(meta)
+    }
+    const { el } = mount()
+    expect(el.textContent).toContain('国盛办公AI<script>')
+    expect(el.textContent).toContain('正在启动…')
+    expect(el.querySelector('script')).toBeNull()
+    expect(el.textContent).not.toContain('HARNESS')
+  })
   it('draws the loading skeleton before any plugin state arrives', () => {
     const { el } = mount()
     expect(el.firstElementChild?.getAttribute('data-dsh-boot')).toBe('')

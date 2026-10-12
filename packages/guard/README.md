@@ -28,6 +28,7 @@ Two small plugins cover the two patterns; each README below explains when to kee
 |---|---|
 | [`repeat-tool-reminder/`](repeat-tool-reminder/README.md) | Reminds the model when it repeats the same tool call, so it changes approach or finishes |
 | [`timeout-policy/`](timeout-policy/README.md) | Times out tool calls that declare a limit, so the model gets a clear error instead of waiting forever |
+| [`sensitive-policy/`](sensitive-policy/README.md) | Confines private sessions to trusted model routes, denies their egress tools at the executor, and suspends them on server trust revocation |
 
 -----
 

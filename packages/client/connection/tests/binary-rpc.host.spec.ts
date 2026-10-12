@@ -69,7 +69,9 @@ describe('Connection binary RPC', () => {
     } finally {
       await ctx.fiber.dispose()
     }
-  })
+    // The WebServer boot and 1 MB transfer run ~2.5 s alone; the aggregate
+    // lane's forked workers stretch that past the default test budget.
+  }, 30_000)
 
   it('roundtrips raw bytes and metadata on the existing channel while JSON results and errors stay JSON', async () => {
     const ctx = new Context()

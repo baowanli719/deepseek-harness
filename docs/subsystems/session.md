@@ -774,6 +774,96 @@ The optional `application` selects a registered file handler without changing th
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxsensitivepolicy--sensitivepolicycore"></a>
+
+### `ctx.sensitivePolicy` — `SensitivePolicyCore`
+
+Per-session sensitive-data policy state. Transitions are monotonic — privacy and sensitivity never downgrade inside a process lifetime — and every commit notifies subscribers after the state change lands.
+
+```ts cordis-catalog
+/**
+ * Subscribe to committed transitions.
+ * @param listener - called with the session id after each committed change.
+ * @returns the unsubscribe function.
+ */
+subscribe(listener: (sessionId: string, event: SensitivePolicyEvent) => void): () => void
+
+/**
+ * Read-only view for external consumers.
+ * @returns the never-mutating face of this core.
+ */
+view(): SensitivePolicyView
+
+/**
+ * Whether the session is registered with the core.
+ * @param sessionId - the session id.
+ * @returns whether the session is known.
+ */
+knows(sessionId: string): boolean
+
+/**
+ * Register one session, seeding from a restored state when the caller has
+ * one. Re-registration never downgrades an existing record.
+ * @param sessionId - the session id.
+ * @param restored - a previously folded state, when available.
+ */
+registerSession(sessionId: string, restored?: SensitiveSessionState): void
+
+/**
+ * Read one session's policy state.
+ * @param sessionId - the session id.
+ * @returns the state; unknown sessions read as {@link STANDARD_SESSION_STATE}.
+ */
+stateOf(sessionId: string): SensitiveSessionState
+
+/**
+ * Whether the session is locked to trusted-only egress.
+ * @param sessionId - the session id.
+ * @returns whether the session is private.
+ */
+isPrivate(sessionId: string): boolean
+
+/**
+ * Lock a session to trusted-only egress; committed at entry, never undone.
+ * `provider-endpoint` marks the automatic judgement ("a trusted model
+ * endpoint makes the conversation private"). Both causes enforce egress
+ * restriction, and an explicit entry can upgrade an endpoint cause.
+ * @param sessionId - the session id.
+ * @param cause - what drove the session into private.
+ */
+enterPrivate(sessionId: string, cause: SensitivePrivateCause = 'explicit'): void
+
+/**
+ * Raise the session's sensitivity to at least `potential`.
+ * @param sessionId - the session id.
+ */
+markPotential(sessionId: string): void
+
+/**
+ * Raise the session's sensitivity to `sensitive`.
+ * @param sessionId - the session id.
+ */
+markSensitive(sessionId: string): void
+
+/**
+ * Record the provider route one session's model traffic used (on change only).
+ * @param sessionId - the session id.
+ * @param providerId - the provider route of the delegated request.
+ */
+noteProvider(sessionId: string, providerId: string): void
+
+/**
+ * Private sessions whose recorded provider route fails the trust predicate.
+ * The caller executes the actual suspension; the core only judges. A private
+ * session with no observed provider has nothing to suspend yet.
+ * @param isTrusted - trust predicate over provider ids; fails closed.
+ * @returns the suspended session ids, sorted for determinism.
+ */
+suspendedSessions(isTrusted: (provider: string) => boolean): string[]
+```
+
+Source: [`packages/guard/sensitive-policy/src/core.ts`](../../packages/guard/sensitive-policy/src/core.ts)
+
 <a id="ctxsessioncontroller--sessioncontroller"></a>
 
 ### `ctx.sessionController` — `SessionController`

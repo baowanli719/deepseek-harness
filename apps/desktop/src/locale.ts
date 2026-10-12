@@ -1,12 +1,46 @@
 /** Typed English and Chinese copy owned by the Electron shell. */
 
 export const en = {
+  startupLoading: 'Starting…',
+  cliCommandMenu: 'Manage dsh Command…',
+  cliCommandTitle: 'Manage dsh Command',
+  cliCommandLocation: 'Desktop command: {path}',
+  cliCommandSelected: 'Current dsh command: {path}',
+  cliCommandTarget: 'Current launcher target: {path}',
+  cliCommandShadowed: 'Another dsh takes precedence. Remove or reorder that installation to use the Desktop command by default. You can also run the Desktop command by its full path.',
+  cliCommandSelectionUnknown: 'Your shell command could not be verified. An alias or another dsh installation may take precedence.',
+  cliCommandInstalled: 'The Desktop command is installed.',
+  cliCommandNotInstalled: 'Add the Desktop command to your terminal.',
+  cliCommandBroken: 'The Desktop command needs repair.',
+  cliCommandInstall: 'Install',
+  cliCommandRepair: 'Repair',
+  cliCommandRemove: 'Remove',
+  cliCommandClose: 'Close',
+  cliCommandSwitch: 'Continue with the Desktop command?',
+  cliCommandPreserve: 'An existing command will be preserved. Other installations and shell startup files will not be changed.',
+  cliCommandContinue: 'Continue',
+  cliCommandInstallApp: 'Install Desktop in your Applications folder before managing the dsh command.',
+  cliCommandUpdating: 'An update is being installed. Manage the command after installation finishes.',
+  cliCommandNewTerminal: 'Open a new terminal and run dsh --version.',
+  cliCommandRemoved: 'Desktop command registration removed.',
+  cliCommandPreviousRestored: 'The previous launcher has been restored.',
+  cliCommandOtherKept: 'Other command installations have been left in place.',
+  cliCommandBackupKept: 'A previous launcher is preserved at: {path}',
+  cliCommandChanged: 'The command or PATH changed while this dialog was open. Open Manage dsh Command again to review the current state.',
+  cliCommandOwnershipError: 'The command registration or backup changed. No unrelated command was removed.',
+  cliCommandFailed: 'The command could not be updated. Check that the application is installed and the destination is writable, then retry.',
   application: 'Application',
   fileMenu: 'File',
   closePage: 'Close Page or Window',
   aboutMenu: 'About DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'Version V{version}',
+  gsUpdateInvalid: 'The server returned invalid update information. Please contact your administrator.',
+  gsUpdateStale: 'The confirmed release has changed. Please check for updates again.',
+  gsUpdateNotAvailable: 'This release is not available for download yet.',
+  gsUpdateDownloadFailed: 'The installer download or file validation failed. Please try again.',
+  gsUpdateAvailableFrom: 'Downloads are available from {time}.',
+  gsProductServer: 'Server: {server}\nUpdate channel: server client configuration',
   hideApplication: 'Hide DeepSeek Harness',
   hideOtherApplications: 'Hide Others',
   showAllApplications: 'Show All',
@@ -145,12 +179,46 @@ export const en = {
 export type DesktopMessages = { readonly [Key in keyof typeof en]: string }
 
 export const zh = {
+  startupLoading: '正在启动…',
+  cliCommandMenu: '管理 dsh 命令…',
+  cliCommandTitle: '管理 dsh 命令',
+  cliCommandLocation: 'Desktop 命令：{path}',
+  cliCommandSelected: '当前 dsh 命令：{path}',
+  cliCommandTarget: '当前启动器目标：{path}',
+  cliCommandShadowed: '另一个 dsh 的优先级更高。请移除或调整该安装的顺序，以默认使用 Desktop 命令；也可以通过完整路径运行 Desktop 命令。',
+  cliCommandSelectionUnknown: '无法确认 shell 中的命令。别名或另一个 dsh 安装可能具有更高优先级。',
+  cliCommandInstalled: 'Desktop 命令已安装。',
+  cliCommandNotInstalled: '将 Desktop 命令添加到终端。',
+  cliCommandBroken: 'Desktop 命令需要修复。',
+  cliCommandInstall: '安装',
+  cliCommandRepair: '修复',
+  cliCommandRemove: '移除',
+  cliCommandClose: '关闭',
+  cliCommandSwitch: '继续使用 Desktop 命令？',
+  cliCommandPreserve: '现有命令会被保留，不会修改其他安装或 shell 启动文件。',
+  cliCommandContinue: '继续',
+  cliCommandInstallApp: '请先将 Desktop 安装到“应用程序”文件夹，再管理 dsh 命令。',
+  cliCommandUpdating: '正在安装更新。请在安装完成后管理命令。',
+  cliCommandNewTerminal: '打开新终端并运行 dsh --version。',
+  cliCommandRemoved: '已移除 Desktop 命令注册。',
+  cliCommandPreviousRestored: '已恢复之前的启动器。',
+  cliCommandOtherKept: '其他命令安装保持不变。',
+  cliCommandBackupKept: '之前的启动器保留在：{path}',
+  cliCommandChanged: '对话框打开期间命令或 PATH 已改变。请重新打开“管理 dsh 命令”检查当前状态。',
+  cliCommandOwnershipError: '命令注册或备份已改变，未移除无关命令。',
+  cliCommandFailed: '无法更新命令。请检查应用是否已安装、目标位置是否可写，然后重试。',
   application: '应用',
   fileMenu: '文件',
   closePage: '关闭页面或窗口',
   aboutMenu: '关于 DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: '版本 V{version}',
+  gsUpdateInvalid: '服务端返回的更新信息无效，请联系管理员。',
+  gsUpdateStale: '已确认的版本发生变化，请重新检查更新。',
+  gsUpdateNotAvailable: '此版本尚未开放下载。',
+  gsUpdateDownloadFailed: '安装包下载或文件校验失败，请重试。',
+  gsUpdateAvailableFrom: '此版本将于 {time} 开放下载。',
+  gsProductServer: '服务端：{server}\n更新渠道：服务端客户端配置',
   hideApplication: '隐藏 DeepSeek Harness',
   hideOtherApplications: '隐藏其他',
   showAllApplications: '显示全部',
@@ -289,6 +357,20 @@ export const zh = {
 export interface DesktopLocale {
   readonly id: 'en' | 'zh-CN'
   readonly messages: DesktopMessages
+}
+
+/**
+ * Apply the server-delivered product name to the native shell's localized messages.
+ * @param locale - Selected complete dictionary.
+ * @param name - Effective product name from the GS brand store.
+ * @returns A dictionary retaining the selected language and named placeholders.
+ */
+export function withDesktopProductName(locale: DesktopLocale, name: string): DesktopLocale {
+  const messages = { ...locale.messages }
+  for (const key of Object.keys(messages) as (keyof DesktopMessages)[]) {
+    messages[key] = messages[key].replaceAll('DeepSeek Harness', name)
+  }
+  return { id: locale.id, messages }
 }
 
 /** Resolve Electron's locale to one shipped Desktop dictionary. */

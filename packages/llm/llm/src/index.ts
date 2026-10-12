@@ -57,6 +57,8 @@ export type { LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.
 declare module '@deepseek-ai/cordis' {
   interface Context {
     llm: LlmRuntime
+    /** Optional visual-tool provider admitting image prompts and projecting images for text-only models. */
+    visionToolAdmission: VisionToolAdmission
   }
 
   interface Events {
@@ -75,6 +77,22 @@ declare module '@deepseek-ai/cordis' {
     'llm/stream'(this: LlmRuntime, options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk>
 
   }
+}
+
+/** Auxiliary visual-tool provider; durable images remain unchanged while text-only requests receive tool handles. */
+export interface VisionToolAdmission {
+  /**
+   * Whether visual tools can consume this session's uploaded images.
+   * @param agent - session-bearing prompt initiator.
+   * @returns true only while the provider is activated and enabled.
+   */
+  canHandle(agent: { readonly session: { readonly id: string } }): boolean
+  /**
+   * Project immutable request images to text handles naming the visual tools.
+   * @param options - session-bound request and complete message history.
+   * @returns request-only messages; durable message objects must remain unchanged.
+   */
+  projectTextInput(options: { readonly sessionId?: string; readonly messages: readonly RequestMessage[] }): readonly RequestMessage[]
 }
 
 /** Structured provider facts and cause accepted by {@link LlmError}. */
@@ -1070,7 +1088,9 @@ export class LlmRuntime extends TypertRemoteService {
       if (modelInfo.inputModalities !== undefined
         && !modelInfo.inputModalities.includes('image')
         && projectedMessages.some(message => contentHasImage(message.content))) {
-        projectedMessages = projectImagesForTextModel(projectedMessages)
+        const visualTools = this.ctx.get('visionToolAdmission')
+        projectedMessages = visualTools === undefined ? projectImagesForTextModel(projectedMessages)
+          : projectImagesForTextModel(visualTools.projectTextInput({ ...resolvedOptions, messages: projectedMessages }))
       }
       // Tool changes are logged on every route; the route's declared mode selects what it receives.
       const projectedTools = projectToolUpdates(projectedMessages, resolvedOptions.tools, modelInfo.toolUpdate, resolvedOptions.toolHistory)

@@ -9,8 +9,17 @@ import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ModelDirectoryState } from './directory.ts'
 
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotMap {
+    /** Optional model-row decoration supplied by a deployment policy plugin. */
+    'model.option.accessory': { kind: 'single'; scope: 'root'; owner: { selection: ModelSelection } }
+  }
+}
+
 /** Injected business face of the composer model seat. */
 export interface ModelSelectInjected {
+  /** Whether a deployment policy must authorize even the currently selected row. */
+  authorizeCurrentSelection?: boolean
   /** Whether this session supports Agent-bound model inspection and selection. */
   available: boolean
   /** The session's shared directory store (same instance the /model popup reads). */

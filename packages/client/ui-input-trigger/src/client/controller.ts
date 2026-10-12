@@ -205,6 +205,31 @@ export class InputTriggerController {
   }
 
   /**
+   * Open every registered source for one trigger from a toolbar gesture.
+   * @param source - toolbar source identity used to toggle this launcher.
+   * @param hit - trigger position and search query.
+   */
+  toggleAllSources(source: string, hit: TriggerHit): void {
+    if (this.disposed) return
+    if (this.launcher.getSnapshot() === source && this.menu.getSnapshot().open) {
+      this.dismiss()
+      return
+    }
+    const roster = this.deps.roster.sources(hit.trigger)
+    if (!roster.some(item => item.name === source)) {
+      this.dismiss()
+      return
+    }
+    this.stopFetch()
+    this.hit = hit
+    this.launcher.set(source)
+    this.menu.set(seedGroups(this.menu.getSnapshot(), roster))
+    this.reduce({ type: 'hit', hit })
+    this.refreshHeaders(hit, roster)
+    this.fetchCandidates(hit, roster)
+  }
+
+  /**
    * Pointer pick from MenuView: route the clicked candidate through onPick
    * and execute claim/insert outcomes via the scoped input events.
    * @param source - source (group) name.

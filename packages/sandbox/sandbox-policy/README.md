@@ -25,6 +25,8 @@ Use this package to apply one file-effect policy to every confined bash, filesys
 <a id="use-this-package"></a>
 ## Use this package
 
+`constrain(maximum)` registers a disposable live upper bound. Resolution intersects all bounds with deployment defaults, session overrides, and approved explicit modes; callers re-resolve after approval before execution.
+
 Mount this package in any composition where sandbox-enforcing capabilities run: it owns the deployment default and the per-session overrides those capabilities consume, and it contributes the current policy to the model's runtime-context snapshot.
 
 ### When to choose it

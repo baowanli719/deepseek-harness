@@ -13,6 +13,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
+    /** Product About page mark; declared by the product About section. */
+    'gs.about.brand.mark': { kind: 'single'; scope: 'root'; owner: { readonly size: number; readonly className?: string | undefined } }
     /** Optional sidebar account launcher; opens the shell-owned settings panel. */
     'settings.launcher': { kind: 'single'; scope: 'root'; owner: SettingsLauncherOwnerProps }
 
@@ -150,6 +152,8 @@ export interface SettingsLauncherOwnerProps {
   settingsShortcut?: { readonly keys: readonly string[]; readonly aria?: string | undefined }
   /** Open the settings panel. */
   openSettings: () => void
+  /** Open the settings panel on a registered section, when the owner supports section navigation. */
+  openSection?: (id: string) => void
   /** @param id - registered onboarding editor to open explicitly. */
   openOnboarding: (id: string) => void
 }

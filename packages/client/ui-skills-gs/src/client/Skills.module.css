@@ -1,0 +1,18 @@
+.root { display: flex; flex-direction: column; gap: 16px; padding: 16px; color: var(--dsw-alias-label-primary); }
+.header h2 { margin: 0; font-size: 20px; }
+.header p { margin: 8px 0; color: var(--dsw-alias-label-secondary); }
+.header button, .local button { border: 0; border-radius: var(--dsw-radius-md); padding: 8px 12px; cursor: pointer; font: inherit; }
+.list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.row { padding: 12px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); }
+.row p { margin: 4px 0; color: var(--dsw-alias-label-secondary); }
+.row small { display: block; margin-top: 4px; color: var(--dsw-alias-label-secondary); }
+.name { display: flex; align-items: center; gap: 8px; }
+.badge { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.local { padding-top: 12px; border-top: 0.5px solid var(--dsw-alias-border-subtle); }
+.local code { overflow-wrap: anywhere; }
+.local form { display: flex; flex-direction: column; gap: 10px; }
+.local label { display: flex; flex-direction: column; gap: 4px; }
+.local input { width: 100%; box-sizing: border-box; padding: 8px; border: 0.5px solid var(--dsw-alias-border-subtle); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; }
+
+.local input:disabled, .local button:disabled { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); opacity: 0.5; cursor: not-allowed; }

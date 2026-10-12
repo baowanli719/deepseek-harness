@@ -37,6 +37,8 @@ Boot runs in two stages: the module stage adopts the parser-loaded bootstrap bat
 
 ### The boot page
 
+A carrier can provide already localized loading copy through document metadata named `dsh-boot-wordmark` and `dsh-boot-hint` before the entry runs. The boot page reads those values as text, retaining its default copy when metadata is absent. This presentation does not release the Host-injection gate.
+
 The boot page uses plain DOM and local CSS, so bundle and plugin-activation failures remain visible: it shows one spinner node whose CSS arc grows as entries activate, and reports per-entry status. The spinner and its animation phase persist until the full UI replaces the boot page. A plugin that fails import or activation is reported by name with the reason (missing service, import failure, or state) instead of a blank page. The console contains the original import error.
 
 ### The shared module table

@@ -92,6 +92,8 @@ function bashDescription(): string {
     + 'Each call runs in a fresh shell; pass `workdir` instead of using `cd`. '
     + `Managed \`$${DSH_ENV_PREFIX}*\` variables expose current harness environment facts. `
     + 'Long output is truncated to its tail; the full output is saved to a file whose path is reported when available. '
+    + 'Before any delete or move, verify that the resolved absolute target path is the intended one; never run it against a computed path you have not checked. '
+    + 'An unset variable expands to an empty string, so guard variables in such paths with `${VAR:?}`. '
     + 'Commands may run under a file sandbox; a blocked file operation is reported as `[sandbox: file access denied under <mode> mode]`, a policy denial: do not retry another way.'
 }
 
@@ -484,7 +486,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           : undefined
         const policy = approvedMode === undefined
           ? standingPolicy
-          : { ...(standingPolicy as SandboxExecutionPolicy), mode: approvedMode }
+          : sandboxPolicy?.resolve({ ...exec.agent ? { session: exec.agent.session } : {}, mode: approvedMode })
         const workdir = resolveWorkdir(args.workdir, exec, standingPolicy?.workspaceRoot)
         const dshEnv = ctx.shellEnv.collect(exec)
         const request: ShellExecRequest = {

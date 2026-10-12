@@ -41,6 +41,8 @@ kind: "package-reference"
     cwd: /absolute/path/to/workspace
 ```
 
+无法解析的符号链接以 `FS_NOT_FOUND` 拒绝，不能作为普通缺失目录后缀处理。目录列表保留失效链接作为仅含元数据的 `other` 条目；操作时必须重新解析。
+
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `cwd` | `process.cwd()` | 相对路径的基准目录 |

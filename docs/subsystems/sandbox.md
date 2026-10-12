@@ -208,6 +208,14 @@ The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mo
 resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy
 
 /**
+ * Limit every resolution, including explicit escalations, to a live maximum mode.
+ * Multiple constraints can only tighten the policy.
+ * @param maximum - per-call upper bound owned by the registering policy.
+ * @returns disposer removing this constraint.
+ */
+constrain(maximum: (request: SandboxPolicyRequest) => SandboxMode): () => void
+
+/**
  * Read the session override without applying the deployment default.
  * @param session - session whose log supplies the override.
  * @returns the last logged mode, or `undefined` without one.

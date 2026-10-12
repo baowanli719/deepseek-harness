@@ -192,6 +192,9 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
   'sdk-minimal': {
     bundles: ['@deepseek-ai/dsh-sdk-minimal'],
   },
+  'gs-desktop': {
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-gs-app'],
+  },
 }
 
 /** Installation-owned bundle tuples normalized to the shipped template. */
@@ -531,9 +534,10 @@ function collectProfileScopePackages(
   const bundleAnchors = profile.layers
     .filter(layer => !installationPackageNames.has(layer.packageName))
     .map(layer => join(layer.packageDir, 'package.json'))
-  const bundleLinks = dependencyClosure(bundleAnchors, installationPackageNames, declarers, versions)
-  for (const layer of profile.layers) bundleLinks.delete(layer.packageName)
-  return bundleLinks
+  // Anchors kept in the result: a bundle the installation does not supply (an
+  // application-owned product bundle) is itself only reachable from here, and its
+  // patch may name its own subpath plugin entries (for example `<bundle>/vision-bridge`).
+  return dependencyClosure(bundleAnchors, installationPackageNames, declarers, versions)
 }
 
 /**

@@ -9,13 +9,27 @@ const MIME: Readonly<Record<string, string>> = {
 }
 const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>'
 
+/** Carrier-owned, already localized copy shown before Host injections arrive. */
+export interface DesktopBootPresentation {
+  readonly wordmark: string
+  readonly hint: string
+}
+
+function bootPresentation(presentation: DesktopBootPresentation | undefined): string {
+  if (presentation === undefined) return ''
+  const escape = (value: string): string => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  return `<meta name="dsh-boot-wordmark" content="${escape(presentation.wordmark)}"><meta name="dsh-boot-hint" content="${escape(presentation.hint)}">`
+}
+
 /**
  * Read an application-owned static asset; the index waits for asynchronous Host injections.
  * @param request - Local application request.
  * @param root - Packaged Web dist directory.
+ * @param presentation - Optional localized loading copy, inserted as escaped document metadata.
  * @returns Static response, or a missing/invalid path response.
  */
-export async function serveWebDocument(request: Request, root: string): Promise<Response> {
+export async function serveWebDocument(request: Request, root: string, presentation?: DesktopBootPresentation): Promise<Response> {
   if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405 })
   const url = new URL(request.url)
   let pathname: string
@@ -29,7 +43,7 @@ export async function serveWebDocument(request: Request, root: string): Promise<
     throw error
   }
   const content = pathname === '/' || pathname === '/index.html'
-    ? body.toString().replace('<head>', '<head>' + BOOT) : new Uint8Array(body)
+    ? body.toString().replace('<head>', '<head>' + BOOT + bootPresentation(presentation)) : new Uint8Array(body)
   return new Response(request.method === 'HEAD' ? null : content, {
     headers: { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' },
   })
@@ -69,6 +83,8 @@ const PLUGIN_BUNDLE_PATH = /^\/plugins\//u
  * Plugin bundle responses lose their `cache-control` for `no-store`: the Host marks them immutable
  * under a revision that changes every launch, so Chromium's disk cache would only accumulate bundles
  * no later launch can reuse.
+ * Accepted application requests carry the owned Host origin and same-origin fetch metadata;
+ * foreign origins and browser cross-site requests are rejected before attaching credentials.
  * @param request - Request from the application origin.
  * @param host - Owned Host URL.
  * @param cookie - Host-issued authentication cookie.
@@ -77,13 +93,18 @@ const PLUGIN_BUNDLE_PATH = /^\/plugins\//u
 export async function forwardWebRequest(request: Request, host: string, cookie: string): Promise<Response> {
   const source = new URL(request.url)
   const origin = request.headers.get('origin')
-  if (origin !== null && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
+  const fetchSite = request.headers.get('sec-fetch-site')
+  if (source.protocol !== 'dsh-app:' || source.host !== 'app'
+    || (origin !== null && origin !== 'dsh-app://app')
+    || (fetchSite !== null && fetchSite !== 'same-origin')) return new Response(null, { status: 403 })
   const target = new URL(host)
   target.pathname = source.pathname
   target.search = source.search
   const headers = new Headers(request.headers)
-  for (const name of ['host', 'origin', 'cookie', 'sec-fetch-site']) headers.delete(name)
+  for (const name of ['host', 'origin', 'referer', 'cookie', 'sec-fetch-site']) headers.delete(name)
   headers.set('cookie', cookie)
+  headers.set('origin', target.origin)
+  headers.set('sec-fetch-site', 'same-origin')
   const init = { method: request.method, headers, body: request.body, signal: request.signal, duplex: 'half', redirect: 'manual' as const }
   const response = await fetch(target, init)
   const outgoing = new Headers(response.headers)

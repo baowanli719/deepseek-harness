@@ -132,6 +132,13 @@ setPolicy(agent: Agent, policy: ApprovalPolicy): void
 async request(req: ApprovalRequest): Promise<ApprovalOutcome>
 
 /**
+ * Allow a policy owner to reject escalation even when a session selects ask.
+ * @param maximum - live upper bound; never rejects every approval request.
+ * @returns disposer removing this constraint.
+ */
+constrain(maximum: (session: Session) => ApprovalPolicy): () => void
+
+/**
  * Read the session override without applying the configured default.
  * @param session - session whose log supplies the override.
  * @returns the last logged policy, or `undefined` without one.

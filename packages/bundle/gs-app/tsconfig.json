@@ -1,0 +1,43 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../sandbox/sandbox-policy" },
+    { "path": "../../interaction/user-approval" },
+    { "path": "../../guard/sensitive-policy" },
+    { "path": "../../core/tools" },
+    { "path": "../../core/agent" },
+    { "path": "../../core/system-prompt" },
+    { "path": "../../llm/llm" },
+    { "path": "../../../vendor/loader" },
+    { "path": "../../../vendor/include" },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../mcp/mcp-client"
+    },
+    {
+      "path": "../../llm/llm-gs-gateway"
+    },
+    {
+      "path": "../../api/gs-server"
+    },
+    {
+      "path": "../../host/webserver"
+    },
+    {
+      "path": "../../skill/skill"
+    },
+    {
+      "path": "../../skill/gs-server-skills"
+    }
+  ]
+}

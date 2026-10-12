@@ -925,6 +925,23 @@ async prepare(request: DeepSeekLlmApiExtensionRequest): Promise<PreparedDeepSeek
 
 Source: [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../../packages/llm/deepseek-llm-api-extensions/src/index.ts)
 
+<a id="ctxgsllmgateway--gsllmgateway"></a>
+
+### `ctx.gsLlmGateway` — `GsLlmGateway`
+
+The loopback gateway face this plugin publishes as `ctx.gsLlmGateway`: everything a composition needs to route a provider profile through the proxy and to wire the per-boot token into the credential plane.
+
+```ts cordis-catalog
+/**
+ * Provider-profile baseURL route for one server provider id.
+ * @param providerId - provider id inside the route grammar.
+ * @returns the loopback baseURL naming that provider.
+ */
+providerBaseUrl(providerId: string): string
+```
+
+Source: [`packages/llm/llm-gs-gateway/src/types.ts`](../../packages/llm/llm-gs-gateway/src/types.ts)
+
 <a id="ctxllm--llmruntime"></a>
 
 ### `ctx.llm` — `LlmRuntime`
@@ -1081,6 +1098,30 @@ stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 ```
 
 Types: [FileAttachmentRef](attachment.zh.md)
+
+Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
+
+<a id="ctxvisiontooladmission--visiontooladmission"></a>
+
+### `ctx.visionToolAdmission` — `VisionToolAdmission`
+
+Auxiliary visual-tool provider; durable images remain unchanged while text-only requests receive tool handles.
+
+```ts cordis-catalog
+/**
+ * Whether visual tools can consume this session's uploaded images.
+ * @param agent - session-bearing prompt initiator.
+ * @returns true only while the provider is activated and enabled.
+ */
+canHandle(agent: { readonly session: { readonly id: string } }): boolean
+
+/**
+ * Project immutable request images to text handles naming the visual tools.
+ * @param options - session-bound request and complete message history.
+ * @returns request-only messages; durable message objects must remain unchanged.
+ */
+projectTextInput(options: { readonly sessionId?: string; readonly messages: readonly RequestMessage[] }): readonly RequestMessage[]
+```
 
 Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 

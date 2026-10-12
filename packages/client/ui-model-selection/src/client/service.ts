@@ -20,6 +20,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { WeakMapWithValues } from '@deepseek-ai/dsh-util-values'
 import { ModelCatalogDirectory } from './catalog.ts'
 import { ModelDirectory } from './directory.ts'
+import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -39,6 +41,32 @@ export class ModelDirectoryResolver extends Service {
 
   private readonly live: LiveState = { directories: new WeakMapWithValues() }
   private readonly catalog: ModelCatalogDirectory
+  private readonly selectionGuards = new Set<(sessionId: SessionId, selection: ModelSelection) => Promise<boolean>>()
+
+  /** Whether a policy may present a dialog before a model choice. */
+  get requiresAuthorization(): boolean { return this.selectionGuards.size > 0 }
+
+  /**
+   * Register a policy that runs before either model-selection entry changes a session.
+   * @param guard - authorization callback; false cancels the selection.
+   * @returns registration disposer.
+   */
+  registerSelectionGuard(guard: (sessionId: SessionId, selection: ModelSelection) => Promise<boolean>): () => void {
+    this.selectionGuards.add(guard)
+    return () => { this.selectionGuards.delete(guard) }
+  }
+
+  /**
+   * Authorize then submit a model choice, preserving the current model on cancellation.
+   * @param sessionId - owning session.
+   * @param selection - requested provider, model, and effort.
+   * @returns Host outcome, or undefined when authorization was cancelled.
+   */
+  async select(sessionId: SessionId, selection: ModelSelection): Promise<RemoteResult<void> | undefined> {
+    const directory = this.directoryFor(sessionId)
+    for (const guard of this.selectionGuards) if (!await guard(sessionId, selection)) return undefined
+    return directory.select(selection)
+  }
 
   /**
    * @param ctx - owning root context (the service registers itself as `models`).

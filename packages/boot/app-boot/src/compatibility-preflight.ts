@@ -61,7 +61,7 @@ function manifestOf(ctx: Context, name: string, parentURL: string): object | und
 }
 
 /** Prepare profile or preset rows before the owning DSH caller passes them to Loader.
- * Only a compatibility conflict denies a row: an entry whose manifest cannot be resolved keeps
+ * Application admission runs before compatibility checks; an entry whose manifest cannot be resolved keeps
  * the Loader's own import failure. A denied ordinary row gains `disabled`; a native Include that
  * reaches a denied plugin is denied as a whole, because its file is never rewritten.
  * @param ctx Context carrying launcher-owned profile facts; non-profile contexts retain their rows.
@@ -89,8 +89,9 @@ type DenialReporter = (row: EntryOptions, reason: string) => void
 function preflight(
   ctx: Context, entries: readonly EntryOptions[], parentURL: string | undefined, report: DenialReporter,
 ) {
-  const rows = structuredClone(entries) as EntryOptions[]
   const profile = ctx.get('profileContext')
+  const detached = structuredClone(entries) as EntryOptions[]
+  const rows = profile?.transformEntries?.(detached) ?? detached
   if (profile === undefined) return { rows, blocked: false }
   if (parentURL === undefined) throw new Error('Profile compatibility preflight requires a resolution base')
   // A damaged permission file authorizes nothing, but it must not stop the profile from starting.

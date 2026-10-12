@@ -168,3 +168,15 @@ it('does not write a release completion record when Apple proxy cleanup fails', 
     .rejects.toThrow('proxy restoration failed')
   expect(writeFileSync).not.toHaveBeenCalled()
 })
+
+it.each([false, true])('keeps unsigned macOS packaging hardware-free and checks the assembled runtime (directory=%s)', async (directory) => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--unsigned', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), environment, run)
+  expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')
+  expect(packageMacOSArtifacts).not.toHaveBeenCalled()
+  expect(withMacOSNotarizationProxy).not.toHaveBeenCalled()
+  expect(writeFileSync).not.toHaveBeenCalled()
+  for (const call of run.run.mock.calls) {
+    if (call[0].startsWith('run prepare:')) expect(call[3].env.DSH_DESKTOP_UNSIGNED).toBe('1')
+  }
+})

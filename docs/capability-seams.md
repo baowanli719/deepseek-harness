@@ -7,6 +7,20 @@ A service can be a core spine service, a swappable capability seam, a bundle/com
 
 ```mermaid
 flowchart LR
+  pkg_llm["llm"]
+  svc_visionToolAdmission["ctx.visionToolAdmission<br/>Auxiliary visual-tool admission"]
+  pkg_session_controller["session-controller"]
+  pkg_gs_server["gs-server"]
+  svc_gsServer["ctx.gsServer<br/>GS account and authenticated server access"]
+  pkg_llm_gs_gateway["llm-gs-gateway"]
+  pkg_gs_server_skills["gs-server-skills"]
+  pkg_sensitive_policy["sensitive-policy"]
+  svc_gsLlmGateway["ctx.gsLlmGateway<br/>GS model gateway configuration"]
+  svc_gsServerSkillCatalog["ctx.gsServerSkillCatalog<br/>GS server skill catalog"]
+  pkg_ui_skills_gs["ui-skills-gs"]
+  svc_gsServerSkillGate["ctx.gsServerSkillGate<br/>GS server skill permission gate"]
+  svc_gsServerSkillPreferences["ctx.gsServerSkillPreferences<br/>GS server skill preferences"]
+  svc_sensitivePolicy["ctx.sensitivePolicy<br/>Durable private session policy"]
   pkg_hmr["hmr"]
   svc_hmr["ctx.hmr<br/>Serialized module and configuration reloads"]
   pkg_app_boot["app-boot"]
@@ -44,7 +58,6 @@ flowchart LR
   pkg_llm_deepseek["llm-deepseek"]
   pkg_client_file_upload["client-file-upload"]
   svc_fileUploads["ctx.fileUploads<br/>Agent-scoped staged file uploads"]
-  pkg_llm["llm"]
   svc_llm["ctx.llm<br/>LLM adapter registry"]
   pkg_llm_replay["llm-replay"]
   pkg_agent_loop["agent-loop"]
@@ -334,6 +347,10 @@ flowchart LR
   pkg_fs_sandbox --> svc_fs
   pkg_fs_ssh --> svc_fs
   pkg_goal --> svc_goals
+  pkg_gs_server --> svc_gsServer
+  pkg_gs_server_skills --> svc_gsServerSkillCatalog
+  pkg_gs_server_skills --> svc_gsServerSkillGate
+  pkg_gs_server_skills --> svc_gsServerSkillPreferences
   pkg_hmr --> svc_hmr
   pkg_host_directory_picker --> svc_directoryPicker
   pkg_host_directory_picker_browse --> svc_directoryPicker
@@ -345,7 +362,9 @@ flowchart LR
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
   pkg_llm --> svc_llm
+  pkg_llm --> svc_visionToolAdmission
   pkg_llm_deepseek --> svc_llm
+  pkg_llm_gs_gateway --> svc_gsLlmGateway
   pkg_llm_pi_ai --> svc_llm
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
@@ -368,6 +387,7 @@ flowchart LR
   pkg_sandbox_ssh --> svc_sandbox
   pkg_sandbox_windows_acl --> svc_skills
   pkg_schedule --> svc_schedule
+  pkg_sensitive_policy --> svc_sensitivePolicy
   pkg_session --> svc_sessions
   pkg_session_log_deepseek --> svc_deepseekLlmApiExtensions
   pkg_session_persistence --> svc_sessionPersistence
@@ -464,6 +484,15 @@ flowchart LR
   svc_fileReferences --> pkg_api_session_controller
   svc_fileUploads --> pkg_api_session_controller
   svc_fs --> pkg_tool_fs
+  svc_gsLlmGateway --> pkg_llm_gs_gateway
+  svc_gsServer --> pkg_gs_server_skills
+  svc_gsServer --> pkg_llm_gs_gateway
+  svc_gsServer --> pkg_sensitive_policy
+  svc_gsServerSkillCatalog --> pkg_ui_skills_gs
+  svc_gsServerSkillGate --> pkg_gs_server_skills
+  svc_gsServerSkillGate --> pkg_sensitive_policy
+  svc_gsServerSkillPreferences --> pkg_gs_server_skills
+  svc_gsServerSkillPreferences --> pkg_ui_skills_gs
   svc_hmr --> pkg_app_boot
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
@@ -493,6 +522,8 @@ flowchart LR
   svc_sandboxPolicy --> pkg_bash_sandbox
   svc_sandboxPolicy --> pkg_fs_sandbox
   svc_sandboxPolicy --> pkg_terminal_bash
+  svc_sensitivePolicy --> pkg_gs_server_skills
+  svc_sensitivePolicy --> pkg_llm_gs_gateway
   svc_sessionPersistence --> pkg_agent_loop
   svc_sessionPersistence --> pkg_hooks_claude_code
   svc_sessionPersistence --> pkg_hooks_codex
@@ -563,6 +594,8 @@ flowchart LR
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_visionToolAdmission --> pkg_llm
+  svc_visionToolAdmission --> pkg_session_controller
   svc_web --> pkg_tool_web
   svc_webServer --> pkg_client_connection
   svc_webServer --> pkg_client_hmr
@@ -577,6 +610,13 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.visionToolAdmission` | `seam` | [`llm`](../packages/llm/llm) | - | [`llm`](../packages/llm/llm), `session-controller` | - | The GS-bundled Vision Router admits uploaded images and projects text-model tool guidance without rewriting durable history. |
+| `ctx.gsServer` | `core` | [`gs-server`](../packages/api/gs-server) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway), [`gs-server-skills`](../packages/skill/gs-server-skills), [`sensitive-policy`](../packages/guard/sensitive-policy) | - | Owns account generations, secure credential persistence, and authenticated requests to the configured GS endpoint. |
+| `ctx.gsLlmGateway` | `service` | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway) | - | Registers GS model and vision adapters using authenticated server access and sensitive request attribution. |
+| `ctx.gsServerSkillCatalog` | `core` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | `ui-skills-gs` | - | Reads the authenticated account catalog; skill loading rechecks current account, preferences, and privacy policy. |
+| `ctx.gsServerSkillGate` | `service` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | [`gs-server-skills`](../packages/skill/gs-server-skills), [`sensitive-policy`](../packages/guard/sensitive-policy) | - | Combines active account configuration and per-session privacy policy before server skill access. |
+| `ctx.gsServerSkillPreferences` | `core` | [`gs-server-skills`](../packages/skill/gs-server-skills) | - | `ui-skills-gs`, [`gs-server-skills`](../packages/skill/gs-server-skills) | - | Persists global and per-skill enablement and applies changes to subsequent skill access. |
+| `ctx.sensitivePolicy` | `core` | [`sensitive-policy`](../packages/guard/sensitive-policy) | - | [`llm-gs-gateway`](../packages/llm/llm-gs-gateway), [`gs-server-skills`](../packages/skill/gs-server-skills) | - | Restores monotonic privacy transitions through a session projection and flushes transitions before inference or tool access. |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | Owns module and exact configuration watchers; application mutations share its queue and automatic reloads await the application file lock. |
 | `ctx.pluginRegistryProbe` | `core` | [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | - | [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | - | Races public registry responses on the Host; the Client owns the initial registry recommendation. |
 | `ctx.pluginManager` | `core` | [`plugin-manager`](../packages/boot/plugin-manager) | - | [`plugin-manager`](../packages/boot/plugin-manager), `ui-settings-plugin-inventory` | - | Shares profile package operations with the CLI and reports persisted and running state to Web and agent callers. |

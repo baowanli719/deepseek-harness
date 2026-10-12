@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.0-rc.2/gs-model-risk-account-identity/guide.md
+/:
+  en: ab34edd02fe070ad
+  zh: bcefcca57d32b2f5
+/gs-model-risk-signer-identity:
+  en: 0534b47be9568a6a
+  zh: 677d74789b9e8ba2
+/gs-model-risk-signer-identity/change:
+  en: e1cbdb69ade9c402
+  zh: 54df49f920653dfe
+/gs-model-risk-signer-identity/migration:
+  en: f42bb74291ed4a10
+  zh: 42080e07d49ad693

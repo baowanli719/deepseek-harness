@@ -5,6 +5,8 @@ description: Create, read, edit, and check Word documents (.docx), including rep
 
 # Word documents
 
+When `create_word_document` is available, use it for new Word documents containing a title, paragraphs and tables. It writes a new `.docx` in an existing directory without scripts or external services; workspace-write confines output to the workspace, while full access permits external paths. It cannot replace an existing file or render a preview; choose a new filename and deliver the actual created file with `present`. Use the workflow below for edits or more complex layouts when command execution is available.
+
 Use `python-docx` for DOCX creation and ordinary edits. Follow an explicit user or applicable AGENTS.md requirement for a project environment or another library. Otherwise call `load_workspace_dependencies` and execute the returned Python path with its bundled libraries. Do not install packages or discover a system Python for the default workflow. If the tool is unavailable, use an already configured environment and report a missing dependency only when it prevents the requested operation.
 
 Keep source scripts, intermediate files, and final documents in the task workspace; the runtime and this skill directory are read-only resources. Use the user's requested language and preserve an existing document's design unless a redesign is requested.

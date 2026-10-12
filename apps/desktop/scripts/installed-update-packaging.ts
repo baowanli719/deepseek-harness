@@ -14,7 +14,8 @@ import { planInstalledUpdateDistribution } from './installed-update-distribution
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY = resolve(APP_ROOT, '../..')
 const SIGNING_FIELDS = new Set(['DSH_DESKTOP_WINDOWS_CER_FILE', 'DSH_DESKTOP_WINDOWS_SIGNTOOL',
-  'DSH_DESKTOP_WINDOWS_KEY_CONTAINER', 'DSH_DESKTOP_WINDOWS_TOKEN_PIN'])
+  'DSH_DESKTOP_WINDOWS_KEY_CONTAINER', 'DSH_DESKTOP_WINDOWS_TOKEN_PIN',
+  'DSH_DESKTOP_WINDOWS_PFX_FILE', 'DSH_DESKTOP_WINDOWS_PFX_PASSWORD'])
 
 /** Public refusal without credential values or contents of the incident record. */
 export class InstalledUpdateSigningHoldError extends Error {
@@ -41,7 +42,7 @@ export async function assertInstalledUpdateSigningClear(stateFile = join(homedir
 }
 
 /**
- * Restrict builder children to ordinary tool settings and the four file-owned signing inputs.
+ * Restrict builder children to ordinary tool settings and the file-owned signing inputs.
  * @param environment Loaded .env.windows settings, never raw log data.
  * @returns A new environment without upload/LLM credentials or Node preload overrides.
  */
