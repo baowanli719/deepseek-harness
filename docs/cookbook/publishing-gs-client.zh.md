@@ -20,7 +20,7 @@
 
 先完成构建及打包运行时检查。构建和签名方法见[桌面端打包说明](../../apps/desktop/README.zh.md#desktop-packaging)。通知版本必须与安装包的实际产品版本一致，且严格高于已安装客户端版本才会触发更新提示。只修改通知版本不会升级二进制文件，还可能导致反复提示。
 
-通过客户端安装 GS 更新需要通过[原生签名校验](../../apps/desktop/README.zh.md#gs-server-updates)。未签名测试包可以上传并发布手动安装通知；更新说明中必须标明未签名。不要将它描述为已签名的自动更新。宣传依赖后端的功能前，应先部署必要的接口；图片理解使用服务端管理的视觉模型及其专用接口。
+Windows GS 更新要求安装包旁提供带企业签名的发布 manifest（元数据清单），参见[更新信任规则](../../apps/desktop/README.zh.md#gs-server-updates)。安装包本身可以没有 Windows Authenticode，但更新说明须明确区分。旧客户端需要手动安装一次支持清单验签的版本。宣传依赖后端的功能前，应先部署必要接口。
 
 使用 PowerShell、`curl.exe` 和已配置的 `litellm-aliyun` SSH 主机获取文件服务器校验值。将 `GS_RELEASE_INSTALLER` 设置为本地安装包路径，将 `GS_UPLOAD_NETRC` 设置为操作人员的上传凭据文件路径，并从目标部署的密钥配置中取得 `RELEASE_API_TOKEN`。上传账号为 `gs-upload`；操作人员的凭据文件惯例位置为 `%USERPROFILE%\.config\gs-worker\upload.netrc`。令牌、密码和凭据文件不得写入 Git、安装包、命令行参数或操作日志。本地初始化账号不是目标部署的发布凭据。
 
@@ -89,6 +89,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Public download Range failed.' }
 
 文件服务器将公开安装包存放在 `/opt/gs-downloads/`。另一种方式是使用 gsclaw-server 的 `PUT /api/admin/releases/packages/windowsX64/<filename>`，以原始二进制请求体和发布凭据上传；接口返回产物大小、SHA-256 和下载路径。其反向代理必须允许安装包对应的请求体大小。当前部署应使用验证过的 HTTPS 文件服务器链接，避免在发布期间调整代理限制。
 
+使用 `corepack pnpm exec tsx apps/desktop/scripts/sign-gs-release.ts --installer <exe> --url <download-url> --version <version> --key-file <private-pem> --expires-at <ISO-time> --out <exe>.release.json` 生成配套清单，在 Windows 上从仓库根目录运行。操作人员将 Ed25519 PKCS8 私钥保存在 Git 外并限制文件访问；客户端只携带公钥身份。工具检查安装包 ProductVersion，并拒绝客户端不接受的密钥。使用同一 WebDAV 凭据将清单上传到 `/upload/<filename>.release.json`，再验证其匿名 `/downloads/<filename>.release.json` 响应。两个文件上传并验证后才能发布。后续客户端应保留已接受的密钥；替换密钥需要通过旧密钥授权的版本分发下一个内置公钥。此部署没有远程密钥撤销服务。
+
 <a id="publish-notice"></a>
 
 ## 4. 发布更新通知
@@ -144,4 +146,4 @@ $After.appUpdate
 
 Windows 2.2.0 测试安装包已于 2026-10-11 上传并回读通知。其大小为 304,914,491 字节，本地与服务器 SHA-256 一致，匿名 HEAD 返回 200，Range 返回 206 且开头字节一致。打包运行时、原生 Sharp、视觉插件加载、构建身份及输入框控件隐藏检查通过。发布验证未启动已登录客户端，也未验证在线视觉后端。这些记录针对该测试产物，不代表已完成签名生产版本验收。
 
-2.2.2 Windows 安装包于 2026-10-12 以未签名方式构建，因为打包机上签名证书不可用：`gs-worker-2.2.2-win-x64-unsigned.exe`，307,843,114 字节。运行时、Office 转换与技能 CLI 检查通过。该包只能手动分发安装，并在更新说明中标注未签名；客户端无法通过更新流程安装它，安装它的客户端也无法安装后续更新，直到被签名版本替换。
+2.2.2 Windows 客户端尚不支持企业发布 manifest。其原生签名规则拒绝未签名更新；迁移到支持清单验签的客户端需要手动安装一次。后续 Windows 更新使用签名清单和安装包摘要验证。

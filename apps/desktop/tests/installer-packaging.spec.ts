@@ -6,6 +6,7 @@ import { Packager } from 'app-builder-lib'
 import { describe, expect, it, vi } from 'vitest'
 
 const { execute } = vi.hoisted(() => ({ execute: vi.fn(async () => undefined) }))
+const gsVersion = (JSON.parse(readFileSync(new URL('../brand/gs/product.json', import.meta.url), 'utf8')) as { version: string }).version
 vi.mock('node:child_process', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:child_process')>()
   const { promisify } = await import('node:util')
@@ -106,12 +107,12 @@ describe('branded product identity overrides', () => {
   it('extends the GS release family while keeping the bundled Harness runtime version separate', async () => {
     const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
     const { resolveDesktopProductVersion } = await import('../scripts/desktop-release-environment.mjs')
-    const version = '2.2.1-test.20261012.1'
+    const version = `${gsVersion}-test.20261012.1`
     const config = createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.enterprise.officeagent',
       DSH_DESKTOP_PROFILE: 'gs-desktop', DSH_DESKTOP_BUILD_VERSION: version, DSH_DESKTOP_UNSIGNED: '1' }, 'win32', 'x64')
     expect(config.extraMetadata.version).toBe(version)
     expect(resolveDesktopProductVersion({}, '0.2.0-rc.2')).toBe('0.2.0-rc.2')
-    expect(resolveDesktopProductVersion({ DSH_DESKTOP_PROFILE: 'gs-desktop' }, '0.2.0-rc.2')).toBe('2.2.1')
+    expect(resolveDesktopProductVersion({ DSH_DESKTOP_PROFILE: 'gs-desktop' }, '0.2.0-rc.2')).toBe(gsVersion)
   })
   it('packages the gs-worker identity from environment overrides', async () => {
     const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
@@ -135,7 +136,7 @@ describe('branded product identity overrides', () => {
     expect(config.publish).toBeNull()
     expect(config.extraMetadata.author).toEqual({ name: '国盛办公AI' })
     expect(config.extraMetadata.description).toBe('国盛办公AI桌面客户端')
-    expect(config.extraMetadata.version).toBe('2.2.1')
+    expect(config.extraMetadata.version).toBe(gsVersion)
     expect(config.files).toContain('lib/gs-login/**/*')
     expect(config.files).toContain('lib/preload-gs-login.cjs')
     expect(config.files).toContain('renderer/**/*')

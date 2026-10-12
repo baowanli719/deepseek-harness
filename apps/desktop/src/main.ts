@@ -44,6 +44,7 @@ import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashRep
 import { openWelcomeWindow } from './welcome-window.ts'
 import { openGsLoginWindow } from './gs-login-window.ts'
 import { verifyGsUpdateSignature } from './gs-update-signature.ts'
+import { GS_RELEASE_KEYS } from './gs-release-keys.ts'
 import { connectGsLogin, type GsLoginBackend } from './gs-login-backend.ts'
 
 import { WELCOME_IPC, needsWelcome, type WelcomeNotice } from './welcome-api.ts'
@@ -667,12 +668,13 @@ async function main(): Promise<void> {
     directory: join(app.getPath('userData'), 'updates'), platform: process.platform, arch: process.arch,
     messages: () => locale.messages,
     verify: path => verifyGsUpdateSignature(path),
+    manifestKeys: GS_RELEASE_KEYS,
     install: async (path) => {
       if (process.platform === 'win32') {
         await new Promise<void>((resolve, reject) => {
           const environment = Object.fromEntries(Object.entries(process.env)
             .filter(([name]) => !/key|secret|token|password|^NODE_OPTIONS$|^NODE_PATH$|^ELECTRON_RUN_AS_NODE$/iu.test(name)))
-          const child = spawn(path, ['/S', `/D=${dirname(process.execPath)}`], {
+          const child = spawn(path, ['--updated', '/S', '--force-run', `/D=${dirname(process.execPath)}`], {
             detached: true, stdio: 'ignore', windowsHide: true, env: environment,
           })
           child.once('error', reject)

@@ -6,6 +6,7 @@ import { valid } from 'semver'
 import type { GsAppUpdateConfig } from '@deepseek-ai/dsh-gs-server'
 import type { DesktopReleaseSource } from './update-coordinator.ts'
 import type { DesktopMessages } from './locale.ts'
+import { verifyGsReleaseArtifact, verifyGsReleaseManifest, type GsReleaseManifest } from './gs-release-manifest.ts'
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -55,8 +56,10 @@ export interface GsDesktopReleaseOptions {
   arch: string
   /** Launch a completely written installer after the shell stops active tasks. */
   install(path: string): Promise<void>
-  /** Verify OS trust and the installed application's signing identity; failure refuses installation. */
+  /** Verify OS trust on platforms without enterprise manifest authorization; failure refuses installation. */
   verify(path: string): Promise<void>
+  /** Embedded release keys require a detached signed manifest for Windows installers. */
+  manifestKeys?: Readonly<Record<string, string>>
   /** Selected native dictionary, resolved again after a locale change. */
   messages(): DesktopMessages
 }
@@ -65,7 +68,7 @@ export interface GsDesktopReleaseOptions {
 export class GsDesktopReleaseSource implements DesktopReleaseSource {
   private readonly abort = new AbortController()
   private checked: { notice: GsAppUpdateConfig; url: string } | undefined
-  private prepared: { version: string; path: string } | undefined
+  private prepared: { version: string; path: string; manifest?: GsReleaseManifest } | undefined
 
   constructor(private readonly options: GsDesktopReleaseOptions) {}
 
@@ -90,11 +93,12 @@ export class GsDesktopReleaseSource implements DesktopReleaseSource {
   }
 
   /**
-   * Download the exact confirmed notice into a new private file and validate its native format.
+   * Download the confirmed release into a private file and validate its format and release authorization.
    * @param version - Version confirmed in the native dialog.
    * @param progress - Bounded percentage updates; 100 is emitted only after file validation.
    */
   async download(version: string, progress: (percent: number) => void): Promise<void> {
+    this.prepared = undefined
     const checked = this.checked
     if (checked === undefined || checked.notice.version !== version) throw new Error(this.options.messages().gsUpdateStale)
     if (checked.notice.availableFrom !== undefined && Date.now() < Date.parse(checked.notice.availableFrom)) {
@@ -111,6 +115,34 @@ export class GsDesktopReleaseSource implements DesktopReleaseSource {
       if (!allowed) throw new Error(this.options.messages().gsUpdateNotAvailable)
     }
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(30 * 60_000)])
+    let manifest: GsReleaseManifest | undefined
+    if (this.options.platform === 'win32' && this.options.manifestKeys !== undefined) {
+      const url = new URL(checked.url)
+      url.pathname += '.release.json'
+      const metadata = await this.options.request(url.href, {
+        method: 'GET', credentials: 'omit', redirect: 'error', cache: 'no-store', signal,
+      })
+      if (!metadata.ok || metadata.body === null) throw new Error(this.options.messages().gsUpdateManifestInvalid)
+      const reader = metadata.body.getReader()
+      const chunks: Uint8Array[] = []
+      let bytes = 0
+      try {
+        for (;;) {
+          signal.throwIfAborted()
+          const chunk = await reader.read()
+          if (chunk.done) break
+          bytes += chunk.value.byteLength
+          if (bytes > 16_384) throw new Error('Release manifest exceeds the size limit')
+          chunks.push(chunk.value)
+        }
+        manifest = verifyGsReleaseManifest(JSON.parse(Buffer.concat(chunks).toString('utf8')),
+          { version, url: checked.url, platform: this.options.platform, arch: this.options.arch }, this.options.manifestKeys)
+      } catch (cause) {
+        throw new Error(this.options.messages().gsUpdateManifestInvalid, { cause })
+      } finally {
+        await reader.cancel().catch((_cause: unknown) => {})
+      }
+    }
     const response = await this.options.request(checked.url, { method: 'GET', credentials: 'omit', redirect: 'error', cache: 'no-store', signal })
     if (!response.ok || response.body === null) throw new Error(this.options.messages().gsUpdateDownloadFailed)
     await mkdir(this.options.directory, { recursive: true, mode: 0o700 })
@@ -128,7 +160,7 @@ export class GsDesktopReleaseSource implements DesktopReleaseSource {
           const chunk = await reader.read()
           if (chunk.done) break
           received += chunk.value.byteLength
-          if (received > 2 * 1024 ** 3) throw new Error(this.options.messages().gsUpdateDownloadFailed)
+          if (received > (manifest?.size ?? 2 * 1024 ** 3)) throw new Error(this.options.messages().gsUpdateDownloadFailed)
           await file.writeFile(chunk.value)
           if (total > 0 && Number.isFinite(total)) progress(Math.min(98, received * 100 / total))
         }
@@ -155,8 +187,8 @@ export class GsDesktopReleaseSource implements DesktopReleaseSource {
       }
       signal.throwIfAborted()
       await rename(partial, target)
-      await this.options.verify(target)
-      this.prepared = { version, path: target }
+      await this.verifyArtifact(target, manifest)
+      this.prepared = { version, path: target, ...(manifest === undefined ? {} : { manifest }) }
       progress(100)
     } catch (cause) {
       await rm(partial, { force: true })
@@ -172,11 +204,23 @@ export class GsDesktopReleaseSource implements DesktopReleaseSource {
   async install(version: string): Promise<void> {
     this.abort.signal.throwIfAborted()
     if (this.prepared?.version !== version) throw new Error(this.options.messages().gsUpdateStale)
-    await this.options.verify(this.prepared.path)
+    await this.verifyArtifact(this.prepared.path, this.prepared.manifest)
     this.abort.signal.throwIfAborted()
     await this.options.install(this.prepared.path)
   }
 
   /** Cancel network work and reject later download or installer handoffs. */
   dispose(): void { this.abort.abort() }
+
+  private async verifyArtifact(path: string, manifest: GsReleaseManifest | undefined): Promise<void> {
+    if (manifest === undefined) {
+      await this.options.verify(path)
+      return
+    }
+    try {
+      await verifyGsReleaseArtifact(path, manifest)
+    } catch (cause) {
+      throw new Error(this.options.messages().gsUpdateIntegrityFailed, { cause })
+    }
+  }
 }
