@@ -405,7 +405,7 @@ Windows 打包命令通过 `DESKTOP_PACKAGING_RECORD` 输出 `.desktop-build/pac
 
 Windows 打包将 7-Zip 过滤器固定为 `BCJ`，以兼容内置的 NSIS 解码器。这样可以保留 x64 安装包中由依赖携带的 ARM64 二进制文件；自动 ARM64 过滤会生成该解码器无法解压的条目。
 
-NSIS 在安装阶段清理临时解压目录，完成后才显示完成页或自动启动应用。已安装的生产依赖保持为普通文件；启动时不会再次解压。安装仍会写入完整的应用目录树。
+NSIS 在安装阶段清理临时解压目录，完成后才显示完成页或自动启动应用。所有用户安装请求提权前，等待中的父进程释放对已安装目录的句柄，让管理员子进程可以替换该目录。已安装的生产依赖保持为普通文件；启动时不会再次解压。安装仍会写入完整的应用目录树。
 
 在 `.env.windows` 中填写 `DSH_DESKTOP_WINDOWS_CER_FILE`（公开叶证书）和 `DSH_DESKTOP_WINDOWS_SIGNTOOL`（SafeNet 兼容的 SignTool），然后只配置一种签名身份。使用 SafeNet USB Token 时，设置 `DSH_DESKTOP_WINDOWS_KEY_CONTAINER`（匹配的私钥容器）和 `DSH_DESKTOP_WINDOWS_TOKEN_PIN`（Token Password）；私钥仍保留在 USB Token。使用无 USB Token 的软件代码签名证书时，设置 `DSH_DESKTOP_WINDOWS_PFX_FILE`（包含证书和私钥的 PKCS#12 `.pfx` 或 `.p12` 文件）和 `DSH_DESKTOP_WINDOWS_PFX_PASSWORD`（私钥口令；显式空值对应未加密文件）。同时配置两种身份会使配置检查失败。不要把证书、PFX 文件或本地凭据文件提交到 Git。
 
@@ -448,7 +448,7 @@ macOS 打包在组装 App 时、代码签名前写入 `Contents/Resources/app-up
 
 GS 的发布版本、更新说明、各平台下载地址及开放时间来自认证后的服务端配置。登录和刷新带来的配置变化通过不含凭据的 Host IPC 信号触发主动检查；启动、定时及手动检查也会拉取当前通知。当前平台适用且严格高于已安装版本的更新，会在每次应用运行期间按版本去重并自动弹出原生通知。通知和 GS 侧栏操作展示服务端说明，确认后才下载。开放时间尚未到达时仅提醒。
 
-GS 更新仅接受不重定向的 HTTPS 下载，遵守服务端可用时间与每日下载窗口，并在下载后、安装前分别进行原生签名校验。Windows 要求下载安装包的签名者与已安装应用具有相同的 CN、O、C 主体属性并包含时间戳，同身份证书续期不影响更新；macOS 固定已安装应用的 Team ID，并要求通过 Gatekeeper。GS 未签名安装包（`pnpm run package:win:x64:unsigned`，产物为 `gs-worker-<version>-win-x64-unsigned.exe`）不能通过客户端更新流程安装，只能手动分发安装，并在更新说明中标注未签名；已安装的未签名客户端同样无法安装后续 GS 更新，直到被签名版本替换。GS 登出与过期会使桌面返回登录窗口。
+GS 更新仅接受不重定向的 HTTPS 下载，并遵守服务端可用时间与每日下载窗口。Windows 客户端从安装包 URL 路径追加 `.release.json` 的地址获取 Ed25519 企业发布 manifest（元数据清单），使用应用内置公钥验签。签名内容绑定产品、运行时家族、版本、目标平台、URL、大小、SHA-256 和有效期。下载后和安装前均重新核对文件及有效期；清单缺失或无效时不会退回接受未签名文件。此企业更新渠道不要求 Windows Authenticode，因此未签名客户端在一次性安装内置发布公钥的版本后，可以直接更新。macOS 保留已安装应用的 Team ID 和 Gatekeeper 校验。GS 登出与过期会使桌面返回登录窗口。
 
 Windows 下载完成后的更新确认说明应用会在安装期间关闭、完成后自动打开，并提示期间不要重复启动。安装器携带 `--updated` 重启应用并直接打开工作区时，壳会将主窗口前置并聚焦一次，不启用永久置顶。启动进入欢迎页时会清除此请求，使后续登录保留正常的激活行为。Windows 普通启动激活工作区时也会将窗口前置。
 

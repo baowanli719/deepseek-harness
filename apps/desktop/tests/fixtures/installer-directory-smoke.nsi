@@ -21,6 +21,15 @@ LangString decompressionFailed ${LANG_ENGLISH} "Payload extraction failed"
 
 Section
   InitPluginsDir
+  !ifdef PARENT_INSTALLER
+    SetOutPath "${TARGET_DIR}"
+    !ifdef RELEASE_PARENT
+      !insertmacro dshReleaseInstallDirectory
+    !endif
+    ExecWait '"${PARENT_INSTALLER}" /S' $R0
+    SetErrorLevel $R0
+    Quit
+  !endif
   !ifdef SOURCE_DLL
     File "/oname=$PLUGINSDIR\window-frame.dll" "${SOURCE_DLL}"
   !endif

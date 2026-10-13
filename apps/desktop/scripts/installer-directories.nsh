@@ -6,6 +6,12 @@ Var dshOldDirectory
 Var dshOldMoved
 Var dshNewMoved
 
+; The non-elevated NSIS parent waits for its elevated child. Its current-directory
+; handle must not prevent that child from renaming an existing installation.
+!macro dshReleaseInstallDirectory
+  SetOutPath $PLUGINSDIR
+!macroend
+
 !macro dshExtractPayload FILE
   !ifmacrodef customInstallerExtract
     !insertmacro customInstallerExtract "${FILE}"
