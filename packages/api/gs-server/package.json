@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-gs-server",
   "description": "gsclaw-server integration: token state machine with encrypted-at-rest refresh token, authenticated HTTP client with 401 retry, endpoint resolution, server ClientConfig cache, brand download, private /api/gs-server/* host routes, and log export",
-  "version": "0.2.1-rc.1",
+  "version": "0.2.1-rc.2",
   "publishConfig": {
     "access": "public"
   },

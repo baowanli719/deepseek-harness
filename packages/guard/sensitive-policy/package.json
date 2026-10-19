@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-sensitive-policy",
   "description": "Sensitive-data compliance: private-session policy restricting sessions to trusted model routes, egress tool restriction, x-gsclaw-sensitive audit header injection, and suspension on trust revocation",
-  "version": "0.2.1-rc.1",
+  "version": "0.2.1-rc.2",
   "publishConfig": {
     "access": "public"
   },
