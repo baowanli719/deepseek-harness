@@ -7,6 +7,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './Skills.module.css'
 import { NS, zh, en } from './locale.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-link-preview/client'
+import { createGsLinkPreviewProvider } from './link-preview.ts'
 
 interface SkillRow {
   readonly name: string
@@ -144,9 +146,10 @@ function SkillsSection({ t, readSkills: load, readLocalInfo: localInfo, createLo
   </section>
 }
 
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'linkPreviews']
 
 export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.linkPreviews.register(createGsLinkPreviewProvider()), 'gs skills source reader')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'gs skills dictionary')
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'gs-skills', order: 110,

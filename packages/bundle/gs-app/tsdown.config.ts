@@ -33,7 +33,7 @@ export default defineConfig([
     clean: false,
   },
   {
-    entry: ['lib/types/skills-routes.js'],
+    entry: ['lib/types/skills-routes.js', 'lib/types/link-preview.js'],
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',

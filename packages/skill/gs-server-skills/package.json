@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-gs-server-skills",
   "description": "Server-executed skill bridges (run_data_query / run_mcp_skill) and administrator-controlled local skill trust (name + SHA256 trusted-only)",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.1-rc.1",
   "publishConfig": {
     "access": "public"
   },

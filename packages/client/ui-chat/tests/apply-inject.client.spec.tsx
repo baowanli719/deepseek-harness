@@ -240,6 +240,29 @@ describe('Chat inject API', () => {
     await b.runtime.dispose()
   })
 
+  it('offers links to plugins before the browser preference and resumes normal opening after disposal', async () => {
+    const b = await bench()
+    try {
+      const { injected } = b.chatViewApi(b.rootReference)
+      const claimed = vi.fn()
+      const remove = b.runtime.ctx.on('chat/open-link', (sessionId, url) => {
+        if (!url.startsWith('https://source.test/')) return
+        claimed(sessionId, url)
+        return true
+      })
+      injected.openExternalLink('https://source.test/original')
+      expect(claimed).toHaveBeenCalledWith(ROOT, 'https://source.test/original')
+      expect(b.sidebarRight.openTab).not.toHaveBeenCalled()
+      injected.openExternalLink('https://other.test/')
+      expect(b.sidebarRight.openTab).toHaveBeenCalledWith('browser', { params: { url: 'https://other.test/' } })
+      remove()
+      injected.openExternalLink('https://source.test/original')
+      expect(b.sidebarRight.openTab).toHaveBeenLastCalledWith('browser', { params: { url: 'https://source.test/original' } })
+    } finally {
+      await b.runtime.dispose()
+    }
+  })
+
   it('opens message HTTP(S) links in the system browser when no Sidebar Browser is registered', async () => {
     const b = await bench()
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)

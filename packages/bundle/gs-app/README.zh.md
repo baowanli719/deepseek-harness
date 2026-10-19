@@ -52,7 +52,10 @@ Word 输出从完整临时文件进行独占复制，因此可写的 exFAT/FAT32
 | `serverName` | `vision` | MCP 命名空间；工具以 `mcp__<serverName>__analyze_image` 出现 |
 | `toolCallTimeoutMs` | `120000` | 单次调用超时；保持在视觉服务器自身 110 秒请求超时之上，让其可读错误先生效 |
 
+`gs-link-preview` 插件为共享的 [Link Preview 阅读页](../../client/ui-link-preview/README.zh.md)提供认证后的制度原文。只读 `/api/gs-server/link-preview?url=...` 路由要求同源回环访问，只接受当前 GS 端点的 origin 和部署前缀，后接 `/api/v1/zhidu/files/` 与 1～25 位数字 ID。目标地址不匹配时返回 HTTP 409 和 `source_endpoint_mismatch`；授权失败仍为 HTTP 403。网关令牌由 `gsServer.fetch` 持有并复用其刷新重试；请求拒绝重定向。`maxResponseBytes` 默认为 2097152 个未压缩上游响应字节，`requestTimeoutMs` 默认为 120000。关闭阅读页会取消请求。存在 JSON `content` 时提取该字段，其他成功响应体按纯文本保留。
+
 <a id="model-experience"></a>
+
 ## 模型体验
 
 ### 系统提示词
