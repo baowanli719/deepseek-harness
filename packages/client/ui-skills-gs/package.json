@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-skills-gs",
   "description": "gs-worker Skills settings page",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.1-rc.1",
   "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/deepseek-ai/deepseek-harness.git", "directory": "packages/client/ui-skills-gs" },
   "type": "module",
@@ -13,11 +13,12 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "dsh": { "client": { "inject": ["@deepseek-ai/dsh-client-ui-settings-general"], "platform": "web" } },
+  "dsh": { "client": { "inject": ["@deepseek-ai/dsh-client-ui-settings-general", "@deepseek-ai/dsh-client-ui-link-preview"], "platform": "web" } },
   "scripts": { "bundle": "tsdown", "watch": "tsdown --watch" },
   "license": "MIT",
   "peerDependencies": { "@deepseek-ai/cordis": "workspace:~" },
   "devDependencies": {
+    "@deepseek-ai/dsh-client-ui-link-preview": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings-general": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-client-locale": "workspace:*",

@@ -93,6 +93,7 @@
     { "path": "./packages/client/ui-brand-official" },
     { "path": "./packages/client/ui-brand-gs" },
     { "path": "./packages/client/ui-account-gs" },
+    { "path": "./packages/client/ui-link-preview" },
     { "path": "./packages/client/ui-skills-gs" },
     { "path": "./packages/client/ui-model-risk-gs" },
     { "path": "./packages/client/ui-approval" },

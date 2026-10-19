@@ -52,7 +52,10 @@ The bundle includes `dsh-vision-router` 3.0.3 with the GS product patch and Shar
 | `serverName` | `vision` | MCP namespace; the tool appears as `mcp__<serverName>__analyze_image` |
 | `toolCallTimeoutMs` | `120000` | Per-call timeout; stays above the vision server's own 110 s request timeout so its readable error wins |
 
+The `gs-link-preview` plugin serves authenticated policy text to the shared [Link Preview reader](../../client/ui-link-preview/README.md). Its read-only `/api/gs-server/link-preview?url=...` route requires same-origin loopback access and accepts only the current GS endpoint origin and deployment prefix followed by `/api/v1/zhidu/files/` and a 1–25 digit ID. A destination mismatch returns HTTP 409 with `source_endpoint_mismatch`; authorization failures retain HTTP 403. Gateway tokens stay in `gsServer.fetch`, including its refresh retry; redirects are refused. `maxResponseBytes` defaults to 2097152 uncompressed upstream bytes and `requestTimeoutMs` to 120000. Closed readers cancel their requests. JSON `content` is extracted when available; other successful bodies remain literal text.
+
 <a id="model-experience"></a>
+
 ## Model Experience
 
 ### System prompt

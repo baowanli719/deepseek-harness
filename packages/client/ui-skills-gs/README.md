@@ -28,6 +28,8 @@ Unavailable server skills display the Host's specific cause: client execution ha
 
 Local creation always shows its permission status. When the administrator disables creation, the form stays visible with gray disabled controls and guidance to contact the administrator. Signed-out accounts and failed permission refreshes cannot submit the form.
 
+制度 source links register on `ctx.linkPreviews`. Ordinary clicks open the shared right Sidebar reader, whose request uses the Host GS proxy and never exposes gateway tokens. The reader formats Markdown `content` with a raw-text view, preserves malformed-format fallbacks, reports truncation, and asks the user to sign in again after an unrecoverable 401.
+
 ## Build and verify
 
 The settings page is served from `lib/client.js`, independently of the Host's `lib/index.js`. For a focused rebuild, run `pnpm exec tsc -b packages/client/ui-skills-gs` at the repository root, then run `pnpm exec tsdown --config tsdown.config.ts --env.DSH_BUILD_FACE client` in this package. Confirm that the build emits `lib/client.js`; a successful Host-only build does not update the page. When replacing an installed bundle, verify the browser artifact contains the new reason fields and check the page after restarting the client.

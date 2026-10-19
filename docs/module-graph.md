@@ -179,6 +179,7 @@ flowchart TD
     pkg_client_ui_input_trigger["client-ui-input-trigger"]
     pkg_client_ui_jobs["client-ui-jobs"]
     pkg_client_ui_layout["client-ui-layout"]
+    pkg_client_ui_link_preview["client-ui-link-preview"]
     pkg_client_ui_message_feedback["client-ui-message-feedback"]
     pkg_client_ui_model_risk_gs["client-ui-model-risk-gs"]
     pkg_client_ui_model_selection["client-ui-model-selection"]
@@ -1455,6 +1456,7 @@ flowchart TD
 | [`client-ui-input-trigger`](../packages/client/ui-input-trigger) | `client` | — |
 | [`client-ui-jobs`](../packages/client/ui-jobs) | `client` | — |
 | [`client-ui-layout`](../packages/client/ui-layout) | `client` | — |
+| [`client-ui-link-preview`](../packages/client/ui-link-preview) | `client` | — |
 | [`client-ui-message-feedback`](../packages/client/ui-message-feedback) | `client` | — |
 | [`client-ui-model-risk-gs`](../packages/client/ui-model-risk-gs) | `client` | — |
 | [`client-ui-model-selection`](../packages/client/ui-model-selection) | `client` | — |

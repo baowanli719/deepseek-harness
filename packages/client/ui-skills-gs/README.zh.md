@@ -28,6 +28,8 @@ kind: "package-reference"
 
 本地创建始终展示权限状态。管理员禁用创建时，表单仍显示，控件变灰禁用，并引导联系管理员。未登录账户和权限刷新失败时不能提交表单。
 
+制度来源链接通过 `ctx.linkPreviews` 注册。普通点击打开共享的右侧原文阅读页，请求经 Host GS 代理发送，不向浏览器暴露网关令牌。阅读页排版 Markdown `content` 并提供原始文本视图，保留格式异常时的原文回退，提示截断内容，并在无法恢复的 401 后引导用户重新登录。
+
 ## Build and verify
 
 设置页面由 `lib/client.js` 提供，与 Host 的 `lib/index.js` 分开。局部构建时，在仓库根运行 `pnpm exec tsc -b packages/client/ui-skills-gs`，再在本包运行 `pnpm exec tsdown --config tsdown.config.ts --env.DSH_BUILD_FACE client`。确认生成 `lib/client.js`；仅 Host 构建成功不会更新页面。替换已安装的构建包时，确认浏览器产物包含新的原因字段，并重启客户端检查页面。

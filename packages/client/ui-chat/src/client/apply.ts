@@ -1,6 +1,7 @@
 /** Register the Chat Conversation target, renderers, stats, and details surface. */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from './contract/links.ts'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -226,6 +227,7 @@ export function apply(ctx: Context): void {
             ctx.get('inputTriggers')?.sessionOf(scope).openReference('skill', { ref: `/${name}` })
           },
           openExternalLink: (url) => {
+            if (ctx.bail('chat/open-link', sessionId, url) === true) return
             if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
               ctx.sidebarRight.openTab('browser', { params: { url } })
             } else {
