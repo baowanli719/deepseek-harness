@@ -123,7 +123,7 @@ export async function packageMacOSArtifacts(
       [dmgOutput, `${base}.dmg`],
       [zipOutput, `${base}.zip`],
       ...gsProduct ? [] : [[zipOutput, `${base}.zip.blockmap`] as const],
-      ...gsProduct ? [] : [[zipOutput, desktopUpdateMetadataFilename(version, 'darwin')] as const],
+      ...gsProduct ? [] : [[zipOutput, desktopUpdateMetadataFilename(version, 'darwin', update!.channel)] as const],
     ] as const
     for (const [output, filename] of artifacts) {
       const file = join(output, filename)

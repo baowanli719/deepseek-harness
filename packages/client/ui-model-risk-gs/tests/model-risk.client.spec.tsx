@@ -275,8 +275,9 @@ describe('model picker consent flow', () => {
       failures: [], status: 'ready', pending: null, error: null,
     })
     render(<ModelSelect locked={false} available authorizeCurrentSelection directory={directory} load={() => {}}
-      t={makeTranslate(modelZh)} renderSlot={(_, owner: object) =>
-        <ModelRiskBadge selection={(owner as { selection: ModelSelection }).selection} {...api} t={makeTranslate(zh)} />}
+      t={makeTranslate(modelZh)} renderSlot={(slot, owner: object, options) => slot === 'model.option.accessory'
+        ? <ModelRiskBadge selection={(owner as { selection: ModelSelection }).selection} {...api} t={makeTranslate(zh)} />
+        : options?.fallback ?? null}
       select={async (picked) => {
         if (!await controller.authorize(SID, picked)) return undefined
         directory.update((state) => { state.current = picked })

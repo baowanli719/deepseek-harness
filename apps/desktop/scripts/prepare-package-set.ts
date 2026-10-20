@@ -212,6 +212,7 @@ function main(): void {
       if (file.endsWith('.tgz')) rmSync(join(pluginOutput, file))
     }
     const invocation = pnpmInvocation(['--config.manage-package-manager-versions=false', '--config.ignore-scripts=true',
+      '--config.pm-on-fail=warn',
       '--dir', pluginDir, 'pack', '--pack-destination', pluginOutput])
     capture(invocation.command, invocation.args)
     inputs.push(pluginOutput)

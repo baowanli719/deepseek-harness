@@ -20,6 +20,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import Tools from '@deepseek-ai/dsh-tools'
 import AgentPreset from '@deepseek-ai/dsh-agent-preset'
 import Presets from '@deepseek-ai/dsh-agent-preset-registry'
+import FileSystem from '@deepseek-ai/dsh-fs-local'
+import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import { sanitizeGsSkillEntries } from '../src/skill-policy.ts'
 
 const filesystem = { id: 'skill-filesystem', name: '@deepseek-ai/dsh-skill-filesystem' }
@@ -116,6 +118,8 @@ it('enforces live server permissions through the Loader, registry, and newly mou
   await writeFile(join(bundle, 'cordis.patch.yml'), JSON.stringify([{ insert: [
     { id: 'llm', name: 'cordis:llm' }, { id: 'sessions', name: 'cordis:sessions' },
     { id: 'projections', name: 'cordis:projections' }, { id: 'prompt', name: 'cordis:prompt' },
+    { id: 'fs', name: 'cordis:fs', config: { cwd: home } },
+    { id: 'working-directory', name: 'cordis:working-directory', config: { defaultDirectory: home } },
     { id: 'tools', name: 'cordis:tools' }, { id: 'agents', name: 'cordis:agents' },
     { id: 'loop', name: 'cordis:loop', config: { agents: [] } },
     { id: 'registry', name: 'cordis:registry' },
@@ -142,6 +146,7 @@ it('enforces live server permissions through the Loader, registry, and newly mou
       llm: LlmRuntime, sessions: SessionStore, projections: Projections, prompt: SystemPrompt,
       tools: Tools, agents: AgentRegistry, loop: AgentLoop, registry: SkillRegistry,
       server: RemoteServer, gs: gsSkills, presets: Presets, preset: AgentPreset, catalog: skillTool,
+      fs: FileSystem, 'working-directory': WorkingDirectory,
     })
   })
   const agent = await ctx.agentLoop.create(SessionId('local-policy'), { provider: 'test', model: 'test' })
