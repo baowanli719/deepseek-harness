@@ -1451,6 +1451,8 @@ export interface Config {
   readonly clientVersion: string
   /** Client platform reported to the gateway; defaults to the running OS. */
   readonly clientPlatform?: GsClientIdentity['platform']
+  /** Enterprise email domain completing bare mailbox prefixes in email-code login; defaults to `@gszq.com`. */
+  readonly emailDomain?: string
   /**
    * Refresh-token protector. Defaults to Windows DPAPI or macOS Keychain-backed
    * AES-GCM; other platforms require an injected OS-backed implementation.

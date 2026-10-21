@@ -214,7 +214,7 @@ Web 侧的对应命令是 `pnpm run dev:web` 与 `pnpm run start:web`，见[开�
 
 ### 启动引导
 
-`gs-desktop` profile 使用从 `dsh-desktop` 迁移的账号密码和邮箱验证码登录窗。启动时读取 Host 的 gs-server 会话，有已密封的 refresh token 时先恢复会话；未登录则打开 440×700 的密码或邮箱验证码表单。表单仅调用 Host 的私有回环路由，登录成功后进入工作区。上游 Desktop profile 继续使用原有欢迎流程。
+`gs-desktop` profile 使用从 `dsh-desktop` 迁移的账号密码和邮箱验证码登录窗。启动时读取 Host 的 gs-server 会话，有已密封的 refresh token 时先恢复会话；未登录则打开 440×700 的密码或邮箱验证码表单。表单仅调用 Host 的私有回环路由，登录成功后进入工作区。邮箱验证码登录支持只输入邮箱前缀或完整 `@gszq.com` 邮箱；gs-server 服务会把前缀补全为企业邮箱域名，在发送验证码前拒绝其他域名，登录窗口按界面语言提示被拒绝的账号。上游 Desktop profile 继续使用原有欢迎流程。
 
 API Key 输入框初始为空，并通过 `autocomplete="new-password"` 请求 Chromium 不要自动填入已保存的登录密码。
 

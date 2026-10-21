@@ -11,7 +11,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
-import { GsAuthStorageError } from './auth.ts'
+import { GsAuthStorageError, GsEmailAccountError } from './auth.ts'
 import { GatewayError } from './client.ts'
 import {
   GS_SERVER_BRAND_PATH,
@@ -79,6 +79,10 @@ function finishOperationFailure(res: ServerResponse, cause: unknown): void {
   }
   if (cause instanceof GsAuthStorageError) {
     finishJson(res, 503, error(cause.message, { code: 'safe_storage_unavailable' }))
+    return
+  }
+  if (cause instanceof GsEmailAccountError) {
+    finishJson(res, 400, error(cause.message, { code: 'invalid_email_account' }))
     return
   }
   throw cause

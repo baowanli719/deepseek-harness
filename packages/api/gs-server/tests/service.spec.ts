@@ -211,6 +211,28 @@ it('maps gateway login failures onto the stable renderer error shape', async () 
   expect(await response.json()).toEqual({ error: 'wrong password', code: 'INVALID_CREDENTIALS' })
 })
 
+it('rejects a foreign email account with invalid_email_account and completes bare prefixes', async () => {
+  const { origin, calls } = await boot({
+    gatewayRoutes: {
+      '/api/auth/email/send-code': () => json(200, { ok: true, maskedEmail: 'a***@gszq.com', expiresIn: 600, resendIn: 60 }),
+    },
+  })
+  const denied = await api(origin, '/api/gs-server/email-code', {
+    method: 'POST', body: JSON.stringify({ account: 'alice@example.com' }),
+  })
+  expect(denied.status).toBe(400)
+  expect(await denied.json()).toMatchObject({ code: 'invalid_email_account' })
+  expect(calls).toEqual([])
+
+  const sent = await api(origin, '/api/gs-server/email-code', {
+    method: 'POST', body: JSON.stringify({ account: 'alice' }),
+  })
+  expect(sent.status).toBe(200)
+  const forward = calls.find(call => call.path === '/api/auth/email/send-code')
+  const forwardedBody: unknown = JSON.parse(typeof forward?.init.body === 'string' ? forward.init.body : '{}')
+  expect(forwardedBody).toMatchObject({ account: 'alice@gszq.com' })
+})
+
 it('answers 503 with safe_storage_unavailable when no protector backs the refresh token', async () => {
   const { origin } = await boot({
     protector: unavailableRefreshTokenProtector('linux') as typeof protector,

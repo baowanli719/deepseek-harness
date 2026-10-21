@@ -7,7 +7,9 @@ import {
   emailCodeWindowSeconds,
   GsAuthService,
   GsAuthStorageError,
+  GsEmailAccountError,
   gsRefreshTokenPath,
+  resolveGsEmailAccount,
   type GsAuthOptions,
 } from '../src/auth.ts'
 import type { GsRequest } from '../src/client.ts'
@@ -319,4 +321,51 @@ it('normalizes email-code windows given in milliseconds', async () => {
   expect(emailCodeWindowSeconds(300)).toBe(300)
   expect(emailCodeWindowSeconds(0)).toBe(0)
   expect(emailCodeWindowSeconds(Number.NaN)).toBe(0)
+})
+
+it('completes bare mailbox prefixes with the enterprise email domain for send-code and verify', async () => {
+  const { auth, calls } = await fixture({
+    '/api/auth/email/send-code': () => json(200, { ok: true, maskedEmail: 'a***@gszq.com', expiresIn: 600, resendIn: 60 }),
+    '/api/auth/email/verify': () => json(200, loginResponse()),
+  })
+  await auth.sendEmailCode('alice')
+  await auth.loginWithEmailCode({ account: ' alice ', code: '123456' })
+  expect(calls.map(call => call.path)).toEqual(['/api/auth/email/send-code', '/api/auth/email/verify'])
+  expect(bodyJson(calls[0]?.init ?? {}).account).toBe('alice@gszq.com')
+  expect(bodyJson(calls[1]?.init ?? {}).account).toBe('alice@gszq.com')
+})
+
+it('accepts a full enterprise address and rejects foreign domains before calling the gateway', async () => {
+  const { auth, calls } = await fixture({
+    '/api/auth/email/send-code': () => json(200, { ok: true, maskedEmail: 'a***@gszq.com', expiresIn: 600, resendIn: 60 }),
+  })
+  await auth.sendEmailCode('Alice@GSZQ.COM')
+  expect(bodyJson(calls[0]?.init ?? {}).account).toBe('Alice@GSZQ.COM')
+  await expect(auth.sendEmailCode('alice@example.com')).rejects.toBeInstanceOf(GsEmailAccountError)
+  await expect(auth.sendEmailCode('not an email')).rejects.toBeInstanceOf(GsEmailAccountError)
+  await expect(auth.sendEmailCode('')).rejects.toBeInstanceOf(GsEmailAccountError)
+  await expect(auth.loginWithEmailCode({ account: '@gszq.com', code: '123456' })).rejects.toBeInstanceOf(GsEmailAccountError)
+  expect(calls).toHaveLength(1)
+})
+
+it('honors a configured enterprise email domain', async () => {
+  const { auth, calls } = await fixture({
+    '/api/auth/email/send-code': () => json(200, { ok: true, maskedEmail: 'a***@example.cn', expiresIn: 600, resendIn: 60 }),
+  }, { emailDomain: '@example.cn' })
+  await auth.sendEmailCode('alice')
+  expect(bodyJson(calls[0]?.init ?? {}).account).toBe('alice@example.cn')
+  await expect(auth.sendEmailCode('alice@gszq.com')).rejects.toBeInstanceOf(GsEmailAccountError)
+})
+
+it('rejects a malformed emailDomain at construction', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-gs-auth-'))
+  dirs.push(dir)
+  expect(() => new GsAuthService({
+    endpoint: () => 'http://127.0.0.1:8151/gsworker',
+    stateDir: dir,
+    protector: testProtector(),
+    client: { platform: 'windows', version: '0.2.0-rc.2' },
+    emailDomain: 'gszq.com',
+  })).toThrow(/emailDomain/u)
+  expect(resolveGsEmailAccount('alice')).toBe('alice@gszq.com')
 })

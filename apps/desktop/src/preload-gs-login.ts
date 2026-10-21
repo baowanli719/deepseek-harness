@@ -14,9 +14,12 @@ const invoke = async <T>(channel: string, ...args: unknown[]): Promise<T> => {
     error?: string
     status?: number
     retryAfter?: number
+    code?: string
   }
   if (result.ok) return result.value as T
-  throw Object.assign(new Error(result.error ?? 'Login failed'), { status: result.status, retryAfter: result.retryAfter })
+  throw Object.assign(new Error(result.error ?? 'Login failed'), {
+    status: result.status, retryAfter: result.retryAfter, code: result.code,
+  })
 }
 
 const api: GsLoginApi = {

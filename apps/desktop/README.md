@@ -214,7 +214,7 @@ Dependency installation does not run the locked Electron package's separate bina
 
 ### Startup onboarding
 
-The `gs-desktop` profile uses the password and email-code login window migrated from `dsh-desktop`. Startup reads the Host's gs-server session, restores a sealed refresh token when available, and opens the 440×700 password or email-code form when signed out. The form calls only the Host's private loopback routes; successful login enters the workspace. The upstream Desktop profile continues to use its existing Welcome flow.
+The `gs-desktop` profile uses the password and email-code login window migrated from `dsh-desktop`. Startup reads the Host's gs-server session, restores a sealed refresh token when available, and opens the 440×700 password or email-code form when signed out. The form calls only the Host's private loopback routes; successful login enters the workspace. Email-code login accepts the mailbox prefix or the full `@gszq.com` address; the gs-server service completes bare prefixes with the enterprise email domain and rejects other domains before sending a code, and the window explains rejected accounts in the shell locale. The upstream Desktop profile continues to use its existing Welcome flow.
 
 The API-key input starts empty and uses `autocomplete="new-password"` to ask Chromium not to autofill saved login passwords.
 

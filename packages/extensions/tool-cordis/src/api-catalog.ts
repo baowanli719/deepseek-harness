@@ -1383,13 +1383,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'sendEmailCode(account: string): Promise<GsEmailCodeResponse>',
-        description: 'Send one email verification code to the account\'s registered address.',
-        parameters: [{ name: 'account', description: 'account name or email accepted by the gateway.' }],
+        description: 'Send one email verification code to the account\'s registered address. A bare mailbox prefix is completed with the configured enterprise email domain.',
+        parameters: [{ name: 'account', description: 'mailbox prefix or full enterprise email address.' }],
         returns: 'the send-code outcome with second-normalized windows.',
       },
       {
         signature: 'async loginWithEmailCode(login: GsEmailLogin): Promise<GsSessionView>',
-        description: 'Email-code login; resolves with the fresh session view.',
+        description: 'Email-code login; resolves with the fresh session view. The account is resolved exactly like in `sendEmailCode`.',
         parameters: [{ name: 'login', description: 'account plus the received verification code.' }],
         returns: 'the token-free session view after login.',
       },
@@ -6021,7 +6021,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GsAuthOptions',
-    declaration: 'export interface GsAuthOptions {\n    readonly endpoint: () => string;\n    readonly stateDir: string;\n    readonly protector: GsRefreshTokenProtector;\n    readonly client: GsClientIdentity;\n    readonly request?: GsRequest;\n    readonly onConfig?: (user: GsAuthUser, config: GsClientConfig) => void;\n    readonly onSessionEstablished?: (user: GsAuthUser) => void;\n    readonly onSessionLost?: (reason: GsSessionLostReason) => void;\n}',
+    declaration: 'export interface GsAuthOptions {\n    readonly endpoint: () => string;\n    readonly stateDir: string;\n    readonly protector: GsRefreshTokenProtector;\n    readonly client: GsClientIdentity;\n    readonly emailDomain?: string;\n    readonly request?: GsRequest;\n    readonly onConfig?: (user: GsAuthUser, config: GsClientConfig) => void;\n    readonly onSessionEstablished?: (user: GsAuthUser) => void;\n    readonly onSessionLost?: (reason: GsSessionLostReason) => void;\n}',
   },
   {
     name: 'GsAuthService',

@@ -162,13 +162,15 @@ async loginWithPassword(login: GsPasswordLogin): Promise<GsSessionView>
 
 /**
  * Send one email verification code to the account's registered address.
- * @param account - account name or email accepted by the gateway.
+ * A bare mailbox prefix is completed with the configured enterprise email domain.
+ * @param account - mailbox prefix or full enterprise email address.
  * @returns the send-code outcome with second-normalized windows.
  */
 sendEmailCode(account: string): Promise<GsEmailCodeResponse>
 
 /**
- * Email-code login; resolves with the fresh session view.
+ * Email-code login; resolves with the fresh session view. The account is
+ * resolved exactly like in `sendEmailCode`.
  * @param login - account plus the received verification code.
  * @returns the token-free session view after login.
  */
