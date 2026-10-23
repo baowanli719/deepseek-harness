@@ -11,7 +11,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
-import { GsAuthStorageError } from './auth.ts'
+import { GsAuthStorageError, GsEmailAccountError } from './auth.ts'
 import { GatewayError } from './client.ts'
 import {
   GS_SERVER_BRAND_PATH,
@@ -22,6 +22,8 @@ import {
   GS_SERVER_LOGIN_PATH,
   GS_SERVER_LOGOUT_PATH,
   GS_SERVER_META_PATH,
+  GS_SERVER_NOTICE_PATH,
+  GS_SERVER_SCENARIO_SHORTCUTS_PATH,
   GS_SERVER_MODEL_RISK_DOWNLOAD_PATH,
   GS_SERVER_MODEL_RISK_SIGN_PATH,
   GS_SERVER_MODEL_RISK_STATUS_PATH,
@@ -79,6 +81,10 @@ function finishOperationFailure(res: ServerResponse, cause: unknown): void {
   }
   if (cause instanceof GsAuthStorageError) {
     finishJson(res, 503, error(cause.message, { code: 'safe_storage_unavailable' }))
+    return
+  }
+  if (cause instanceof GsEmailAccountError) {
+    finishJson(res, 400, error(cause.message, { code: 'invalid_email_account' }))
     return
   }
   throw cause
@@ -653,6 +659,43 @@ export function createGsServerRoutes(options: GsServerRoutesOptions): WebRoute[]
           catch (unexpected) {
             reportError('check gs-server application update', unexpected)
             finishJson(res, 502, error('gs-server update check failed'))
+          }
+        }
+      },
+    },
+    {
+      kind: 'exact',
+      path: GS_SERVER_NOTICE_PATH,
+      handler: async (req, res) => {
+        if (req.method !== 'GET') { methodNotAllowed(res, 'GET'); return }
+        if (!isSameOriginLoopbackRequest(req, options.expectedOrigin(), false)) { forbidden(res); return }
+        try {
+          const snapshot = await service.refreshClientConfig()
+          finishJson(res, 200, { notice: snapshot.config.notice ?? null })
+        } catch (cause) {
+          try { finishOperationFailure(res, cause) }
+          catch (unexpected) {
+            reportError('check gs-server notice', unexpected)
+            finishJson(res, 502, error('gs-server notice check failed'))
+          }
+        }
+      },
+    },
+    {
+      kind: 'exact',
+      path: GS_SERVER_SCENARIO_SHORTCUTS_PATH,
+      handler: async (req, res) => {
+        if (req.method !== 'GET') { methodNotAllowed(res, 'GET'); return }
+        if (!isSameOriginLoopbackRequest(req, options.expectedOrigin(), false)) { forbidden(res); return }
+        try {
+          const snapshot = await service.refreshClientConfig()
+          const scenarioShortcuts = snapshot.config.scenarioShortcuts
+          finishJson(res, 200, scenarioShortcuts === undefined ? {} : { scenarioShortcuts })
+        } catch (cause) {
+          try { finishOperationFailure(res, cause) }
+          catch (unexpected) {
+            reportError('check gs-server scenario shortcuts', unexpected)
+            finishJson(res, 502, error('gs-server scenario shortcuts check failed'))
           }
         }
       },

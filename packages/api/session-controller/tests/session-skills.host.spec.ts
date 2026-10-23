@@ -1,5 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
@@ -9,7 +10,12 @@ import { SessionSkillCatalog } from '../src/skill-catalog.ts'
 
 function observation(
   sessionId: SessionId,
-  options: { readonly cwd?: string; readonly agentPreset?: string } = {},
+  options: {
+    readonly cwd?: string
+    readonly workingDirectory?: string | null
+    readonly agentPreset?: string
+    readonly selectionProvider?: string
+  } = {},
 ): SessionObservation {
   const events = Object.freeze([])
   const lease = (): SessionObservation => ({
@@ -28,6 +34,10 @@ function observation(
       asOfSeq: -1,
       values: {
         ...options.agentPreset === undefined ? {} : { agentPreset: options.agentPreset },
+        ...options.workingDirectory === undefined ? {} : { workingDirectory: options.workingDirectory },
+        ...options.selectionProvider === undefined ? {} : {
+          modelSelection: { lastUsed: null, next: { provider: options.selectionProvider, model: 'm1' } },
+        },
       },
     },
     retain: lease,
@@ -40,18 +50,20 @@ async function context(): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
+  provideWorkingDirectoryFixture(ctx, '/catalog/default')
   return ctx
 }
 
 describe('SessionSkillCatalog', () => {
-  it('reads a cold Session catalog without resuming an Agent', async () => {
+  it('reads a moved cold Session catalog from its recorded current directory without resuming an Agent', async () => {
     const ctx = await context()
     const sessionId = SessionId('cold-skills')
-    const observed = observation(sessionId, { cwd: '/cold/project' })
+    const observed = observation(sessionId, { cwd: '/cold/original', workingDirectory: '/cold/project' })
     const dispose = vi.spyOn(observed, Symbol.dispose)
     const observeSession = vi.fn(() => Promise.resolve(observed))
     ctx.provide('sessionQuery', { observeSession } as never)
     const resume = vi.spyOn(ctx.agents, 'resume')
+    const ensureDirectory = vi.spyOn(ctx.workingDirectory, 'ensure')
     const list = vi.fn(() => Promise.resolve([
       {
         name: 'review',
@@ -81,8 +93,38 @@ describe('SessionSkillCatalog', () => {
     expect(observeSession).toHaveBeenCalledWith(sessionId)
     expect(dispose).toHaveBeenCalledOnce()
     expect(resume).not.toHaveBeenCalled()
+    expect(ensureDirectory).not.toHaveBeenCalled()
     expect(ctx.agents.list()).toEqual([])
     expect(list).toHaveBeenCalledWith({ cwd: '/cold/project', scope: undefined })
+  })
+
+  it.each([
+    { cwd: undefined, workingDirectory: '/cold/current', expected: '/cold/current' },
+    { cwd: '/cold/original', workingDirectory: null, expected: '/cold/original' },
+    { cwd: undefined, workingDirectory: null, expected: '/catalog/default' },
+    { cwd: undefined, workingDirectory: undefined, expected: '/catalog/default' },
+  ])('resolves cold directory metadata $cwd / $workingDirectory to $expected without filesystem checks', async ({ cwd, workingDirectory, expected }) => {
+    const ctx = await context()
+    try {
+      const sessionId = SessionId('cold-directory-fallback')
+      ctx.provide('sessionQuery', {
+        observeSession: () => Promise.resolve(observation(sessionId, {
+          ...cwd === undefined ? {} : { cwd },
+          ...workingDirectory === undefined ? {} : { workingDirectory },
+        })),
+      } as never)
+      const list = vi.fn(() => Promise.resolve([]))
+      ctx.provide('skills', { list } as never)
+      const ensure = vi.spyOn(ctx.workingDirectory, 'ensure')
+      const resume = vi.spyOn(ctx.agents, 'resume')
+      await expect(new SessionSkillCatalog(ctx).list({ sessionId }, new AbortController().signal))
+        .resolves.toEqual({ skills: [] })
+      expect(list).toHaveBeenCalledWith({ cwd: expected, scope: undefined })
+      expect(ensure).not.toHaveBeenCalled()
+      expect(resume).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it('uses a live Agent to address a preset-owned registry', async () => {
@@ -91,6 +133,7 @@ describe('SessionSkillCatalog', () => {
     const session = ctx.sessions.create(sessionId, { meta: { cwd: '/live/project' } })
     const agent = { id: sessionId, session, status: 'idle', ctx } as Agent
     await ctx.agents.register(agent)
+    const ensureDirectory = vi.spyOn(ctx.workingDirectory, 'ensure').mockResolvedValue('/live/current')
     ctx.provide('sessionQuery', {
       observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/live/project' })),
     } as never)
@@ -113,7 +156,9 @@ describe('SessionSkillCatalog', () => {
         modelInvocable: false,
       }],
     })
-    expect(scopedList).toHaveBeenCalledWith({ cwd: '/live/project', scope: agent })
+    expect(scopedList).toHaveBeenCalledWith({ cwd: '/live/current', scope: agent })
+    expect(ensureDirectory).toHaveBeenCalledWith(agent, expect.any(AbortSignal))
+    expect(session.header.cwd).toBe('/live/project')
     expect(acquireScope).not.toHaveBeenCalled()
   })
 
@@ -192,22 +237,18 @@ describe('SessionSkillCatalog', () => {
     await expect(failed).rejects.toThrow('skill registry is absent')
   })
 
-  it('rejects observations without projections or a project cwd', async () => {
+  it('rejects observations without projections', async () => {
     const ctx = await context()
     const sessionId = SessionId('incomplete-skills')
     const withoutProjections = { ...observation(sessionId, { cwd: '/project' }), projections: undefined }
     const observeSession = vi.fn()
       .mockResolvedValueOnce(withoutProjections)
-      .mockResolvedValueOnce(observation(sessionId))
     ctx.provide('sessionQuery', { observeSession } as never)
     const catalog = new SessionSkillCatalog(ctx)
 
     const unprojected = catalog.list({ sessionId }, new AbortController().signal)
     await expect(unprojected).rejects.toMatchObject({ code: 'gateway/internal' })
     await expect(unprojected).rejects.toThrow('projected Session observation')
-    const cwdless = catalog.list({ sessionId }, new AbortController().signal)
-    await expect(cwdless).rejects.toMatchObject({ code: 'gateway/internal' })
-    await expect(cwdless).rejects.toThrow('has no project cwd')
   })
 
   it('classifies a provider listing failure', async () => {
@@ -225,5 +266,105 @@ describe('SessionSkillCatalog', () => {
       .rejects.toMatchObject({
         code: 'gateway/internal', message: 'skill listing failed: Error: catalog offline',
       })
+  })
+
+  it('lists gated trusted-only skills when the Session selection resolves to a trusted route', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-trusted')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project', selectionProvider: 'trusted-gw' })),
+    } as never)
+    ctx.provide('skills', { list: () => Promise.resolve([]) } as never)
+    ctx.provide('sensitivePolicy', {
+      isPrivate: () => false,
+      trustsProvider: (provider: string) => provider === 'trusted-gw',
+    } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({
+        gated: [{
+          name: 'zhidu-knowledge',
+          displayName: 'Knowledge Base',
+          description: 'Consult the policy knowledge base.',
+        }],
+      }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({
+      skills: [{
+        name: 'zhidu-knowledge',
+        description: 'Consult the policy knowledge base.',
+        modelInvocable: true,
+      }],
+    })
+  })
+
+  it('lists gated skills for a private Session regardless of its selection', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-private')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project' })),
+    } as never)
+    ctx.provide('skills', { list: () => Promise.resolve([]) } as never)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'ext-cloud', model: 'm1' }) } as never)
+    ctx.provide('sensitivePolicy', {
+      isPrivate: (id: string) => id === String(sessionId),
+      trustsProvider: () => false,
+    } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({ gated: [{ name: 'zhidu-knowledge', displayName: 'Knowledge Base' }] }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({
+      skills: [{ name: 'zhidu-knowledge', description: 'Knowledge Base', modelInvocable: true }],
+    })
+  })
+
+  it('hides gated skills from a Session bound to an external route', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-external')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project', selectionProvider: 'ext-cloud' })),
+    } as never)
+    ctx.provide('skills', { list: () => Promise.resolve([]) } as never)
+    ctx.provide('sensitivePolicy', { isPrivate: () => false, trustsProvider: () => false } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({ gated: [{ name: 'zhidu-knowledge', description: 'Consult the policy knowledge base.' }] }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({ skills: [] })
+  })
+
+  it('does not duplicate gated skills the registry already listed', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-dedup')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project', selectionProvider: 'trusted-gw' })),
+    } as never)
+    ctx.provide('skills', {
+      list: () => Promise.resolve([{
+        name: 'zhidu-knowledge',
+        description: 'Scoped gated lane candidate.',
+        invocation: { modelInvocable: true, userInvocable: true },
+      }]),
+    } as never)
+    ctx.provide('sensitivePolicy', {
+      isPrivate: () => true,
+      trustsProvider: (provider: string) => provider === 'trusted-gw',
+    } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({ gated: [{ name: 'zhidu-knowledge', description: 'Snapshot copy.' }] }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({
+      skills: [{
+        name: 'zhidu-knowledge',
+        description: 'Scoped gated lane candidate.',
+        modelInvocable: true,
+      }],
+    })
   })
 })

@@ -52,7 +52,7 @@ it.each(['2.1.0', '2.1.1-test.20261002.1'])('does not offer GS release %s over t
   const source = { check: vi.fn(async () => version), download: vi.fn(async () => {}),
     install: vi.fn(async () => {}), dispose: vi.fn() }
   const coordinator = new DesktopUpdateCoordinator(state => state, async () => true, updater,
-    () => false, () => '2.1.1-test.20261002.1', undefined, source)
+    () => false, () => '2.1.1-test.20261002.1', undefined, 'nightly', source)
   coordinators.push(coordinator)
   expect(await coordinator.check(true)).toEqual({ phase: 'idle' })
   expect(source.download).not.toHaveBeenCalled()
@@ -64,7 +64,7 @@ it('checks, downloads, and installs through the GS source without calling the pu
   const source = { check: vi.fn(async () => '2.2.0'), download: vi.fn(async () => {}),
     install: vi.fn(async () => {}), dispose: vi.fn() }
   const beforeRestart = vi.fn(async () => true)
-  const coordinator = new DesktopUpdateCoordinator(state => state, beforeRestart, updater, () => false, () => '2.1.0', undefined, source)
+  const coordinator = new DesktopUpdateCoordinator(state => state, beforeRestart, updater, () => false, () => '2.1.0', undefined, 'nightly', source)
   coordinators.push(coordinator)
   expect(await coordinator.check(true)).toMatchObject({ phase: 'available', version: '2.2.0' })
   expect(source.download).not.toHaveBeenCalled()
@@ -78,7 +78,7 @@ it('checks, downloads, and installs through the GS source without calling the pu
   expect(quitAndInstall).not.toHaveBeenCalled()
 })
 
-function fixture() {
+function fixture(channel: 'nightly' | 'latest' = 'nightly', version = '1.1.0-alpha.1') {
   const events = new EventEmitter()
   const checkForUpdates = vi.fn(async () => ({
     isUpdateAvailable: true,
@@ -97,7 +97,7 @@ function fixture() {
   const updater = Object.assign(events, { checkForUpdates, downloadUpdate, quitAndInstall }) as unknown as AppUpdater
   const coordinator = new DesktopUpdateCoordinator(
     (state) => { states.push(state); return state },
-    beforeRestart, updater, () => true, () => '1.1.0-alpha.1', downloadResult,
+    beforeRestart, updater, () => true, () => version, downloadResult, channel,
   )
   coordinators.push(coordinator)
   return { coordinator, updater, events, states, checkForUpdates, downloadUpdate, quitAndInstall, beforeRestart, downloadResult }
@@ -272,4 +272,19 @@ it.each([new DesktopUpdatePreparationError('stop-failed', 'private diagnostic'),
   await f.coordinator.download('1.1.0-rc.2')
   expect(f.downloadResult).toHaveBeenCalledExactlyOnceWith(false, error instanceof DesktopUpdatePreparationError ? 'stop-failed' : 'download_failed')
   expect(JSON.stringify(f.downloadResult.mock.calls)).not.toContain('private')
+})
+
+
+it('keeps a stable-version nightly installation on nightly and rejects prereleases on latest', async () => {
+  const nightly = fixture('nightly', '1.0.0')
+  expect(nightly.updater.channel).toBe('nightly')
+  expect(nightly.updater.allowPrerelease).toBe(true)
+  expect((await nightly.coordinator.check()).phase).toBe('available')
+  expect(nightly.updater.channel).toBe('nightly')
+  const latest = fixture('latest', '1.0.0')
+  expect(latest.updater.channel).toBe('latest')
+  expect(latest.updater.allowPrerelease).toBe(false)
+  expect(latest.updater.allowDowngrade).toBe(false)
+  expect((await latest.coordinator.check()).phase).toBe('error')
+  expect(latest.downloadUpdate).not.toHaveBeenCalled()
 })

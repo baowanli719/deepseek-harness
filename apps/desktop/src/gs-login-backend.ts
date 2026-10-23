@@ -3,7 +3,12 @@
 import type { GsEmailCodeResult, GsLoginCaptcha, GsLoginMeta, GsLoginSession } from './gs-login-api.ts'
 
 export class GsLoginRequestError extends Error {
-  constructor(message: string, readonly status: number, readonly retryAfter?: number) { super(message) }
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfter?: number,
+    readonly code?: string,
+  ) { super(message) }
 }
 
 export interface GsLoginBackend {
@@ -31,11 +36,12 @@ export function connectGsLogin(authenticatedUrl: string, send: (input: string, i
     const value: unknown = await response.json()
     if (!response.ok) {
       const failure = typeof value === 'object' && value !== null
-        ? value as { error?: unknown; retryAfter?: unknown } : {}
+        ? value as { error?: unknown; retryAfter?: unknown; code?: unknown } : {}
       throw new GsLoginRequestError(
         typeof failure.error === 'string' ? failure.error : 'gs-server request failed',
         response.status,
         typeof failure.retryAfter === 'number' ? failure.retryAfter : undefined,
+        typeof failure.code === 'string' ? failure.code : undefined,
       )
     }
     return value as T

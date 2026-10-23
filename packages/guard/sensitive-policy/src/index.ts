@@ -3,9 +3,12 @@
  *
  * A session is private (`inferencePolicy: 'trusted-only'`) when entered
  * explicitly through the `sensitivePolicy` service, inherited from a private
- * fork parent, or judged by endpoint: a session whose model request resolves
- * to a server-trusted provider route is a private conversation
- * (`privateCause: 'provider-endpoint'`). Enforcement lives in the operations
+ * fork parent, or judged by endpoint: a session whose model request or
+ * effective model selection resolves to a server-trusted provider route is a
+ * private conversation (`privateCause: 'provider-endpoint'`). The selection
+ * judgement lands at agent activation and at each `model/selection` commit —
+ * before the next request assembles — while the request judgement stands at
+ * the call boundary. Enforcement lives in the operations
  * that make it, never in UI filtering:
  *
  * - `llm/stream` wrapper: a private session's request on an untrusted route
@@ -182,6 +185,30 @@ function providerForbiddenStream(options: GenerateOptions): AsyncIterable<Stream
   })()
 }
 
+/** Provider route of one `model/selection`-shaped value, when it carries one. */
+function providerOfSelectionValue(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const provider = (value as { provider?: unknown }).provider
+  return typeof provider === 'string' && provider !== '' ? provider : undefined
+}
+
+/**
+ * Effective provider route of one `modelSelection` projection state: the
+ * pending selection first, then the last used one. The projection is registered
+ * by the Session Controller package; its state is read loosely here and
+ * narrowed field by field so this plugin composes without it.
+ */
+function providerOfSelectionState(state: unknown): string | undefined {
+  if (typeof state !== 'object' || state === null) return undefined
+  const record = state as { pending?: unknown; lastUsed?: unknown }
+  return providerOfSelectionValue(record.pending) ?? providerOfSelectionValue(record.lastUsed)
+}
+
+/** Narrow optional face of the composition's default-model service. */
+interface AgentDefaultModelFace {
+  currentSelection(): { provider: string }
+}
+
 /**
  * Register the policy core service and every enforcement listener.
  * @param ctx - the plugin context; `gsServer` (trust source) is a declared
@@ -223,6 +250,22 @@ export function apply(ctx: Context, config?: Config): void {
 
   const agents = (): AgentRegistry | undefined => ctx.get('agents')
   const currentClientConfig = (): GsClientConfig | undefined => ctx.gsServer.getClientConfig()
+  core.trustsProvider = provider => isTrustedProvider(currentClientConfig(), provider)
+
+  /**
+   * Effective provider route of one session: the pending selection, the last
+   * used one, then the composition default. The `modelSelection` projection
+   * belongs to the Session Controller package, so its state is read through a
+   * loose key-accepting face and narrowed field by field; both it and the
+   * default-model service may be absent from a composition.
+   */
+  const effectiveProviderOf = (session: Session): string | undefined => {
+    const projections = ctx.sessionProjections as unknown as { stateOf(session: Session, key: string): unknown }
+    const selected = providerOfSelectionState(projections.stateOf(session, 'modelSelection'))
+    if (selected !== undefined) return selected
+    const defaults = ctx.get('agentDefaultModel') as AgentDefaultModelFace | undefined
+    return defaults?.currentSelection().provider
+  }
 
   // Trusted-route enforcement and audit marking at the model-call boundary.
   ctx.on('llm/stream', (options, next) => {
@@ -325,6 +368,13 @@ export function apply(ctx: Context, config?: Config): void {
     // Private by lineage: a forked child of a private parent stays private.
     const parent = agent.session.header.parentSession
     if (parent !== undefined && core.isPrivate(String(parent))) core.enterPrivate(sessionId)
+    // Endpoint judgement at activation: a session whose effective selection
+    // resolves to a trusted route enters private before its first request
+    // assembles, so the gated skill lane mounts ahead of prompt assembly.
+    if (!core.isPrivate(sessionId)) {
+      const provider = effectiveProviderOf(agent.session)
+      if (provider !== undefined && core.trustsProvider(provider)) core.enterPrivate(sessionId, 'provider-endpoint')
+    }
     if (core.isPrivate(sessionId)) {
       // The gated skill lane joins every private session, however it became
       // private; every cause applies the egress restrictions.
@@ -336,6 +386,18 @@ export function apply(ctx: Context, config?: Config): void {
     liveSessions.delete(String(agent.session.id))
     restrictedSessions.delete(String(agent.session.id))
     laneMountedSessions.delete(String(agent.session.id))
+  })
+  // Endpoint judgement at selection commit: switching a session onto a trusted
+  // route enters private at once — a live agent mounts the gated lane before
+  // the next request assembles, and a draft session is already private when
+  // its agent activates.
+  ctx.on('session/event', (session, event) => {
+    if ((event as { type: string }).type !== 'model/selection') return
+    const provider = providerOfSelectionValue((event as { data?: unknown }).data)
+    if (provider === undefined || !core.trustsProvider(provider)) return
+    const sessionId = String(session.id)
+    core.registerSession(sessionId)
+    core.enterPrivate(sessionId, 'provider-endpoint')
   })
   // A session that turns private mid-flight mounts the lane on its live agent
   // too, not only at creation, and restricts the egress surface.

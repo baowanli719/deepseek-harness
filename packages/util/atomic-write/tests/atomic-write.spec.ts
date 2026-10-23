@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -16,12 +16,28 @@ const state = vi.hoisted(() => ({
   releaseLockBeforeProbe: false,
   renameAttempts: 0,
   renameFailures: [] as string[],
+  readdirFailures: 0,
+  statFailures: 0,
 }))
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
   return {
     ...actual,
+    readdir: (async (...args: Parameters<typeof actual.readdir>) => {
+      if (state.readdirFailures > 0) {
+        state.readdirFailures -= 1
+        throw Object.assign(new Error('EPERM: injected listing failure'), { code: 'EPERM' })
+      }
+      return actual.readdir(...args)
+    }) as typeof actual.readdir,
+    stat: (async (...args: Parameters<typeof actual.stat>) => {
+      if (state.statFailures > 0 && String(args[0]).endsWith('.tmp')) {
+        state.statFailures -= 1
+        throw Object.assign(new Error('EPERM: injected stat failure'), { code: 'EPERM' })
+      }
+      return actual.stat(...args)
+    }) as typeof actual.stat,
     rename: (async (...args: Parameters<typeof actual.rename>) => {
       state.renameAttempts += 1
       const code = state.renameFailures.shift()
@@ -72,6 +88,8 @@ afterEach(async () => {
   state.releaseLockBeforeProbe = false
   state.renameAttempts = 0
   state.renameFailures.length = 0
+  state.readdirFailures = 0
+  state.statFailures = 0
   await Promise.all(scratchDirs.splice(0).map(dir => rm(dir, {
     force: true,
     maxRetries: 10,
@@ -122,6 +140,13 @@ async function waitForLock(lockPath: string): Promise<void> {
 }
 
 describe('writeFileAtomic', () => {
+  it('preserves non-UTF-8 binary content during atomic replacement', async () => {
+    const path = join(await scratch(), 'native-helper')
+    const bytes = new Uint8Array([0, 255, 128, 0xcf, 0xfa, 0xed, 0xfe])
+    await writeFileAtomic(path, bytes, { mode: 0o700 })
+    expect(await readFile(path)).toEqual(Buffer.from(bytes))
+  })
+
   it('creates the file and its parents with exactly the stated mode', async () => {
     const dir = await scratch()
     const target = join(dir, 'nested', 'deep', 'doc.yaml')
@@ -160,16 +185,99 @@ describe('writeFileAtomic', () => {
     const dir = await scratch()
     const target = join(dir, 'document')
     await writeFile(target, 'old')
-    state.renameFailures.push('EACCES', 'EBUSY', 'EPERM')
+    state.renameFailures.push('EACCES', 'EBUSY', 'EEXIST', 'EPERM')
 
     const replacement = writeFileAtomic(target, 'new', { mode: 0o600 })
     await vi.waitFor(() => { expect(state.renameAttempts).toBeGreaterThan(0) })
     await vi.runAllTimersAsync()
     await replacement
 
-    expect(state.renameAttempts).toBe(4)
+    expect(state.renameAttempts).toBe(5)
     expect(await readFile(target, 'utf8')).toBe('new')
     expect((await readdir(dir)).filter(entry => entry.includes('.tmp'))).toEqual([])
+  })
+
+  it('sweeps orphan temp siblings that predate the write', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'settings.json')
+    await writeFile(target, 'old')
+    const stale = join(dir, 'settings.json.0123456789ab.tmp')
+    const older = join(dir, 'settings.json.fedcba987654.tmp')
+    await writeFile(stale, 'orphan')
+    await writeFile(older, 'orphan')
+    const past = new Date(Date.now() - 120_000)
+    await utimes(stale, past, past)
+    await utimes(older, past, past)
+
+    await writeFileAtomic(target, 'new', { mode: 0o600 })
+
+    expect(await readFile(target, 'utf8')).toBe('new')
+    expect(await readdir(dir)).toEqual(['settings.json'])
+  })
+
+  it('keeps fresh temp siblings and unrelated files out of the orphan sweep', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'settings.json')
+    await writeFile(target, 'old')
+    // A temp another writer created a moment ago may still be mid-rename.
+    const concurrent = join(dir, 'settings.json.aabbccddeeff.tmp')
+    await writeFile(concurrent, 'in-flight')
+    // Only the target's own `<name>.*.tmp` siblings are orphans of this write.
+    const otherTarget = join(dir, 'other.json.0123456789ab.tmp')
+    await writeFile(otherTarget, 'not-mine')
+    const notTemp = join(dir, 'settings.json.tmp.bak')
+    await writeFile(notTemp, 'not-a-temp')
+    const past = new Date(Date.now() - 120_000)
+    await utimes(otherTarget, past, past)
+    await utimes(notTemp, past, past)
+
+    await writeFileAtomic(target, 'new', { mode: 0o600 })
+
+    expect((await readdir(dir)).sort()).toEqual([
+      'other.json.0123456789ab.tmp',
+      'settings.json',
+      'settings.json.aabbccddeeff.tmp',
+      'settings.json.tmp.bak',
+    ])
+  })
+
+  it('commits the replacement when the orphan sweep cannot read the directory', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    state.readdirFailures = 1
+
+    await writeFileAtomic(target, 'new', { mode: 0o600 })
+
+    expect(await readFile(target, 'utf8')).toBe('new')
+  })
+
+  it('commits the replacement and keeps an orphan the sweep cannot inspect', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'settings.json')
+    const orphan = join(dir, 'settings.json.0123456789ab.tmp')
+    await writeFile(orphan, 'orphan')
+    const past = new Date(Date.now() - 120_000)
+    await utimes(orphan, past, past)
+    state.statFailures = 1
+
+    await writeFileAtomic(target, 'new', { mode: 0o600 })
+
+    expect(await readFile(target, 'utf8')).toBe('new')
+    expect(await readFile(orphan, 'utf8')).toBe('orphan')
+  })
+
+  it('leaves a temp-named directory out of the orphan sweep', async () => {
+    const dir = await scratch()
+    const target = join(dir, 'settings.json')
+    const orphanDir = join(dir, 'settings.json.0123456789ab.tmp')
+    await mkdir(orphanDir)
+    const past = new Date(Date.now() - 120_000)
+    await utimes(orphanDir, past, past)
+
+    await writeFileAtomic(target, 'new', { mode: 0o600 })
+
+    expect(await readFile(target, 'utf8')).toBe('new')
+    expect((await readdir(dir)).sort()).toEqual(['settings.json', 'settings.json.0123456789ab.tmp'])
   })
 
   it('leaves no temp sibling after bounded Windows rename retries expire', async () => {
@@ -213,6 +321,26 @@ describe('writeFileAtomic', () => {
 })
 
 describe('withFileLock', () => {
+  it('cancels a waiting writer without releasing the current holder', async () => {
+    const target = join(await scratch(), 'document')
+    const release: PromiseWithResolvers<void> = Promise.withResolvers()
+    const entered: PromiseWithResolvers<void> = Promise.withResolvers()
+    const holder = withFileLock(target, async () => { entered.resolve(); await release.promise })
+    await entered.promise
+    const controller = new AbortController()
+    const operation = vi.fn(async () => {})
+    try {
+      const waiter = withFileLock(target, operation, { waitMs: 10_000, signal: controller.signal })
+      const rejected = expect(waiter).rejects.toThrow()
+      controller.abort()
+      await rejected
+      expect(operation).not.toHaveBeenCalled()
+      expect(await readFile(`${target}.lock`, 'utf8')).toBe(record(process.pid))
+      await expect(withFileLock(target, operation, { signal: controller.signal })).rejects.toThrow()
+    } finally { release.resolve(); await holder }
+    await expect(stat(`${target}.lock`)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('retries EPERM only when the lock path currently exists', async () => {
     const dir = await scratch()
     const target = join(dir, 'document')

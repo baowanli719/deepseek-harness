@@ -43,6 +43,39 @@ export const MAX_GS_REFRESH_TOKEN_BYTES = 8 * 1024
 const PRIVATE_DIRECTORY_MODE = 0o700
 const PRIVATE_FILE_MODE = 0o600
 
+/** Default enterprise email domain completing bare mailbox prefixes. */
+export const GS_DEFAULT_EMAIL_DOMAIN = '@gszq.com'
+
+/** Email-code login input that cannot resolve to an enterprise mailbox. */
+export class GsEmailAccountError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'GsEmailAccountError'
+  }
+}
+
+/**
+ * Resolve one email-code login input to a full enterprise mailbox address.
+ * A full address must belong to the enterprise domain; a bare mailbox prefix
+ * is completed with it. Anything else is rejected before the gateway is
+ * called, so send-code and verify always identify the user by the same
+ * resolved address.
+ * @param account - raw account input: mailbox prefix or full address.
+ * @param domain - enterprise email domain including the leading `@`.
+ * @returns the full mailbox address identifying the user.
+ */
+export function resolveGsEmailAccount(account: string, domain: string = GS_DEFAULT_EMAIL_DOMAIN): string {
+  const value = account.trim()
+  if (value.includes('@')) {
+    if (value.toLowerCase().endsWith(domain.toLowerCase()) && value.length > domain.length) return value
+    throw new GsEmailAccountError(`email login requires a ${domain} address`)
+  }
+  if (!/^[A-Za-z0-9._%+-]+$/u.test(value)) {
+    throw new GsEmailAccountError(`enter a mailbox prefix or a full ${domain} address`)
+  }
+  return `${value}${domain}`
+}
+
 /** Resend/expire windows beyond one hour are millisecond payloads, not seconds. */
 const EMAIL_CODE_SECONDS_CEILING = 3600
 
@@ -86,6 +119,8 @@ export interface GsAuthOptions {
   readonly protector: GsRefreshTokenProtector
   /** Client identity embedded in login and refresh requests. */
   readonly client: GsClientIdentity
+  /** Enterprise email domain completing bare mailbox prefixes; defaults to {@link GS_DEFAULT_EMAIL_DOMAIN}. */
+  readonly emailDomain?: string
   /** Optional fetch implementation for a host adapter or test. */
   readonly request?: GsRequest
   /** ClientConfig pushed by login and refresh responses. */
@@ -149,9 +184,15 @@ export class GsAuthService implements GsSessionTokenSource {
   private generation = 0
   private stateCommit: Promise<void> = Promise.resolve()
   private readonly statePath: string
+  private readonly emailDomain: string
 
   constructor(private readonly options: GsAuthOptions) {
     this.statePath = gsRefreshTokenPath(options.stateDir)
+    const domain = options.emailDomain ?? GS_DEFAULT_EMAIL_DOMAIN
+    if (!/^@[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}$/u.test(domain)) {
+      throw new Error(`gs-server: emailDomain must be an email domain with a leading @, got ${JSON.stringify(domain)}`)
+    }
+    this.emailDomain = domain
   }
 
   /**
@@ -238,7 +279,9 @@ export class GsAuthService implements GsSessionTokenSource {
 
   /**
    * Send one email verification code to the account's registered address.
-   * @param account - account name or email accepted by the gateway.
+   * A bare mailbox prefix is completed with the configured enterprise domain;
+   * a full address outside it is rejected with {@link GsEmailAccountError}.
+   * @param account - mailbox prefix or full enterprise email address.
    * @returns the send-code outcome with second-normalized windows.
    */
   async sendEmailCode(account: string): Promise<GsEmailCodeResponse> {
@@ -246,7 +289,7 @@ export class GsAuthService implements GsSessionTokenSource {
       endpoint: this.options.endpoint(),
       method: 'POST',
       path: '/api/auth/email/send-code',
-      body: { account },
+      body: { account: resolveGsEmailAccount(account, this.emailDomain) },
       ...(this.options.request === undefined ? {} : { request: this.options.request }),
     })
     return {
@@ -257,7 +300,9 @@ export class GsAuthService implements GsSessionTokenSource {
   }
 
   /**
-   * Email-code login; the success shape matches password login.
+   * Email-code login; the success shape matches password login. The account is
+   * resolved exactly like in {@link sendEmailCode}, so both calls identify the
+   * user by the same enterprise mailbox address.
    * @param login - account plus the received verification code.
    * @returns the fresh token-free snapshot.
    */
@@ -267,7 +312,7 @@ export class GsAuthService implements GsSessionTokenSource {
       endpoint: this.options.endpoint(),
       method: 'POST',
       path: '/api/auth/email/verify',
-      body: { account: login.account, code: login.code, client: this.options.client },
+      body: { account: resolveGsEmailAccount(login.account, this.emailDomain), code: login.code, client: this.options.client },
       ...(this.options.request === undefined ? {} : { request: this.options.request }),
     })
     await this.completeLogin(response, generation)

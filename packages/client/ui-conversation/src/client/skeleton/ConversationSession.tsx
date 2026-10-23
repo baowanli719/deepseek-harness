@@ -133,6 +133,11 @@ export function ConversationSessionHeader({
             </div>
           </>
         )}
+        {hideChrome && (
+          // Server notices share the blank-session header row with the corner
+          // control, centered in the space the hidden chrome leaves behind.
+          <div className={css.titleNotice}>{renderSlot('conversation.notice', {})}</div>
+        )}
         <div className={css.headerCorner} data-conversation-header-corner="">
           {renderSlot('conversation.session.header.corner', {})}
         </div>

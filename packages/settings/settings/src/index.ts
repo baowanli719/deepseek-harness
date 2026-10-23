@@ -6,7 +6,7 @@ import { parse } from 'yaml'
 import { Context, FiberState, Service, resolveConfig, type Fiber } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
 import { interpolate, type Entry } from '@deepseek-ai/cordis-plugin-loader'
-import type {} from '@deepseek-ai/dsh-config-editor'
+import type { ConfigEditOptions } from '@deepseek-ai/dsh-config-editor'
 import type {} from '@deepseek-ai/dsh-app-boot'
 import { redactSecrets, type RedactedSecret } from './redact.ts'
 import { isVolatilePath, plainConfig, projectForm, volatileForm } from './schema.ts'
@@ -343,41 +343,44 @@ export class SettingsForms extends Service {
    * @param ns Profile entry id.
    * @param patch Fields to merge.
    * @param expectedRevision Revision returned by describe.
+   * @param options Persistence-failure behavior; see {@link ConfigEditOptions}.
    */
-  async update(ns: string, patch: object, expectedRevision?: number): Promise<void> {
+  async update(ns: string, patch: object, expectedRevision?: number, options?: ConfigEditOptions): Promise<void> {
     const input = cloneJsonShaped(patch)
-    await this.write(ns, current => mergeLayers(current, input) as Record<string, unknown>, expectedRevision)
+    await this.write(ns, current => mergeLayers(current, input) as Record<string, unknown>, expectedRevision, [], options)
   }
 
   /** Reset all live fields, then set the supplied fields; ordinary config is preserved.
    * @param ns Profile entry id.
    * @param section Complete form values.
    * @param expectedRevision Revision returned by describe.
+   * @param options Persistence-failure behavior; see {@link ConfigEditOptions}.
    */
-  async replace(ns: string, section: object, expectedRevision?: number): Promise<void> {
+  async replace(ns: string, section: object, expectedRevision?: number, options?: ConfigEditOptions): Promise<void> {
     const input = cloneJsonShaped(section)
-    await this.write(ns, (_current, base) => mergeLayers(base, input) as Record<string, unknown>, expectedRevision)
+    await this.write(ns, (_current, base) => mergeLayers(base, input) as Record<string, unknown>, expectedRevision, [], options)
   }
 
   /** Apply field edits without restating redacted secrets; unsetting an array index removes its element.
    * @param ns Profile entry id.
    * @param ops Ordered form edits.
    * @param expectedRevision Revision returned by describe.
+   * @param options Persistence-failure behavior; see {@link ConfigEditOptions}.
    */
-  async mutate(ns: string, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void> {
+  async mutate(ns: string, ops: readonly SettingsPathOp[], expectedRevision?: number, options?: ConfigEditOptions): Promise<void> {
     await this.write(ns, (current, base, schema) => ops.reduce((value, op) => {
       if (op.op === 'set') return applyPathOp(value, op, schema)
       const parent = op.path.slice(0, -1).reduce<unknown>((node, key) => member(node, key), value)
       if (Array.isArray(parent)) return applyPathOp(value, op, schema)
       const inherited = op.path.reduce<unknown>((node, key) => member(node, key, true), base)
       return applyPathOp(value, inherited === undefined ? op : { op: 'set', path: op.path, value: inherited }, schema)
-    }, current), expectedRevision, ops.map(op => op.path))
+    }, current), expectedRevision, ops.map(op => op.path), options)
   }
 
   private async write(
     ns: string,
     change: (current: Record<string, unknown>, base: Record<string, unknown>, schema: z) => Record<string, unknown>,
-    expected?: number, paths: readonly (readonly string[])[] = [],
+    expected?: number, paths: readonly (readonly string[])[] = [], options?: ConfigEditOptions,
   ): Promise<void> {
     const entry = this.ownerContext.configEditor.entries().find(row => row.options.id === ns)
     const schema = entry === undefined ? undefined : this.schema(entry)
@@ -418,7 +421,7 @@ export class SettingsForms extends Service {
         return result
       }
       return mergeLayers(strip(raw, form), next) as Record<string, unknown>
-    })
+    }, options)
     this.describe()
   }
 

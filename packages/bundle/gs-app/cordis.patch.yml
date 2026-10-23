@@ -128,6 +128,9 @@
     - id: ui-account-gs
       name: '@deepseek-ai/dsh-client-ui-account-gs'
 
+    - id: gs-link-preview
+      name: '@deepseek-ai/dsh-gs-app/link-preview'
+
     - id: ui-skills-gs
       name: '@deepseek-ai/dsh-client-ui-skills-gs'
 
@@ -137,6 +140,16 @@
     # routes.
     - id: ui-model-risk-gs
       name: '@deepseek-ai/dsh-client-ui-model-risk-gs'
+
+    # Server-pushed notice banner at the top of the conversation content area,
+    # polled from the gs-server notice loopback route.
+    - id: ui-notice-gs
+      name: '@deepseek-ai/dsh-client-ui-notice-gs'
+
+    # Server-configured scenario actions below the composer card; selection only
+    # inserts the configured skill command into the retained draft.
+    - id: ui-scenarios-gs
+      name: '@deepseek-ai/dsh-client-ui-scenarios-gs'
 
 # ── model-access posture ───────────────────────────────────────────────────
 #

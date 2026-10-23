@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-scenarios-gs/README.md
+/:
+  en: 702d831d8bbb56c4
+  zh: f40111b63f495ce9
+/deepseek-ai-dsh-client-ui-scenarios-gs:
+  en: 22ee0419c156536a
+  zh: f31dc99d3ca5d709
+/deepseek-ai-dsh-client-ui-scenarios-gs/summary:
+  en: 79259254ea9b260d
+  zh: 02492a2a85d74ba8
+/deepseek-ai-dsh-client-ui-scenarios-gs/table-of-contents:
+  en: 76368b6b1da79c80
+  zh: ddafa933c150c4d1
+/deepseek-ai-dsh-client-ui-scenarios-gs/use-this-package:
+  en: f37a13a9cd1143f3
+  zh: e904da37b6fa68fc
+/deepseek-ai-dsh-client-ui-scenarios-gs/understand-the-implementation:
+  en: be7e4c7f3fe3823e
+  zh: 599479e1f5d62929
+/deepseek-ai-dsh-client-ui-scenarios-gs/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-client-ui-scenarios-gs/model-experience/request-context-and-condition:
+  en: cd8530c72534ee6b
+  zh: 16dbf6046e7e51fd
+/deepseek-ai-dsh-client-ui-scenarios-gs/model-experience/request-context-and-condition/what-the-model-sees:
+  en: 726cc2bd829bc154
+  zh: 0c0f8d881265b86d
+/deepseek-ai-dsh-client-ui-scenarios-gs/model-experience/request-context-and-condition/token-effect:
+  en: 6e1e941b2b76026b
+  zh: af11add8a2cc880c
+/deepseek-ai-dsh-client-ui-scenarios-gs/model-experience/request-context-and-condition/kv-cache-effect:
+  en: 0350e558687c27e3
+  zh: d63c02dd01da46f2
+/deepseek-ai-dsh-client-ui-scenarios-gs/known-limitations-and-deferred-work:
+  en: e8e978c8d24eda9a
+  zh: 750df26ce9add706
+/deepseek-ai-dsh-client-ui-scenarios-gs/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: bd8a8936229e035e

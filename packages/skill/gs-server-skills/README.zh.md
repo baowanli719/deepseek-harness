@@ -44,7 +44,7 @@ kind: "package-reference"
 - **桥接工具。** 当有效目录持有某运行时类型的可执行技能时，模型会看到该类型的桥接工具，并以技能名加声明的模板/工具名与参数调用它；结果是服务端的文本，服务端截断时附带后缀说明。
 - **受门控的技能在标准通道上保持可见但沉默。** 被标记 `trusted-only` 的服务端技能与命中名称+SHA-256 限制的本地技能以不可调用条目列出；它们从不进入标准模型目录、从不加载、也从不经标准桥接调用解析。
 - **实时本地权限。** 本地发现会在扫描后检查登录状态和 `allowLocalSkillCreate`；正文加载在读取文件前后都检查这两项。磁盘 I/O 期间撤销权限会拒绝返回结果。配置推送使发现缓存失效，正文加载器也会独立拒绝旧候选。
-- **受门控的 trusted-only 通道。** 本插件提供 `gsServerSkillGate` 服务。`@deepseek-ai/dsh-sensitive-policy` 把它挂载进每个私密会话的 Agent 作用域（`mountPrivateLane(agent.ctx)`）；该作用域通道把目录中保留的受门控条目以可调用列出，并在每次定义加载时复核 `sensitivePolicy.isPrivate(sessionId)`。受门控的执行要求调用方会话为私密会话，请求体携带会话 id，并发送 `x-gsclaw-sensitive: 1` 审计头；仅含受门控条目的目录仍会注册桥接工具。没有 `sensitivePolicy` 服务时，该通道绝不解析受门控内容。
+- **受门控的 trusted-only 通道。** 本插件提供 `gsServerSkillGate` 服务。`@deepseek-ai/dsh-sensitive-policy` 把它挂载进每个私密会话的 Agent 作用域（`mountPrivateLane(agent.ctx)`）；该作用域通道把目录中保留的受门控条目以可调用列出，并在每次定义加载时复核 `sensitivePolicy.isPrivate(sessionId)`。受门控的执行要求调用方会话为私密会话，请求体携带会话 id，并发送 `x-gsclaw-sensitive: 1` 审计头；仅含受门控条目的目录仍会注册桥接工具。没有 `sensitivePolicy` 服务时，该通道绝不解析受门控内容。受门控快照条目携带目录的 `displayName`/`description`，因此按会话寻址的作曲器目录可以把它们列给已私密、或有效模型选择已解析到可信路由的会话；该列举从不加载正文——逐次加载的私密复核仍是闸门。
 
 ### 可观察的成功与失败
 

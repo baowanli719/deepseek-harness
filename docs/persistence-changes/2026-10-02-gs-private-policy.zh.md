@@ -9,7 +9,7 @@ kind: persistence-change
 
 ## 概述
 
-声明持久化 sensitive/policy 事件，记录单调的私密会话与敏感度转变。新增仅供 Host 使用的私密策略投影检查点，以及仅承载来源归属的 gs-prompt-language 类型。
+在上游工作目录变更之后添加企业私密事件与消息归属。
 
 ## 目录
 
@@ -27,36 +27,36 @@ id: 2026-10-02-gs-private-policy
 baseline: false
 changes:
   - root: "event:agent/inbox/spliced"
-    previous: "2026-09-21-user-question-reply"
-    after: "d7af04d127b483d95eff249da3560886ed9837780f721cc964239025e0047c35"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "957bd5d634227ac951c8a96e92976eb870ffa14f9b8a511d09b5f9081ae1c0a3"
     decision: same-version
   - root: "event:developer/message"
-    previous: "2026-09-21-user-question-reply"
-    after: "91c57bd990e22c8d8b5dd7fd6b9816497c59b8ac25b59cffc0e8e6abb62d1d7d"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "d0ad8a172d9e4387016d241d4b29a6f6b1ebafc5946e3e238e73e87327ce856a"
     decision: same-version
   - root: "event:sensitive/policy"
     previous: null
     after: "ed623394e92e633e50dca80b18bd1ffce65fdd67df0e001bd722239dcb3e27c0"
     decision: same-version
   - root: "event:session/title-llm-request"
-    previous: "2026-09-21-user-question-reply"
-    after: "f71893264d39ff22ddf187ed3388bf3d2bd7cae19aafd9c48fc5da0720b3484d"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "9ecfd89b120c0752a9195a0684f5fad9f6680cd86a11dcefa5929a96949f75a6"
     decision: same-version
   - root: "event:user/message"
-    previous: "2026-09-21-user-question-reply"
-    after: "96684d4c5fa2b14b9b7b6c1a1e04bc18ee8e07b8d7a20ce0c5898cf8d5b520ef"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "964ddacc706427a8095987a979895a8f71a287cebfab5db440410bf3fcd166b2"
     decision: same-version
 ```
 
 <a id="compatibility"></a>
 ## 兼容性
 
-已有会话记录保持有效。新增必需事件承载策略状态，不承载模型内容。当前读取方先重放该状态，再执行敏感推理与工具路由；不认识该事件的旧读取方拒绝受影响的会话，避免丢弃私密限制。该事件遵守会话格式的增量兼容规则。投影缓存为增量新增，可由已有策略事件重建。提示语言来源归属不承载新的行为，沿用仅承载来源归属的兼容规则。
+合并后的写入方保留 Session v4 格式。已有上游消息变体与工作目录归属仍然有效。企业私密事件必须在读取时被识别，因此缺少对应声明的读取方会拒绝日志，不会静默丢弃私密策略。企业新增内容不改变已有事件的解释方式。不重写或删除任何已提交的物理格式代际。
 
 <a id="verification"></a>
 ## 验证
 
-GS agent-policy 的 Loader 集成测试经真实 JSONL 后端写入机密策略，重新打开持久会话后验证私密分类。sensitive-policy 测试验证检查点完成前推理被阻止，并在重放后拒绝外部路由。
+专项回归中，packages/bundle/gs-app/tests/agent-policy.spec.ts 的两个 Loader 测试和 packages/bundle/gs-app/tests/skill-policy.spec.ts 的三个测试通过，覆盖持久化私密策略重载与实时权限执行。企业账户、模型网关和服务端技能的 177 个测试也通过。合并后的 Host、Client 构建及汇总类型检查通过。
 
 <a id="dev-note"></a>
 ## 开发备注

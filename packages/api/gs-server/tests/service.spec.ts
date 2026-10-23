@@ -10,7 +10,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
 import type { GsRequest } from '../src/client.ts'
-import type { GsAuthUser, GsClientConfig } from '../src/contract.ts'
+import type { GsAuthUser, GsClientConfig, GsNoticeConfig, GsScenarioShortcutsConfig } from '../src/contract.ts'
 import { unavailableRefreshTokenProtector } from '../src/protector.ts'
 import GsServer from '../src/index.ts'
 
@@ -164,6 +164,78 @@ it('checks application updates through an authenticated config pull without expo
   expect(new Headers(pull?.init.headers).get('authorization')).toBe('Bearer at-1')
 })
 
+it('serves the scrolling notice banner through an authenticated config pull without exposing gateway credentials', async () => {
+  const notice: GsNoticeConfig = {
+    text: '系统维护通知', startAt: '2026-10-20T00:00:00Z', endAt: '2026-10-22T00:00:00Z', dismissible: true,
+  }
+  let currentNotice: GsNoticeConfig | null = notice
+  const { origin, calls } = await boot({ gatewayRoutes: {
+    '/api/auth/login': () => json(200, loginBody()),
+    '/api/client-config': () => json(200, { user, config: { ...clientConfig, notice: currentNotice } }),
+  } })
+  expect((await api(origin, '/api/gs-server/notice', {}, 'http://evil.example')).status).toBe(403)
+  expect((await api(origin, '/api/gs-server/notice', { method: 'POST' })).status).toBe(405)
+  expect((await api(origin, '/api/gs-server/notice')).status).toBe(401)
+  await api(origin, '/api/gs-server/login', { method: 'POST', body: JSON.stringify({ username: 'alice', password: 'pw' }) })
+  const response = await api(origin, '/api/gs-server/notice')
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({ notice })
+  expect(response.headers.get('cache-control')).toBe('no-store')
+  const pull = calls.find(call => call.path === '/api/client-config')
+  expect(new Headers(pull?.init.headers).get('authorization')).toBe('Bearer at-1')
+
+  currentNotice = null
+  const hidden = await api(origin, '/api/gs-server/notice')
+  expect(hidden.status).toBe(200)
+  expect(await hidden.json()).toEqual({ notice: null })
+})
+
+it('serves scenario shortcuts while preserving absent, null, disabled, and custom configuration', async () => {
+  const customShortcuts: GsScenarioShortcutsConfig = {
+    enabled: true,
+    items: [
+      { id: 'policy', label: '制度库查询', skill: 'zhidu-knowledge' },
+      { id: 'research', label: '研报分析', skill: 'gs-research-summary', enabled: false },
+    ],
+  }
+  let currentShortcuts: GsClientConfig['scenarioShortcuts']
+  const { origin, calls } = await boot({ gatewayRoutes: {
+    '/api/auth/login': () => json(200, loginBody()),
+    '/api/client-config': () => json(200, { user, config: {
+      ...clientConfig,
+      ...(currentShortcuts === undefined ? {} : { scenarioShortcuts: currentShortcuts }),
+    } }),
+  } })
+  expect((await api(origin, '/api/gs-server/scenario-shortcuts', {}, 'http://evil.example')).status).toBe(403)
+  expect((await api(origin, '/api/gs-server/scenario-shortcuts', {}, null)).status).toBe(403)
+  expect((await api(origin, '/api/gs-server/scenario-shortcuts', { method: 'POST' })).status).toBe(405)
+  expect((await api(origin, '/api/gs-server/scenario-shortcuts')).status).toBe(401)
+  await api(origin, '/api/gs-server/login', { method: 'POST', body: JSON.stringify({ username: 'alice', password: 'pw' }) })
+
+  const absent = await api(origin, '/api/gs-server/scenario-shortcuts')
+  expect(absent.status).toBe(200)
+  expect(await absent.json()).toEqual({})
+  expect(absent.headers.get('cache-control')).toBe('no-store')
+
+  currentShortcuts = null
+  const hidden = await api(origin, '/api/gs-server/scenario-shortcuts')
+  expect(hidden.status).toBe(200)
+  expect(await hidden.json()).toEqual({ scenarioShortcuts: null })
+
+  const disabledShortcuts: GsScenarioShortcutsConfig = { enabled: false, items: customShortcuts.items }
+  currentShortcuts = disabledShortcuts
+  const disabled = await api(origin, '/api/gs-server/scenario-shortcuts')
+  expect(disabled.status).toBe(200)
+  expect(await disabled.json()).toEqual({ scenarioShortcuts: disabledShortcuts })
+
+  currentShortcuts = customShortcuts
+  const custom = await api(origin, '/api/gs-server/scenario-shortcuts')
+  expect(custom.status).toBe(200)
+  expect(await custom.json()).toEqual({ scenarioShortcuts: customShortcuts })
+  const pull = calls.find(call => call.path === '/api/client-config')
+  expect(new Headers(pull?.init.headers).get('authorization')).toBe('Bearer at-1')
+})
+
 it('logs in through the private route and exposes the contract surface', async () => {
   const { service, origin, calls, ctx } = await boot({
     gatewayRoutes: {
@@ -209,6 +281,28 @@ it('maps gateway login failures onto the stable renderer error shape', async () 
   })
   expect(response.status).toBe(401)
   expect(await response.json()).toEqual({ error: 'wrong password', code: 'INVALID_CREDENTIALS' })
+})
+
+it('rejects a foreign email account with invalid_email_account and completes bare prefixes', async () => {
+  const { origin, calls } = await boot({
+    gatewayRoutes: {
+      '/api/auth/email/send-code': () => json(200, { ok: true, maskedEmail: 'a***@gszq.com', expiresIn: 600, resendIn: 60 }),
+    },
+  })
+  const denied = await api(origin, '/api/gs-server/email-code', {
+    method: 'POST', body: JSON.stringify({ account: 'alice@example.com' }),
+  })
+  expect(denied.status).toBe(400)
+  expect(await denied.json()).toMatchObject({ code: 'invalid_email_account' })
+  expect(calls).toEqual([])
+
+  const sent = await api(origin, '/api/gs-server/email-code', {
+    method: 'POST', body: JSON.stringify({ account: 'alice' }),
+  })
+  expect(sent.status).toBe(200)
+  const forward = calls.find(call => call.path === '/api/auth/email/send-code')
+  const forwardedBody: unknown = JSON.parse(typeof forward?.init.body === 'string' ? forward.init.body : '{}')
+  expect(forwardedBody).toMatchObject({ account: 'alice@gszq.com' })
 })
 
 it('answers 503 with safe_storage_unavailable when no protector backs the refresh token', async () => {

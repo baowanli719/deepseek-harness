@@ -38,6 +38,7 @@ import type { GsClientConfig } from '@deepseek-ai/dsh-gs-server'
 import type {} from '@deepseek-ai/dsh-sensitive-policy'
 import { GsLlmGatewayProxy } from './proxy.ts'
 import { GS_LLM_GATEWAY_CREDENTIAL_REF, planGsLlmGatewayModels, planGsVisionRouterSettings } from './models.ts'
+import type { GsLlmGateway } from './types.ts'
 
 export * from './types.ts'
 export {
@@ -122,7 +123,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   })
   await proxy.start()
   ctx.effect(() => () => proxy.close())
-  ctx.provide('gsLlmGateway', proxy)
 
   /** Fingerprint of the last committed mirror; identical pushes never touch settings. */
   let lastMirror: string | undefined
@@ -140,21 +140,25 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     // The mirror owns both namespaces outright: the providers dict replaces
     // the whole volatile section, and the default-model row follows the
     // server selection while leaving the user's reasoning effort untouched.
+    // A persist failure must not strand the running composition on a dead
+    // loopback port, so each write still commits to memory when the profile
+    // patch cannot be written; the rejection (and the stale fingerprint)
+    // keeps the failure logged and retried on the next push.
     if (plan.providers !== undefined) {
-      await ctx.settings.replace(config.providerNamespace, { providers: plan.providers })
+      await ctx.settings.replace(config.providerNamespace, { providers: plan.providers }, undefined, { applyOnPersistFailure: true })
     }
     if (plan.defaultModel !== undefined) {
       await ctx.settings.mutate(config.defaultModelNamespace, [
         { op: 'set', path: ['provider'], value: plan.defaultModel.provider },
         { op: 'set', path: ['model'], value: plan.defaultModel.model },
-      ])
+      ], undefined, { applyOnPersistFailure: true })
     }
     if (visionRouter !== undefined) {
       const editor = ctx.get('configEditor')
       if (editor === undefined) throw new Error('llm-gs-gateway: managed visual tools require configEditor')
       const entry = editor.entries().find(row => row.options.id === config.visionRouterNamespace)
       if (entry === undefined) throw new Error(`llm-gs-gateway: missing visual-tool entry ${config.visionRouterNamespace}`)
-      await editor.edit(entry, current => ({ ...current, ...visionRouter }))
+      await editor.edit(entry, current => ({ ...current, ...visionRouter }), { applyOnPersistFailure: true })
     }
     lastMirror = fingerprint
   }
@@ -164,6 +168,27 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       ctx.logger.error(error)
     })
   }
+
+  ctx.provide('gsLlmGateway', {
+    get origin(): string { return proxy.origin },
+    token: proxy.token,
+    providerBaseUrl: (providerId: string) => proxy.providerBaseUrl(providerId),
+    recoverLoopbackRoute: async (baseURL: string): Promise<boolean> => {
+      // A request that already named the live origin failed at the connection
+      // layer for another reason; repointing the mirror would change nothing.
+      if (baseURL === proxy.origin || baseURL.startsWith(`${proxy.origin}/`)) return false
+      const current = ctx.gsServer.getClientConfig()
+      if (current === undefined) return false
+      // The re-mirror moves the running composition to the live origin even
+      // when the persist step fails (applyOnPersistFailure), so the caller
+      // retries either way; the failure stays logged.
+      await mirror(current).catch((error: unknown) => {
+        ctx.logger.error(`${BIN_NAME}: mirroring the server model plan failed`)
+        ctx.logger.error(error)
+      })
+      return true
+    },
+  } satisfies GsLlmGateway)
 
   // ConfigEditor reconciliation awaits every Loader fiber, including this
   // mount. A restored plan must therefore be written after activation.

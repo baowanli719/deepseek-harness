@@ -28,3 +28,8 @@ it('preserves lockout status and retry duration for the email-code form', async 
   const backend = connectGsLogin('http://127.0.0.1:19387/', async () => new Response(JSON.stringify({ error: 'locked', retryAfter: 45 }), { status: 429 }))
   await expect(backend.emailCode('alice')).rejects.toMatchObject({ status: 429, retryAfter: 45 })
 })
+
+it('carries the stable error code for rejected email accounts', async () => {
+  const backend = connectGsLogin('http://127.0.0.1:19387/', async () => new Response(JSON.stringify({ error: 'invalid', code: 'invalid_email_account' }), { status: 400 }))
+  await expect(backend.emailCode('alice@example.com')).rejects.toMatchObject({ status: 400, code: 'invalid_email_account' })
+})

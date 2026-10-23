@@ -13,20 +13,22 @@ const api = window.dshGsLogin
 const zh = api.locale === 'zh'
 const copy = zh ? {
   subheading: '使用邮箱验证码或账号密码登录', passwordTab: '账号密码', emailCodeTab: '邮箱验证码',
-  accountLabel: '账号', accountPlaceholder: '请输入账号', passwordLabel: '登录密码',
+  accountLabel: '账号', accountPlaceholder: '请输入账号', emailPlaceholder: '请输入邮箱前缀或完整邮箱', passwordLabel: '登录密码',
   passwordPlaceholder: '请输入密码', emailCodeLabel: '邮箱验证码', emailCodePlaceholder: '6 位验证码',
   sendCode: '获取验证码', sendingCode: '发送中', captchaLabel: '图形验证码',
   captchaPlaceholder: '请输入图中算式结果', captchaAlt: '图形验证码，点击刷新',
   submit: '安全登录', submitting: '正在登录…', offline: '无法连接服务端，请检查网络或稍后重试',
-  connecting: '正在连接服务端…', loginFailed: '登录失败', footer: '企业内部系统 · 请勿处理非工作信息',
+  connecting: '正在连接服务端…', loginFailed: '登录失败',
+  invalidEmail: '请使用 @gszq.com 企业邮箱，可只输入邮箱前缀', footer: '企业内部系统 · 请勿处理非工作信息',
 } : {
   subheading: 'Sign in with an email code or account password', passwordTab: 'Account password', emailCodeTab: 'Email code',
-  accountLabel: 'Account', accountPlaceholder: 'Enter your account', passwordLabel: 'Password',
+  accountLabel: 'Account', accountPlaceholder: 'Enter your account', emailPlaceholder: 'Mailbox prefix or full email', passwordLabel: 'Password',
   passwordPlaceholder: 'Enter your password', emailCodeLabel: 'Email code', emailCodePlaceholder: '6-digit code',
   sendCode: 'Send code', sendingCode: 'Sending', captchaLabel: 'Captcha',
   captchaPlaceholder: 'Enter the result shown', captchaAlt: 'Captcha image, click to refresh',
   submit: 'Sign in', submitting: 'Signing in…', offline: 'Cannot reach the server. Check your network and try again.',
-  connecting: 'Connecting to the server…', loginFailed: 'Sign-in failed', footer: 'Internal system · do not process non-work information',
+  connecting: 'Connecting to the server…', loginFailed: 'Sign-in failed',
+  invalidEmail: 'Use your @gszq.com email address; entering just the mailbox prefix works too', footer: 'Internal system · do not process non-work information',
 }
 
 function Icon({ kind }: { kind: 'user' | 'key' | 'mail' | 'shield' | 'alert' | 'arrow' }): JSX.Element {
@@ -86,8 +88,9 @@ function Login(): JSX.Element {
   }, [countdown > 0, lockRemaining > 0])
 
   const failure = (cause: unknown): void => {
-    const value = cause as { status?: number; retryAfter?: number; message?: string }
+    const value = cause as { status?: number; retryAfter?: number; message?: string; code?: string }
     if (value.status === 0) { setOffline(true); return }
+    if (value.code === 'invalid_email_account') { setError(copy.invalidEmail); return }
     if (value.status === 429) { setLockRemaining(Math.ceil(value.retryAfter || 900)); return }
     setError(value.message ?? copy.loginFailed)
   }
@@ -145,7 +148,7 @@ function Login(): JSX.Element {
       </div>}
       <form onSubmit={(event) => { void submit(event) }}>
         <label htmlFor="gs-login-account">{copy.accountLabel}</label>
-        <div className="gs-login-field"><Icon kind="user" /><input id="gs-login-account" value={account} autoComplete="username" placeholder={copy.accountPlaceholder} onChange={(event) => { setAccount(event.target.value) }} /></div>
+        <div className="gs-login-field"><Icon kind="user" /><input id="gs-login-account" value={account} autoComplete="username" placeholder={method === 'email_code' ? copy.emailPlaceholder : copy.accountPlaceholder} onChange={(event) => { setAccount(event.target.value) }} /></div>
         <label htmlFor="gs-login-credential">{method === 'password' ? copy.passwordLabel : copy.emailCodeLabel}</label>
         <div className="gs-login-field">{method === 'password' ? <Icon kind="key" /> : <Icon kind="mail" />}
           <input id="gs-login-credential" type={method === 'password' ? 'password' : 'text'} inputMode={method === 'email_code' ? 'numeric' : undefined} value={credential} autoComplete={method === 'password' ? 'current-password' : 'one-time-code'} placeholder={method === 'password' ? copy.passwordPlaceholder : copy.emailCodePlaceholder} onChange={(event) => { setCredential(event.target.value) }} />

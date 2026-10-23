@@ -114,6 +114,8 @@ export interface Config {
   readonly clientVersion: string
   /** Client platform reported to the gateway; defaults to the running OS. */
   readonly clientPlatform?: GsClientIdentity['platform']
+  /** Enterprise email domain completing bare mailbox prefixes in email-code login; defaults to `@gszq.com`. */
+  readonly emailDomain?: string
   /**
    * Refresh-token protector. Defaults to Windows DPAPI or macOS Keychain-backed
    * AES-GCM; other platforms require an injected OS-backed implementation.
@@ -143,6 +145,7 @@ export const Config: z<Config> = z.object({
   environment: z.string(),
   clientVersion: z.string().required(),
   clientPlatform: z.union([z.const('windows'), z.const('macos'), z.const('linux')]),
+  emailDomain: z.string(),
   protector: z.any(),
   routes: z.boolean().default(true),
   restoreOnStart: z.boolean().default(false),
@@ -213,6 +216,7 @@ export class GsServer extends Service {
         platform: resolved.clientPlatform ?? gsClientPlatform(process.platform),
         version: resolved.clientVersion,
       },
+      ...(resolved.emailDomain === undefined ? {} : { emailDomain: resolved.emailDomain }),
       request,
       onConfig: (user, next) => { cacheCell.current?.update(user, next) },
       onSessionEstablished: (user) => { this.ctx.emit('gs-server/session-established', user) },
@@ -368,7 +372,8 @@ export class GsServer extends Service {
 
   /**
    * Send one email verification code to the account's registered address.
-   * @param account - account name or email accepted by the gateway.
+   * A bare mailbox prefix is completed with the configured enterprise email domain.
+   * @param account - mailbox prefix or full enterprise email address.
    * @returns the send-code outcome with second-normalized windows.
    */
   sendEmailCode(account: string): Promise<GsEmailCodeResponse> {
@@ -376,7 +381,8 @@ export class GsServer extends Service {
   }
 
   /**
-   * Email-code login; resolves with the fresh session view.
+   * Email-code login; resolves with the fresh session view. The account is
+   * resolved exactly like in `sendEmailCode`.
    * @param login - account plus the received verification code.
    * @returns the token-free session view after login.
    */

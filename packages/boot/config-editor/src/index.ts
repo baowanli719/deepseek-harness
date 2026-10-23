@@ -22,6 +22,20 @@ function flatten(rows: EntryOptions[]): EntryOptions[] {
   return rows.flatMap(row => [row, ...row.group && Array.isArray(row.config) ? flatten(row.config as EntryOptions[]) : []])
 }
 
+/** Options for one {@link ConfigEditor.edit} call. */
+export interface ConfigEditOptions {
+  /**
+   * Commit the validated next config to the running composition even when the
+   * persist step fails, then still reject with the persist failure. Edits
+   * default to the opposite order — no persist, no apply — so a caller whose
+   * configuration must not diverge from disk keeps that guarantee; a caller
+   * reconciling running state against an intermittently unwritable profile
+   * (endpoint protection holding the patch file is the observed cause) opts
+   * in, and its retry of the same edit re-attempts the persist.
+   */
+  applyOnPersistFailure?: boolean
+}
+
 /** Persist complete raw configs and apply them through the normal Loader path. */
 export class ConfigEditor extends Service {
   static inject = ['loader', 'profileContext']
@@ -82,11 +96,13 @@ export class ConfigEditor extends Service {
   /** Validate, persist, and reconcile a plugin's next config; ordinary fields keep normal lifecycle rules.
    * @param entry Current Loader entry, also used to detect replacement during the write.
    * @param change Derive a raw config from the current entry and its inherited layer.
+   * @param options Persistence-failure behavior; see {@link ConfigEditOptions}.
    * @returns Fulfillment after Loader reconciliation completes.
    */
   async edit(
     entry: Entry,
     change: (current: Record<string, unknown>, inherited: Record<string, unknown>) => Record<string, unknown>,
+    options?: ConfigEditOptions,
   ): Promise<void> {
     const run = async (): Promise<void> => {
       const path = this.documentPath
@@ -139,7 +155,15 @@ export class ConfigEditor extends Service {
         if (!isDeepStrictEqual(effective?.config ?? {}, next)) {
           throw new Error(`Configuration for "${entry.options.id}" is overridden by a home patch or command-line overlay`)
         }
-        await writeFileAtomic(path, String(document), { mode: 0o600 })
+        try {
+          await writeFileAtomic(path, String(document), { mode: 0o600 })
+        } catch (error) {
+          if (options?.applyOnPersistFailure !== true) throw error
+          // The running composition still moves to the validated next config;
+          // the rejection below tells the caller the profile did not.
+          await reconcileProfilePatches(this.ownerContext.root, patches, 'dsh', [entry.options.id])
+          throw error
+        }
         try {
           await reconcileProfilePatches(this.ownerContext.root, patches, 'dsh', [entry.options.id])
         } catch (error) {

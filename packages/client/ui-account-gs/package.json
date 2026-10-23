@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-account-gs",
   "description": "gs-worker sidebar account launcher",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.1-rc.2",
   "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/deepseek-ai/deepseek-harness.git", "directory": "packages/client/ui-account-gs" },
   "type": "module",

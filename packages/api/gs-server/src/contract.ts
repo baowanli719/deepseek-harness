@@ -109,6 +109,12 @@ export interface GsModelsConfig {
 /** Private authenticated pull returning only the server's application update notice. */
 export const GS_SERVER_APP_UPDATE_PATH = '/api/gs-server/app-update'
 
+/** Private authenticated pull returning only the server's scrolling notice banner. */
+export const GS_SERVER_NOTICE_PATH = '/api/gs-server/notice'
+
+/** Private authenticated pull returning only the server's composer scenario shortcuts. */
+export const GS_SERVER_SCENARIO_SHORTCUTS_PATH = '/api/gs-server/scenario-shortcuts'
+
 /** Server-pushed application update notice; null disables update prompts. */
 export interface GsAppUpdateConfig {
   readonly version: string
@@ -128,6 +134,20 @@ export interface GsNoticeConfig {
   readonly startAt?: string
   readonly endAt?: string
   readonly dismissible?: boolean
+}
+
+/** One server-configured composer shortcut; `label` is server data. */
+export interface GsScenarioShortcutItem {
+  readonly id: string
+  readonly label: string
+  readonly skill: string
+  readonly enabled?: boolean
+}
+
+/** Server-configured composer shortcuts; `enabled: false` hides the whole entry. */
+export interface GsScenarioShortcutsConfig {
+  readonly enabled: boolean
+  readonly items: readonly GsScenarioShortcutItem[]
 }
 
 /** Effective client configuration pushed at login/refresh and via `/api/client-config`. */
@@ -152,6 +172,8 @@ export interface GsClientConfig {
   readonly models: GsModelsConfig | null
   readonly appUpdate: GsAppUpdateConfig | null
   readonly notice: GsNoticeConfig | null
+  /** Absent selects client defaults; null hides the whole shortcut entry. */
+  readonly scenarioShortcuts?: GsScenarioShortcutsConfig | null
   /** Server-pushed brand copy; null or absent keeps the cached/default brand. */
   readonly brand?: GsBrandConfig | null
 }

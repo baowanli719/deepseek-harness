@@ -9,7 +9,7 @@ English | [中文](2026-10-02-gs-private-policy.zh.md)
 
 ## Summary
 
-Declares durable sensitive/policy events for monotonic private-session and sensitivity transitions. Adds a host-only privacy projection checkpoint and the attribution-only gs-prompt-language source kind.
+Adds enterprise privacy events and message attribution after the upstream working-directory changes.
 
 ## Table of Contents
 
@@ -27,36 +27,36 @@ id: 2026-10-02-gs-private-policy
 baseline: false
 changes:
   - root: "event:agent/inbox/spliced"
-    previous: "2026-09-21-user-question-reply"
-    after: "d7af04d127b483d95eff249da3560886ed9837780f721cc964239025e0047c35"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "957bd5d634227ac951c8a96e92976eb870ffa14f9b8a511d09b5f9081ae1c0a3"
     decision: same-version
   - root: "event:developer/message"
-    previous: "2026-09-21-user-question-reply"
-    after: "91c57bd990e22c8d8b5dd7fd6b9816497c59b8ac25b59cffc0e8e6abb62d1d7d"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "d0ad8a172d9e4387016d241d4b29a6f6b1ebafc5946e3e238e73e87327ce856a"
     decision: same-version
   - root: "event:sensitive/policy"
     previous: null
     after: "ed623394e92e633e50dca80b18bd1ffce65fdd67df0e001bd722239dcb3e27c0"
     decision: same-version
   - root: "event:session/title-llm-request"
-    previous: "2026-09-21-user-question-reply"
-    after: "f71893264d39ff22ddf187ed3388bf3d2bd7cae19aafd9c48fc5da0720b3484d"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "9ecfd89b120c0752a9195a0684f5fad9f6680cd86a11dcefa5929a96949f75a6"
     decision: same-version
   - root: "event:user/message"
-    previous: "2026-09-21-user-question-reply"
-    after: "96684d4c5fa2b14b9b7b6c1a1e04bc18ee8e07b8d7a20ce0c5898cf8d5b520ef"
+    previous: "2026-10-13-user-rpc-principal"
+    after: "964ddacc706427a8095987a979895a8f71a287cebfab5db440410bf3fcd166b2"
     decision: same-version
 ```
 
 <a id="compatibility"></a>
 ## Compatibility
 
-Existing Session records remain valid. The new required event carries policy state rather than model content. Current readers replay it before routing sensitive inference or tools; older readers without this event refuse affected Sessions rather than dropping privacy enforcement. The event is additive under the Session format compatibility rules. The projection cache is additive and rebuilt from recorded policy events. Prompt-language attribution adds no behavior under the attribution-only compatibility rule.
+The integrated writer retains Session format v4. Existing upstream message variants and working-directory attribution remain valid. Enterprise privacy events are required on read, so a reader without their declarations refuses the log rather than silently dropping privacy policy. The enterprise additions do not change the interpretation of existing events. No committed physical format generation is rewritten or removed.
 
 <a id="verification"></a>
 ## Verification
 
-The GS agent-policy Loader integration test writes confidential policy through the real JSONL backend, reopens the durable Session, and verifies restored private classification. Sensitive-policy tests block inference until the checkpoint completes and refuse external routes after replay.
+The targeted regression run passed the two Loader tests in packages/bundle/gs-app/tests/agent-policy.spec.ts and the three tests in packages/bundle/gs-app/tests/skill-policy.spec.ts, including durable private-policy reload and live permission enforcement. The 177 enterprise account, model-gateway and server-skill tests also passed. The integrated Host and Client builds and aggregate type checks passed.
 
 <a id="dev-note"></a>
 ## Dev Note

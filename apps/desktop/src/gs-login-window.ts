@@ -64,7 +64,7 @@ export async function openGsLoginWindow(
       try { return { ok: true, value: await action(...args) } }
       catch (cause) {
         if (cause instanceof GsLoginRequestError) {
-          return { ok: false, error: cause.message, status: cause.status, retryAfter: cause.retryAfter }
+          return { ok: false, error: cause.message, status: cause.status, retryAfter: cause.retryAfter, code: cause.code }
         }
         return { ok: false, error: '无法连接服务端', status: 0 }
       }

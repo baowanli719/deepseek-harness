@@ -23,6 +23,19 @@ export interface GsLlmGateway {
    * @returns the loopback baseURL naming that provider.
    */
   providerBaseUrl(providerId: string): string
+  /**
+   * Repoint the mirrored provider plan at the live proxy origin after a model
+   * request found its mirrored baseURL refusing connections: the running
+   * proxy always knows its own bound port, while a mirror written for an
+   * earlier origin (or never persisted) leaves the running adapter dialing a
+   * dead listener. The re-mirror commits to the running composition even
+   * when the profile patch cannot be persisted. Absent on gateway faces that
+   * own no mirror; callers feature-detect before relying on it.
+   * @param baseURL - the baseURL the failed request used.
+   * @returns whether the request is worth one retry — the stale baseURL named
+   *   an origin other than the live one and the re-mirror ran.
+   */
+  recoverLoopbackRoute?(baseURL: string): Promise<boolean>
 }
 
 declare module '@deepseek-ai/cordis' {

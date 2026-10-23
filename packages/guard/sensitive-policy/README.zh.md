@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本插件将私密会话约束到服务器声明的可信模型路由，并拒绝外发工具，包括外部 MCP 工具。网关为获准的私密请求添加敏感审计头。显式进入、使用可信提供方、服务器数据分类和分叉血缘均可建立私密状态。持久策略事件和仅供 Host 使用的投影在重启后保留单调分类。信任吊销取消存活的私密 Agent，退出登录取消全部存活 Agent。组合中的服务器技能获得受门控的私密通道。
+本插件将私密会话约束到服务器声明的可信模型路由，并拒绝外发工具，包括外部 MCP 工具。网关为获准的私密请求添加敏感审计头。显式进入、选择或使用可信提供方、服务器数据分类和分叉血缘均可建立私密状态。持久策略事件和仅供 Host 使用的投影在重启后保留单调分类。信任吊销取消存活的私密 Agent，退出登录取消全部存活 Agent。组合中的服务器技能获得受门控的私密通道。
 
 ## 目录
 
@@ -54,6 +54,7 @@ kind: "package-reference"
 
 - 一个 `sensitivePolicy` 服务（`SensitivePolicyCore`），保存每个会话的策略状态：`enterPrivate(sessionId)` 将会话锁定为仅可信出口（永不撤销），`stateOf`/`isPrivate` 读取状态，敏感度（`unclassified` → `potential` → `sensitive`）只升不降。
 - 在模型调用边界（`llm/stream`）：私密会话在不可信路由上的请求会在适配器运行前被拒，返回终结性的 `session_provider_forbidden` 错误；获准的请求会记录其提供方路由，并由 gsclaw 模型网关代理在其网线请求上盖上 `x-gsclaw-sensitive: 1` 审计头。
+- 端点判定也会早于首个请求落定：在 `agent/created` 时以及每次提交 `model/selection` 时，有效模型选择（待生效选择、最后使用的路由，然后是组合默认模型）解析到可信路由的会话即转为私密，因此门控通道与外发限制在下一次请求组装前就已就位。核心及其只读视图上的 `trustsProvider(provider)` 向需要预判该判定的消费方暴露同一谓词。
 - 在工具执行时，所有私密会话都拒绝配置的外发工具；当 `restrictExternalMcp` 为 true 时，还拒绝外部 `mcp__` 工具，包括视觉工具。作用域限制还隐藏配置的工具；执行守卫覆盖直接调用与 PTC 子派发。
 - 当组合了可选的 `gsServerSkillGate` 服务（`@deepseek-ai/dsh-gs-server-skills`）时：每个私密会话的 Agent——无论会话如何变为私密——都会把受门控的 trusted-only 服务端技能通道挂载进其作用域上下文（`agent.ctx`）：对已处于私密的会话在 `agent/created` 时挂载；会话在运行中转为私密时，则在存活 Agent 上即时挂载。挂载按会话幂等，缺少门控服务时为空操作，且作用域注册随 Agent 一并卸载，因此信任吊销导致的取消会连带拆除该通道。
 - 在 `gs-server/trust-revoked` 时：所有已有模型流量的私密会话都会被挂起（其存活 Agent 以 `hook` 原因被取消），且不会再去重判可能已过期的缓存。在 `gs-server/client-config-changed` 时：按最新的信任元数据重判每个私密会话记录的提供方，新落入不可信的会话随即挂起。
@@ -80,6 +81,10 @@ kind: "package-reference"
 
 一个 `llm/stream` 监听器读取 `options.sessionId`；没有会话身份的请求原样委托。它注册会话、应用端点判定（走在可信路由上的普通会话转为私密）、以单块的 `finish` 错误流拒绝不可信路由上的私密会话（与适配器失败规范化后的形态一致，循环会记录并按常规失败路径路由），否则记录提供方并委托。由于端点判定在派发前落定，网关代理连会话的首个可信路由请求也会审计。
 
+### 选择如何被判定
+
+在 `agent/created` 时，插件读取会话的有效模型选择——先是从松散读取的 `modelSelection` 投影中取待生效选择或最后使用的路由，然后是组合的可选默认模型服务——并在首个请求组装前应用同一端点判定。每次提交的 `model/selection` 事件都会重放该判定，因此把存活会话切到可信路由会在下一次请求前挂上门控通道；路由切回时私密状态永不降级。
+
 ### 挂起如何判定与执行
 
 核心负责判定：`suspendedSessions(isTrusted)` 返回所记录提供方未通过谓词的私密会话，按序排列保证确定性；尚无已观察提供方的私密会话没有可挂起之物。插件负责执行：对被判定会话，在挂载了 `ctx.agents` 时取消其存活 Agent（`{ kind: 'hook' }`）。被挂起的会话保持私密，因此其后续请求会在流边界重新判定。
@@ -88,8 +93,8 @@ kind: "package-reference"
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：`name`/`inject`/`Config`/`apply`、`llm/stream` 包装、外发闸门、作用域限制、技能通道挂载、挂起监听 |
-| [`src/core.ts`](src/core.ts) | `SensitivePolicyCore` 状态机：单调迁移、订阅、挂起判定；声明 `Context.sensitivePolicy` |
+| [`src/index.ts`](src/index.ts) | 插件入口：`name`/`inject`/`Config`/`apply`、`llm/stream` 包装、激活与选择提交时的端点判定、外发闸门、作用域限制、技能通道挂载、挂起监听 |
+| [`src/core.ts`](src/core.ts) | `SensitivePolicyCore` 状态机：单调迁移、订阅、挂起判定、绑定的提供方信任谓词；声明 `Context.sensitivePolicy` |
 | [`src/trust.ts`](src/trust.ts) | 信任解析（失败即关闭）与审计头协议常量 |
 | [`src/types.ts`](src/types.ts) | 会话策略状态与迁移类型；消费侧的 `GsServerSkillGateFace` |
 | — | 不发布运行时 invariant 伴生件：强制同步发生在其所属的瀑布与闸门之内，本包不持有任何独立观察可能产生分歧的持久状态关系。 |

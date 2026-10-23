@@ -13,9 +13,10 @@ import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { createPortal } from 'react-dom'
 import { $getRoot, $isTextNode } from 'lexical'
 import {
-  bindSnapshotSelector, conversationSnapshot as conversationFixture, makeTranslate, RemoteError,
+  allowAllAccess, bindSnapshotSelector, conversationSnapshot as conversationFixture, makeTranslate, RemoteError,
   sessionSnapshot as sessionFixture,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -28,7 +29,7 @@ import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
 import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
-  ComposerAttachment, ComposerAttachmentsOwnerProps, DraftFileUploads, InputActivityOwnerProps,
+  ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerShortcutsOwnerProps, DraftFileUploads, InputActivityOwnerProps,
 } from '../src/client/contract/slots.ts'
 import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
@@ -49,6 +50,10 @@ Range.prototype.getBoundingClientRect = ZERO_RECT
 
 const SCTX = {} as Context
 const SID = 's1' as SessionId
+const CONTINUABLE_CHILD = {
+  address: { parentSessionId: 'parent' as SessionId, childSessionId: SID, mode: 'continuable' as const },
+  parentAvailable: true,
+}
 
 function snapshotOf(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return { ...sessionFixture(SID), ...overrides }
@@ -95,6 +100,7 @@ interface BenchOptions {
   leftItems?: React.ReactNode
   rightItems?: React.ReactNode
   activityEntry?: (owner: InputActivityOwnerProps) => React.ReactNode
+  shortcutsEntry?: (owner: ComposerShortcutsOwnerProps) => React.ReactNode
   contextPressure?: ContextPressureProjection
   footer?: React.ReactNode
   attachments?: readonly ComposerAttachment[]
@@ -168,6 +174,7 @@ function bench(over?: BenchOptions) {
     if (key === 'conversation.input.permission') return over?.permissionEntry ?? null
     if (key === 'conversation.input.model') return over?.modelEntry ?? null
     if (key === 'conversation.input.activity') return over?.activityEntry?.(owner as InputActivityOwnerProps) ?? null
+    if (key === 'conversation.composer.shortcuts') return over?.shortcutsEntry?.(owner as ComposerShortcutsOwnerProps) ?? null
     return null
   }) as never
   const props: InputBarProps = {
@@ -186,6 +193,7 @@ function bench(over?: BenchOptions) {
     useWorkspaces: bindSnapshotSelector(createSnapshotStore({
       items: [], archivedSessionIds: [], pinnedSessionIds: [], state: 'idle', phase: 'ready', error: null,
     })),
+    ...allowAllAccess,
     useProjection: ((key: string, selector?: (v: unknown) => unknown) =>
       (selector ?? (v => v))(key === 'plan'
         ? over?.plan
@@ -263,6 +271,14 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
   throw new Error('attachment slot was not rendered')
 }
 
+function shortcutsOwner(slotCalls: readonly { key: string; owner: unknown }[]): ComposerShortcutsOwnerProps {
+  for (let i = slotCalls.length - 1; i >= 0; i -= 1) {
+    const call = slotCalls[i]
+    if (call?.key === 'conversation.composer.shortcuts') return call.owner as ComposerShortcutsOwnerProps
+  }
+  throw new Error('composer shortcuts slot was not rendered')
+}
+
 /** The state's placeholder copy (the textarea.placeholder equivalent; the visible layer renders it only while empty). */
 function placeholderOf(container: HTMLElement): string {
   return container.querySelector('[data-composer-input]')?.getAttribute('data-placeholder') ?? ''
@@ -279,6 +295,86 @@ function writeDraft(shell: SessionInputShell, text: string): void {
 }
 
 describe('composer focus handoff', () => {
+  it.each(['hero', 'composer'] as const)('focuses the %s editor when its card background is pressed', (variant) => {
+    const { view, shell, textarea } = bench({ variant })
+    writeDraft(shell, 'draft text')
+    textarea.blur()
+    const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+    const card = view.container.querySelector('[data-composer-card]')!
+
+    expect(fireEvent.mouseDown(card, { button: 0 })).toBe(false)
+    expect(document.activeElement).toBe(textarea)
+    expect(lexicalFocus).toHaveBeenCalled()
+  })
+
+  it('leaves editor selection, scrollport gestures, controls and canceled presses to their owners', () => {
+    const { view, shell, textarea } = bench({
+      modelEntry: <button><span>Model</span></button>,
+      leftItems: <span onMouseDown={(event) => { event.preventDefault() }}>Canceled</span>,
+    })
+    const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+    const scrollport = view.container.querySelector('[data-input-scroll]')!
+    const card = view.container.querySelector('[data-composer-card]')!
+
+    expect(fireEvent.mouseDown(textarea, { button: 0 })).toBe(true)
+    expect(fireEvent.mouseDown(scrollport, { button: 0 })).toBe(true)
+    expect(fireEvent.mouseDown(view.getByText('Model'), { button: 0 })).toBe(true)
+    expect(fireEvent.mouseDown(view.getByText('Canceled'), { button: 0 })).toBe(false)
+    expect(fireEvent.mouseDown(card, { button: 2 })).toBe(true)
+    expect(lexicalFocus).not.toHaveBeenCalled()
+  })
+
+  it('leaves embedded overlay options, status text and scrollbars with the focused search field', () => {
+    const { view, shell } = bench({
+      overlay: <div>
+        <input aria-label="Filter models" />
+        <div role="listbox"><div role="option" aria-selected={false}>Model option</div></div>
+        <div>Loading models</div>
+      </div>,
+    })
+    const search = view.getByRole('textbox', { name: 'Filter models' })
+    act(() => { search.focus() })
+    const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+
+    for (const target of [
+      view.getByRole('option'), view.getByRole('listbox'), view.getByText('Loading models'),
+      view.container.querySelector('[data-composer-overlay]')!,
+    ]) {
+      expect(fireEvent.mouseDown(target, { button: 0 })).toBe(true)
+      expect(document.activeElement).toBe(search)
+    }
+    expect(lexicalFocus).not.toHaveBeenCalled()
+  })
+
+  it('keeps a focused editor\'s native caret without restoring an older Lexical selection', () => {
+    const { view, shell, textarea } = bench()
+    act(() => { shell.focus() })
+    expect(document.activeElement).toBe(textarea)
+    const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+
+    expect(fireEvent.mouseDown(view.container.querySelector('[data-composer-card]')!, { button: 0 })).toBe(false)
+    expect(document.activeElement).toBe(textarea)
+    expect(lexicalFocus).not.toHaveBeenCalled()
+  })
+
+  it('leaves portaled menu background presses outside the card alone', () => {
+    const { view, shell } = bench({ modelEntry: createPortal(<div>Menu background</div>, document.body) })
+    const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+
+    expect(fireEvent.mouseDown(view.getByText('Menu background'), { button: 0 })).toBe(true)
+    expect(lexicalFocus).not.toHaveBeenCalled()
+  })
+
+  it.each([{ inert: true }, { disabled: true }, { blocked: { reason: 'unavailable' } }])(
+    'does not focus an unavailable composer: %j', (options) => {
+      const { view, shell } = bench(options)
+      const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+
+      expect(fireEvent.mouseDown(view.container.querySelector('[data-composer-card]')!, { button: 0 })).toBe(true)
+      expect(lexicalFocus).not.toHaveBeenCalled()
+    },
+  )
+
   it('focus() returns the keyboard to the editor through Lexical, not a bare DOM focus', () => {
     const { shell, textarea } = bench()
     writeDraft(shell, 'draft text')
@@ -292,6 +388,68 @@ describe('composer focus handoff', () => {
     // land the caret at the start of the draft. jsdom carries no caret, so the
     // selection itself is asserted in the browser lane.
     expect(lexicalFocus).toHaveBeenCalled()
+  })
+})
+
+describe('composer shortcuts slot', () => {
+  it('renders below the hero input card and above the statistics dock', () => {
+    const { view } = bench({
+      variant: 'hero',
+      shortcutsEntry: () => <i data-testid="scenario-shortcut" />,
+      contextPressure: { pressureTokens: 32_000, contextWindow: 128_000 },
+    })
+    const card = view.container.querySelector('[data-composer-card]')!
+    const shortcut = view.getByTestId('scenario-shortcut')
+    const meter = view.getByRole('button', { name: '上下文已用 25%' })
+
+    expect(card.compareDocumentPosition(shortcut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(shortcut.compareDocumentPosition(meter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('does not dispatch or render in the bottom composer variant', () => {
+    const { view, slotCalls } = bench({
+      variant: 'composer',
+      shortcutsEntry: () => <i data-testid="scenario-shortcut" />,
+    })
+
+    expect(view.queryByTestId('scenario-shortcut')).toBeNull()
+    expect(slotCalls.some(call => call.key === 'conversation.composer.shortcuts')).toBe(false)
+  })
+
+  it('does not dispatch or render without a Session', () => {
+    const { view, props, slotCalls } = bench({ variant: 'hero', shortcutsEntry: () => <i data-testid="scenario-shortcut" /> })
+    slotCalls.length = 0
+    view.rerender(<InputBar {...props} sessionId={undefined} />)
+
+    expect(view.queryByTestId('scenario-shortcut')).toBeNull()
+    expect(slotCalls.some(call => call.key === 'conversation.composer.shortcuts')).toBe(false)
+  })
+
+  it('focuses the existing editor through the owner callback without changing the draft', () => {
+    const { view, shell, textarea } = bench({
+      variant: 'hero',
+      draft: 'keep this draft',
+      shortcutsEntry: owner => <button data-testid="scenario-shortcut" onClick={owner.focusComposer} />,
+    })
+    textarea.blur()
+    const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+
+    fireEvent.click(view.getByTestId('scenario-shortcut'))
+    expect(document.activeElement).toBe(textarea)
+    expect(lexicalFocus).toHaveBeenCalled()
+    expect(shell.snapshot.draft).toBe('keep this draft')
+  })
+
+  it.each([{ disabled: true }, { inert: true }, { blocked: { reason: 'waiting' } }])(
+    'passes the composer lock to shortcuts: %j', (options) => {
+      const { slotCalls } = bench({ ...options, variant: 'hero' })
+      expect(shortcutsOwner(slotCalls).locked).toBe(true)
+    },
+  )
+
+  it('keeps shortcuts unlocked while the agent is running', () => {
+    const { slotCalls } = bench({ variant: 'hero', running: true })
+    expect(shortcutsOwner(slotCalls).locked).toBe(false)
   })
 })
 
@@ -339,6 +497,54 @@ describe('composer placeholder visibility', () => {
 })
 
 describe('image draft rail', () => {
+  it.each([false, true])('accepts pasted and dropped images for a continuable child (running=%s)', async (running) => {
+    const addFiles = vi.fn(() => null)
+    const { textarea, shell, slotCalls } = bench({ subagent: CONTINUABLE_CHILD, running, addFiles })
+    const image = new File([Uint8Array.of(1, 2, 3)], 'pixel.png', { type: 'image/png' })
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ kind: 'file', type: image.type, getAsFile: () => image }],
+        getData: () => '一起发送的文字',
+      },
+    })
+    expect(addFiles).toHaveBeenCalledWith([image], undefined)
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('一起发送的文字') })
+    expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(true)
+    act(() => { attachmentOwner(slotCalls).onAddFiles([image]) })
+    expect(addFiles).toHaveBeenCalledTimes(2)
+    // This fix restores paste/drop independently of the menu's picker policy.
+    expect(shell.canPickFiles()).toBe(false)
+  })
+
+  it.each([
+    ['a generic file', new File(['text'], 'notes.txt', { type: 'text/plain' }), false],
+    ['an unsupported image', new File(['<svg/>'], 'drawing.svg', { type: 'image/svg+xml' }), false],
+    ['a directory', new File([], 'folder.png', { type: 'image/png' }), true],
+  ])('refuses the entire child attachment batch containing %s', (_name, unsupported, directory) => {
+    const addFiles = vi.fn(() => null)
+    const { slotCalls, view, shell } = bench({ subagent: CONTINUABLE_CHILD, addFiles, draft: '保留草稿' })
+    const image = new File([Uint8Array.of(1)], 'pixel.png', { type: 'image/png' })
+    act(() => {
+      attachmentOwner(slotCalls).onAddFiles([image, unsupported], directory ? new Set([unsupported]) : undefined)
+    })
+    expect(addFiles).not.toHaveBeenCalled()
+    expect(view.getByRole('alert').textContent).toContain('仅支持 PNG、JPG、WebP、GIF 格式的图片')
+    expect(shell.snapshot.draft).toBe('保留草稿')
+  })
+
+  it.each([
+    ['an offline parent', { ...CONTINUABLE_CHILD, parentAvailable: false }],
+    ['a one-shot child', { ...CONTINUABLE_CHILD, address: { ...CONTINUABLE_CHILD.address, mode: 'one-shot' as const } }],
+  ])('keeps attachment intake closed for %s', (_name, subagent) => {
+    const addFiles = vi.fn(() => null)
+    const { slotCalls } = bench({ subagent, addFiles })
+    expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(false)
+    act(() => {
+      attachmentOwner(slotCalls).onAddFiles([new File([Uint8Array.of(1)], 'pixel.png', { type: 'image/png' })])
+    })
+    expect(addFiles).not.toHaveBeenCalled()
+  })
+
   it('collects clipboard files while preserving text from a mixed paste', async () => {
     const addFiles = vi.fn(() => null)
     const { textarea, shell } = bench({ addFiles })
@@ -380,7 +586,10 @@ describe('image draft rail', () => {
     expect(addFiles).toHaveBeenCalledWith([folder, emptyFile, withoutApi, withoutEntry], new Set([folder]))
   })
 
-  it('pre-checks projected limits at intake: whole-batch refusal with product copy, none added', () => {
+  it.each([
+    ['ordinary session', {}],
+    ['continuable child', { subagent: CONTINUABLE_CHILD }],
+  ])('pre-checks projected image limits for %s: whole-batch refusal with product copy', (_name, session) => {
     const limits = {
       maxImageBytes: 1024 * 1024,
       maxImagesPerMessage: 2,
@@ -394,13 +603,13 @@ describe('image draft rail', () => {
       act(() => { attachmentOwner(result.slotCalls).onAddFiles(files) })
     }
     // Count: three at once over a two-image limit → the whole batch refused.
-    const overCount = bench({ addFiles: vi.fn(() => null), imageLimits: limits })
+    const overCount = bench({ ...session, addFiles: vi.fn(() => null), imageLimits: limits })
     intake(overCount, [png(8, 'a.png'), png(8, 'b.png'), png(8, 'c.png')])
     expect(overCount.view.getByRole('alert').textContent).toContain('一条消息最多添加 2 张图片')
     expect(overCount.props.addFiles).not.toHaveBeenCalled()
     cleanup()
     // Per-file bytes.
-    const overFile = bench({ addFiles: vi.fn(() => null), imageLimits: limits })
+    const overFile = bench({ ...session, addFiles: vi.fn(() => null), imageLimits: limits })
     intake(overFile, [png(1024 * 1024 + 1, 'big.png')])
     expect(overFile.view.getByRole('alert').textContent).toContain('单张图片不能超过 1MB')
     expect(overFile.props.addFiles).not.toHaveBeenCalled()
@@ -408,13 +617,13 @@ describe('image draft rail', () => {
     // Aggregate bytes across the existing rail plus the new batch.
     const held = new File([new ArrayBuffer(1024 * 1024 * 1.5)], 'held.png', { type: 'image/png' })
     const attachment = { kind: 'image' as const, id: 'draft-1' as DraftAttachmentId, file: held, previewUrl: 'blob:held' }
-    const overTotal = bench({ addFiles: vi.fn(() => null), imageLimits: limits, attachments: [attachment] })
+    const overTotal = bench({ ...session, addFiles: vi.fn(() => null), imageLimits: limits, attachments: [attachment] })
     intake(overTotal, [png(1024 * 1024, 'more.png')])
     expect(overTotal.view.getByRole('alert').textContent).toContain('图片总大小超过 2MB')
     expect(overTotal.props.addFiles).not.toHaveBeenCalled()
     cleanup()
     // Within every limit: the batch passes through to addFiles.
-    const within = bench({ addFiles: vi.fn(() => null), imageLimits: limits })
+    const within = bench({ ...session, addFiles: vi.fn(() => null), imageLimits: limits })
     const fits = png(16, 'fits.png')
     intake(within, [fits])
     expect(within.props.addFiles).toHaveBeenCalledWith([fits], undefined)
@@ -1033,7 +1242,7 @@ describe('running and lock semantics', () => {
     expect(interruptButton).not.toBeNull()
     expect(textarea.getAttribute('aria-disabled')).not.toBe('true')
     expect(view.container.querySelector<HTMLInputElement>('input[type="file"]')?.disabled).toBe(true)
-    expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(false)
+    expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(true)
     const click = vi.spyOn(HTMLInputElement.prototype, 'click')
     onTestFinished(() => { click.mockRestore() })
     expect(shell.canPickFiles()).toBe(false)
@@ -1348,7 +1557,7 @@ describe('running and lock semantics', () => {
 
 describe('machine pending lock', () => {
   it('submitting renders read-only textarea, pending dot, and a disabled primary', () => {
-    const { view, shell } = bench()
+    const { view, shell, slotCalls } = bench({ variant: 'hero' })
     // Drive the machine into submitting through a claim + enter.
     act(() => {
       shell.setDraft('/goal ')
@@ -1366,16 +1575,17 @@ describe('machine pending lock', () => {
     const textarea = view.container.querySelector<HTMLDivElement>('[data-composer-input]')!
     expect(editableOf(textarea)).toBe(false)
     expect(view.container.querySelector<HTMLButtonElement>('button[aria-label="发送消息"]')!.disabled).toBe(true)
+    expect(shortcutsOwner(slotCalls).locked).toBe(true)
   })
 })
 
 describe('decorations', () => {
-  /** The claim-token styled leaf (the transform's inline accent color). */
-  function tokenSpanOf(container: HTMLElement): HTMLElement | null {
-    return container.querySelector('[data-lexical-text][style*="business-primary"]')
+  /** The claimed command chip's host element. */
+  function commandChipOf(container: HTMLElement): HTMLElement | null {
+    return container.querySelector('[data-composer-command]')
   }
 
-  it('claimed token styles the leading leaf and sets the blank-args hint variable', () => {
+  it('a claim renders the leading command chip and sets the blank-args hint variable', () => {
     // Dictionary-less stub: an unmatched hint key keeps the machine's raw hint.
     const { view, shell, textarea } = bench({ t: makeTranslate({}) })
     act(() => {
@@ -1384,15 +1594,14 @@ describe('decorations', () => {
         { name: 'goal', token: '/goal ', hint: '目标内容', submit: () => Promise.resolve({ kind: 'success' as const }) },
         { start: 0, end: 6, draftRev: shell.snapshot.draftRev },
       )
-      shell.editor.update(() => {}, { discrete: true }) // flush the queued decoration refresh
     })
-    expect(tokenSpanOf(view.container)?.textContent).toBe('/goal ')
+    expect(commandChipOf(view.container)?.textContent).toBe('/goal')
     expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe(JSON.stringify('目标内容'))
-    // Args typed: the hint disappears, the token style stays.
-    act(() => { shell.setDraft('/goal 发布') })
-    act(() => { shell.editor.update(() => {}, { discrete: true }) }) // flush the queued decoration refresh
+    // Args typed: the hint disappears, the chip stays.
+    act(() => { shell.actions.insertText('发布', shell.actions.captureInsertion()) })
+    expect(shell.snapshot.draft).toBe('/goal 发布')
     expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe('')
-    expect(tokenSpanOf(view.container)).not.toBeNull()
+    expect(commandChipOf(view.container)).not.toBeNull()
   })
 
   it('a locale entry for the claimed command overrides the raw claim hint (trailing-space token)', () => {
@@ -1671,7 +1880,8 @@ describe('command launcher chrome and control seats', () => {
     // Capability absent (no permission slot entry): the chip renders nothing.
     expect(view.queryByLabelText(/^访问模式/)).toBeNull()
     // Every seat dispatched, nothing rendered (render passes may repeat; the
-    // seat set is the contract).
+    // seat set is the contract). The bottom composer never dispatches
+    // conversation.composer.shortcuts — that seat is the hero variant's.
     expect([...new Set(slotCalls.map(c => c.key))]).toEqual([
       'conversation.input.overlay', 'conversation.input.attachments',
       'conversation.input.permission', 'conversation.input.plan', 'conversation.input.left',

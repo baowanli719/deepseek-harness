@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-model-risk-gs",
   "description": "gs-worker untrusted-model risk disclosure: model-list locks, electronic signature before selection, and archived-PDF download",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.1-rc.2",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-gs-app",
   "description": "The gs-worker (国盛办公AI) product bundle: patch layer over dsh-base + dsh-web-app wiring gsclaw-server integration, the model-gateway adapter, sensitive-data compliance, server skills, vision routing, and the 国盛证券办公助理 persona",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.1-rc.2",
   "publishConfig": {
     "access": "public"
   },
@@ -48,7 +48,11 @@
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./link-preview": {
+      "types": "./lib/types/link-preview.d.ts",
+      "default": "./lib/link-preview.js"
+    }
   },
   "files": [
     "lib/index.js",
@@ -61,6 +65,7 @@
     "lib/prompt-policy.js",
     "lib/skill-policy.js",
     "lib/mcp-vision-server.js",
+    "lib/link-preview.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
@@ -75,6 +80,8 @@
     "@deepseek-ai/dsh-client-ui-account-gs": "workspace:*",
     "@deepseek-ai/dsh-client-ui-brand-gs": "workspace:*",
     "@deepseek-ai/dsh-client-ui-model-risk-gs": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-notice-gs": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-scenarios-gs": "workspace:*",
     "@deepseek-ai/dsh-client-ui-schedule": "workspace:*",
     "@deepseek-ai/dsh-client-ui-skills-gs": "workspace:*",
     "@deepseek-ai/dsh-gs-server": "workspace:*",
@@ -108,6 +115,7 @@
     "@deepseek-ai/dsh-agent-loop": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-credentials-local": "workspace:*",
+    "@deepseek-ai/dsh-fs-local": "workspace:*",
     "@deepseek-ai/dsh-fs-sandbox": "workspace:*",
     "@deepseek-ai/dsh-launch-environment": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
@@ -119,6 +127,7 @@
     "@deepseek-ai/dsh-tool-fs": "workspace:*",
     "@deepseek-ai/dsh-tool-skill": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-working-directory": "workspace:*",
     "fflate": "^0.8.3"
   }
 }

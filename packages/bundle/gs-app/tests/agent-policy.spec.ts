@@ -9,7 +9,8 @@ import { boot } from '@deepseek-ai/dsh-app-boot'
 import GsServer, { type GsClientConfig } from '@deepseek-ai/dsh-gs-server'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
-import Persistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as Persistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import Llm, { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -43,7 +44,7 @@ it('clamps local danger-full-access, applies live restrictions, and commits priv
   await writeFile(file, '[]\n')
   const builtins = { sessions: SessionStore, projections: Projections, persistence: Persistence, agents: AgentRegistry,
     loop: AgentLoop, llm: Llm, prompt: Prompt, tools: Tools, sandbox: Sandbox, approval: Approval,
-    fs: Fs, files: ToolFs, server: Remote, private: Private, policy: Policy, word: Word }
+    fs: Fs, workingDirectory: WorkingDirectory, files: ToolFs, server: Remote, private: Private, policy: Policy, word: Word }
   const rows = Object.keys(builtins).map(id => ({ id, name: `cordis:${id}`, config:
     id === 'persistence' ? { root: join(home, 'history'), compression: 'none' }
       : id === 'sandbox' ? { mode: 'danger-full-access', workspaceRoot: home }

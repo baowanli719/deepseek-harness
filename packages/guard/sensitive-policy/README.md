@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this plugin to restrict private sessions to server-declared trusted model routes and deny egress tools, including external MCP tools. The gateway stamps allowed private requests with the sensitive audit header. Privacy follows explicit entry, trusted-provider use, server data classification, and fork lineage. Durable policy events and a Host-only projection preserve monotonic classification across restarts. Trust revocation cancels live private agents; logout cancels all live agents. Composed server skills receive the gated private lane.
+Use this plugin to restrict private sessions to server-declared trusted model routes and deny egress tools, including external MCP tools. The gateway stamps allowed private requests with the sensitive audit header. Privacy follows explicit entry, trusted-provider selection or use, server data classification, and fork lineage. Durable policy events and a Host-only projection preserve monotonic classification across restarts. Trust revocation cancels live private agents; logout cancels all live agents. Composed server skills receive the gated private lane.
 
 ## Table of Contents
 
@@ -54,6 +54,7 @@ Mount with defaults or override the egress list:
 
 - A `sensitivePolicy` service (`SensitivePolicyCore`) holding each session's policy state: `enterPrivate(sessionId)` locks a session to trusted-only egress (never undone), `stateOf`/`isPrivate` read it, and sensitivity (`unclassified` → `potential` → `sensitive`) only rises.
 - At the model-call boundary (`llm/stream`): a private session's request on an untrusted route is refused with a terminal `session_provider_forbidden` error before the adapter runs; an allowed request's provider route is recorded, and the gsclaw model-gateway proxy stamps the `x-gsclaw-sensitive: 1` audit header on its wire request.
+- The endpoint judgement also lands before the first request: at `agent/created` and at every committed `model/selection`, a session whose effective selection (pending choice, last used, then the composition default) resolves to a trusted route turns private, so the gated lane and egress restrictions stand before the next request assembles. `trustsProvider(provider)` on the core and its read-only view exposes the same predicate to consumers that anticipate the judgement.
 - At tool execution, every private session denies configured egress tools; external `mcp__` tools, including vision, are denied when `restrictExternalMcp` is true. Scoped restrictions also hide configured tools; execution guards cover direct calls and PTC sub-dispatches.
 - When the optional `gsServerSkillGate` service is composed (`@deepseek-ai/dsh-gs-server-skills`): every private session's agent — however the session became private — gets the gated trusted-only server-skill lane mounted into its scoped context (`agent.ctx`), at `agent/created` for an already-private session or mid-flight on the live agent when a transition turns the session private. Mounting is idempotent per session, a missing gate is a no-op, and the scoped registration unwinds with the agent, so trust-revocation cancellation tears the lane down with it.
 - On `gs-server/trust-revoked`: every private session with observed model traffic is suspended (its live agent is cancelled with a `hook` cause) without re-judging the possibly stale cache. On `gs-server/client-config-changed`: each private session's recorded provider is re-judged against the fresh trust metadata, and newly untrusted ones suspend.
@@ -80,6 +81,10 @@ This section explains how the plugin keys policy state to sessions and where eac
 
 One `llm/stream` listener reads `options.sessionId`; requests without a session identity delegate untouched. It registers the session, applies the endpoint judgement (a standard session on a trusted route turns private), refuses private sessions on untrusted routes with a one-chunk `finish` error stream (the shape adapter failures normalize into, so the loop logs and routes it through its ordinary failure path), and otherwise records the provider and delegates. Because the endpoint judgement lands before dispatch, the gateway proxy audits even a session's first trusted-route request.
 
+### How a selection is judged
+
+At `agent/created` the plugin reads the session's effective model selection — the pending choice or last used route from the loosely read `modelSelection` projection, then the composition's optional default-model service — and applies the same endpoint judgement before the first request assembles. Each committed `model/selection` event re-applies the judgement, so switching a live session onto a trusted route mounts the gated lane ahead of the next request; privacy never downgrades when the route switches back.
+
 ### How suspension is judged and executed
 
 The core judges: `suspendedSessions(isTrusted)` returns private sessions whose recorded provider fails the predicate, sorted for determinism; a private session with no observed provider has nothing to suspend yet. The plugin executes: for each judged session it cancels the live agent (`ctx.agents.get(...)`), when one is mounted, with `{ kind: 'hook' }`. Suspended sessions stay private, so their next request is re-judged at the stream boundary.
@@ -88,8 +93,8 @@ The core judges: `suspendedSessions(isTrusted)` returns private sessions whose r
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: `name`/`inject`/`Config`/`apply`, the `llm/stream` wrapper, the egress guard, scope restriction, skill-lane mounting, suspension listeners |
-| [`src/core.ts`](src/core.ts) | `SensitivePolicyCore` state machine: monotonic transitions, subscription, suspension judging; declares `Context.sensitivePolicy` |
+| [`src/index.ts`](src/index.ts) | Plugin entry: `name`/`inject`/`Config`/`apply`, the `llm/stream` wrapper, the activation and selection-commit endpoint judgement, the egress guard, scope restriction, skill-lane mounting, suspension listeners |
+| [`src/core.ts`](src/core.ts) | `SensitivePolicyCore` state machine: monotonic transitions, subscription, suspension judging, the bound provider-trust predicate; declares `Context.sensitivePolicy` |
 | [`src/trust.ts`](src/trust.ts) | Trust resolution (fail-closed) and the audit-header protocol constants |
 | [`src/types.ts`](src/types.ts) | Session policy state and transition types; the consumer-side `GsServerSkillGateFace` |
 | — | No runtime invariant companion is published: enforcement is synchronous inside the owning waterfalls and gates, and the package owns no durable state relation that independent observations could diverge from. |

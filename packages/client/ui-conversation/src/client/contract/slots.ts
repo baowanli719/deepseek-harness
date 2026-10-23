@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from 'react'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { FileUploadReceiptId } from '@deepseek-ai/dsh-client-file-upload/client'
+import type { ImageLightboxLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {
   MaybeSnapshotSelectorHook, ObservableSnapshot, SnapshotSelectorHook,
@@ -17,11 +18,12 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import type { ComposerBlock } from './composer-blocks.ts'
 import type { DraftAttachmentId, InputActions, InputNotice, InputState } from './input.ts'
-import type { ComposerKeyboard, EditSelection } from './draft-editor.ts'
+import type { ComposerKeyboard, DraftSnapshot, EditSelection } from './draft-editor.ts'
 import type { createConversationStore } from '../stores.ts'
 import type { BusyEnterBehavior } from './composer-submission.ts'
 import type { ConversationSnapshot } from './snapshot.ts'
 import type { ViewTab } from './views.ts'
+import type { UserTextDocumentInput, UserTextEvaluator, UserTextId, UserTextNode } from './user-text.ts'
 
 /** Browser-owned draft attachment that has not crossed the durable Host boundary. */
 export type ComposerAttachment = ComposerImageAttachment | ComposerFileAttachment
@@ -117,8 +119,53 @@ export interface MessageImagesOwnerProps {
   thumbnail?: boolean
 }
 
-/** Slot-backed renderer used by Conversation targets without importing an attachment implementation. */
-export type RenderMessageImages = (owner: Omit<MessageImagesOwnerProps, 'loadImage'>) => ReactNode
+/** Message-image strings the owner resolves from its own locale namespace. */
+export interface MessageImageLabels {
+  /** Fallback display name for an unnamed image. */
+  image: string
+  /** Thumbnail tooltip inviting the original-image preview. */
+  open: string
+  /** Accessible thumbnail label; receives the image's display name. */
+  openNamed: (label: string) => string
+  /** Loading placeholder shown until bytes resolve. */
+  loading: string
+  /** Retry-control label shown when the load fails. */
+  loadFailed: string
+  /** Lightbox strings forwarded to the opened preview. */
+  lightbox: ImageLightboxLabels
+}
+
+/** Root-scoped image gallery input with explicit reading authority and optional caller copy. */
+export interface MessageImagesContentInput extends MessageImagesOwnerProps {
+  readonly labels?: MessageImageLabels
+}
+
+/** Transform inputs and independently controlled rendering behavior. */
+export interface UserTextInput extends UserTextDocumentInput {
+  /** Enable renderer-owned reference actions; omitted values keep references read-only. */
+  readonly interactive?: boolean
+  /** Use CSS single-line overflow ellipsis without shortening source text. */
+  readonly ellipsis?: boolean
+}
+
+/** Rule invalidation and document evaluation supplied by the data layer. */
+export interface UserTextInjected {
+  hooks: { userTextRevision: ObservableSnapshot<number> }
+  /** Each invocation creates a caller-owned data-layer cache without registry subscriptions. */
+  createUserTextEvaluator: () => UserTextEvaluator
+  /** Report a failed rule while the original text remains visible. */
+  reportTransformFailure: (error: unknown) => void
+}
+
+/** JSON-only owner data common to every business text node. */
+export interface UserTextNodeOwnerProps {
+  readonly raw: string
+  readonly interactive: boolean
+}
+
+/** Complete props for the selected business node, including its Session scope. */
+export type UserTextNodeProps<Id extends UserTextId = UserTextId> =
+  PropsRuntime<'conversation.user.text.node', Id>
 
 /** Selector hook over the current Session's assembled Conversation. */
 export type UseConversation = SnapshotSelectorHook<ConversationSnapshot>
@@ -126,7 +173,33 @@ export type UseConversation = SnapshotSelectorHook<ConversationSnapshot>
 export type UseConversationViews = SnapshotSelectorHook<readonly ViewTab[]>
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotFactoryMap {
+    /** Parse one original text and render its business nodes through the owned keyed Slot. */
+    'conversation.user.text': {
+      scope: 'session'
+      props: UserTextInput
+      inject: UserTextInjected
+      children: {
+        'conversation.user.text.node': { kind: 'keyed'; scope: 'session'; inline: true }
+      }
+    }
+    /** Official reusable gallery, with explicit authorized loading and optional caller copy. */
+    'conversation.images.content': {
+      scope: 'root'
+      props: MessageImagesContentInput
+      locale: 'conversation'
+    }
+  }
+
   interface SlotMap {
+    /** One business-owned inline renderer for a pure JSON text node. */
+    'conversation.user.text.node': {
+      kind: 'keyed'
+      scope: 'session'
+      inline: true
+      owner: UserTextNodeOwnerProps
+      keyProps: { [Id in UserTextId]: { node: UserTextNode<Id> } }
+    }
     /** Conversation shell beneath its root-scoped main-panel entry. */
     'main.conversation': { kind: 'single'; scope: 'session-maybe' }
     /** Strict per-Session Conversation body. */
@@ -193,12 +266,27 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.hero.brand.headline': { kind: 'single'; scope: 'root'; owner: Record<never, never> }
     /** Agent-preset control staged for a New Session. */
     'conversation.hero.agentPreset': { kind: 'single'; scope: 'session-maybe'; owner: HeroAgentPresetOwnerProps }
+    /** Compact options right-aligned in the New Session row after the workspace and preset controls; rendered only with a Session. */
+    'conversation.hero.options': { kind: 'list'; scope: 'session' }
+    /**
+     * Server notice entries centered on the blank-session header row, sharing
+     * the line with the corner control. Rendered only while the header chrome
+     * is hidden (the New Session hero); an occupant with no active notice
+     * renders null.
+     */
+    'conversation.notice': { kind: 'list'; scope: 'session-maybe' }
     /** Full-width entries above the composer card. */
     'conversation.input.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Floating entries rendered inside the resident composer card. */
     'conversation.input.overlay': { kind: 'list'; scope: 'session' }
     /** Ambient entries below the composer card. */
     'conversation.composer.dock': { kind: 'list'; scope: 'session' }
+    /**
+     * Session-scoped first-screen scenario actions below the hero composer
+     * card: the bar dispatches the slot only for its hero variant with a
+     * Session, so the active Session's bottom composer never renders it.
+     */
+    'conversation.composer.shortcuts': { kind: 'list'; scope: 'session'; owner: ComposerShortcutsOwnerProps }
     /** Compact controls at the left of the composer tool row. */
     'conversation.input.left': { kind: 'list'; scope: 'session' }
     /** Compact controls before the composer submit action. */
@@ -239,6 +327,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
         'conversation.hero.brand.headline': { kind: 'single'; scope: 'root' }
         'conversation.hero.workspace': { kind: 'single'; scope: 'root' }
         'conversation.hero.agentPreset': { kind: 'single'; scope: 'session-maybe' }
+        'conversation.hero.options': { kind: 'list'; scope: 'session' }
       }
       inject: ConversationInjected
       locale: 'conversation'
@@ -344,7 +433,7 @@ export interface ConversationSessionInjected {
     readonly inspectCall: ObservableSnapshot<ConvViewOwnerProps['inspectCall']>
   }
   /** Bind input draft persistence to the Session-owned store instance. */
-  bindDraftMirror: (write: (text: string) => void) => () => void
+  bindDraftPersistence: (write: (draft: DraftSnapshot) => void) => () => void
   /** Select and activate one View while addressing an opaque focus request to it. */
   openView: (view: string, focus: string) => void
 }
@@ -415,6 +504,14 @@ export interface InputControlOwnerProps {
   locked: boolean
 }
 
+/** Owner share of composer shortcut entries. */
+export interface ComposerShortcutsOwnerProps {
+  /** Whether draft edits are currently locked, including machine adjudication and submission. */
+  locked: boolean
+  /** Restore editor focus and reveal its current selection. */
+  focusComposer: () => void
+}
+
 /** A toolbar activity hides ordinary accessory controls while expanded; its occupant must release expansion on unmount. */
 export interface InputActivityOwnerProps extends InputControlOwnerProps {
   /** @param active - whether the occupant needs the toolbar width before the submit action. */
@@ -429,7 +526,7 @@ export type ComposerBarProps =
     | 'conversation.input.permission'
     | 'conversation.input.left' | 'conversation.input.plan'
     | 'conversation.input.right' | 'conversation.input.model' | 'conversation.input.activity'
-    | 'conversation.composer.dock'
+    | 'conversation.composer.shortcuts' | 'conversation.composer.dock'
   >
   & InjectFace<ComposerBarInjected>
   & PropsLocale<'conversation'>
@@ -506,6 +603,7 @@ export type ConversationSessionHeaderSlotProps =
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
     | 'conversation.session.header.corner'
+    | 'conversation.notice'
   >
   & PropsStore<ConversationStore>
   & InjectFace<ConversationSessionHeaderInjected>
