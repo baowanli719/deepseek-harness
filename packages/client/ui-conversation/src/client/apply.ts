@@ -434,6 +434,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
       'conversation.session.header.corner': { kind: 'single', scope: 'session' },
+      'conversation.notice': { kind: 'list', scope: 'session-maybe' },
     },
     store: conversationStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionHeaderInjected => ({
@@ -458,6 +459,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       'conversation.input.right': { kind: 'list', scope: 'session' },
       'conversation.input.model': { kind: 'single', scope: 'session' },
       'conversation.input.activity': { kind: 'single', scope: 'session' },
+      'conversation.composer.shortcuts': { kind: 'list', scope: 'session' },
       'conversation.composer.dock': { kind: 'list', scope: 'session' },
     },
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {

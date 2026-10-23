@@ -113,6 +113,19 @@ export interface PiAiAdapterOptions {
    * conversion because its stored replay state is unusable by this build.
    */
   onReplayDegrade?: (detail: { provider: string; model: string; reason: string }) => void
+  /**
+   * Repoint one loopback route whose request failed at the connection layer
+   * before any chunk arrived — the signature of a mirrored baseURL outliving
+   * its listener. The adapter offers the stale baseURL; the hook, typically
+   * backed by the `gsLlmGateway` service, repoints the running configuration
+   * at the live origin. Only a loopback baseURL reaches this hook, only a
+   * failure that delivered nothing triggers it (so a retry replays no
+   * content), and the request is retried at most once. HTTP error statuses
+   * never qualify: they arrive as their own classified failures.
+   * @param detail - the failed route and the baseURL it dialed.
+   * @returns whether the route was repointed and the request should be retried once.
+   */
+  recoverLoopbackRoute?: (detail: { provider: string; baseURL: string }) => Promise<boolean>
 }
 
 /** The two auth injectables a pi-ai collection is built with. */
@@ -121,6 +134,17 @@ export interface PiAiAuthInjection {
   credentials: CredentialStore
   /** Ambient lookups a provider performs while resolving its own auth. */
   authContext: AuthContext
+}
+
+/** Loopback hosts a gateway mirror can point a provider route at; only an in-process gateway could repoint these. */
+const LOOPBACK_BASE_URL_HOSTNAMES: ReadonlySet<string> = new Set(['127.0.0.1', 'localhost', '[::1]'])
+
+/** Whether one profile baseURL addresses a loopback listener an in-process gateway could own. */
+function isLoopbackBaseUrl(baseURL: string | undefined): baseURL is string {
+  /* v8 ignore next -- a route that reached the transport always had a baseURL; the guard keeps the check total. */
+  if (baseURL === undefined) return false
+  /* v8 ignore next -- a baseURL that produced a connection-layer failure parsed well enough to dial. */
+  return LOOPBACK_BASE_URL_HOSTNAMES.has(URL.parse(baseURL)?.hostname ?? '')
 }
 
 /** Copy profile stream knobs into pi-ai's common option vocabulary. */
@@ -360,6 +384,69 @@ export class PiAiAdapter extends LlmAdapter {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
     }
+    const recover = this.config.recoverLoopbackRoute
+    let current = snapshot
+    let recovered = false
+    for (;;) {
+      const profile = this.profileOf(current, options.provider)
+      let held: {
+        chunk: StreamChunk
+        baseURL: string
+        recover: NonNullable<PiAiAdapterOptions['recoverLoopbackRoute']>
+      } | undefined
+      const iterator = this.streamAttempt(options, current)[Symbol.asyncIterator]()
+      let exhausted = false
+      try {
+        while (true) {
+          const result = await iterator.next()
+          if (result.done) {
+            exhausted = true
+            break
+          }
+          // A connection-layer failure delivered before any content: the
+          // request never reached a model, so retrying it against a
+          // repointed route replays nothing. Intercept it only when a hook
+          // could repoint the route — one retry per stream call.
+          if (!recovered && recover !== undefined
+            && result.value.type === 'finish'
+            && result.value.reason.kind === 'error'
+            && result.value.reason.failure.code === 'TRANSPORT'
+            && isLoopbackBaseUrl(profile.baseURL)) {
+            held = { chunk: result.value, baseURL: profile.baseURL, recover }
+            break
+          }
+          yield result.value
+        }
+      } finally {
+        // Any exit short of completion — the interception break, a throw, or
+        // the consumer abandoning this stream — returns into the attempt so
+        // its cleanup (consumer abort) runs; completion already ran it.
+        if (!exhausted) await iterator.return?.(undefined)
+      }
+      if (held === undefined) return
+      let repointed = false
+      try {
+        repointed = await held.recover({ provider: options.provider, baseURL: held.baseURL })
+      } catch (error) {
+        // Recovery is best-effort; the held connection failure stands.
+        void error
+      }
+      // A repoint the running configuration does not reflect would send the
+      // retry to the same dead listener.
+      const next = repointed ? this.current() : current
+      if (next === current) {
+        yield held.chunk
+        return
+      }
+      recovered = true
+      current = next
+    }
+  }
+
+  private async * streamAttempt(
+    options: GenerateOptions,
+    snapshot: PiAiSnapshot,
+  ): AsyncIterable<StreamChunk> {
     // One capture per stream call, taken before any await: the profile, the
     // model descriptor, and the collection all come from the same immutable
     // snapshot, and the credential freezes with them. A configuration change

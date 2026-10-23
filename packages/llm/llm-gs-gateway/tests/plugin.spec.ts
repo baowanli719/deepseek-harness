@@ -60,6 +60,7 @@ async function boot(options: {
   clientConfig?: GsClientConfig | undefined
   launchToken?: string
   config?: object
+  replaceError?: Error
 } = {}): Promise<Harness> {
   const upstreamRequests: Harness['upstreamRequests'] = []
   const upstream: Server = createServer((req, res) => {
@@ -103,6 +104,7 @@ async function boot(options: {
   const settings = { replaced: [] as SettingsCall[], mutated: [] as SettingsCall[] }
   ctx.provide('settings', {
     replace: (ns: string, section: object) => {
+      if (options.replaceError !== undefined) return Promise.reject(options.replaceError)
       settings.replaced.push({ ns, section: structuredClone(section) })
       return Promise.resolve()
     },
@@ -254,6 +256,46 @@ describe('llm-gs-gateway plugin', () => {
 
     const fiber = ctx.plugin(Gateway, {})
     await expect(fiber.await()).rejects.toThrow('llm-pi-ai')
+  })
+
+  it('repoints a stale mirrored route at the live origin when a request is refused', async () => {
+    const harness = await boot({ clientConfig: undefined })
+    harness.setClientConfig(CLIENT_CONFIG)
+
+    const gateway = harness.ctx.gsLlmGateway
+    await expect(gateway.recoverLoopbackRoute?.('http://127.0.0.1:1/v1/gs-cloud')).resolves.toBe(true)
+
+    expect(harness.settings.replaced).toHaveLength(1)
+    expect(harness.settings.replaced[0]?.section).toMatchObject({
+      providers: { 'gs-cloud': { baseURL: `${harness.ctx.gsLlmGateway.origin}/v1/gs-cloud` } },
+    })
+    expect(harness.settings.mutated).toHaveLength(1)
+  })
+
+  it('declines recovery when the failed request already named the live origin', async () => {
+    const harness = await boot()
+    const live = harness.ctx.gsLlmGateway.providerBaseUrl('gs-cloud')
+
+    await expect(harness.ctx.gsLlmGateway.recoverLoopbackRoute?.(live)).resolves.toBe(false)
+
+    expect(harness.settings.replaced).toHaveLength(1)
+  })
+
+  it('declines recovery while no session has supplied a ClientConfig', async () => {
+    const harness = await boot({ clientConfig: undefined })
+
+    await expect(harness.ctx.gsLlmGateway.recoverLoopbackRoute?.('http://127.0.0.1:1/v1/gs-cloud')).resolves.toBe(false)
+
+    expect(harness.settings.replaced).toHaveLength(0)
+  })
+
+  it('still offers the retry when the recovery mirror cannot persist the plan', async () => {
+    const harness = await boot({ clientConfig: undefined, replaceError: new Error('EIO: injected persist failure') })
+    harness.setClientConfig(CLIENT_CONFIG)
+
+    // The mirror rejects, but applyOnPersistFailure has still moved the
+    // running composition, so the caller retries against the live origin.
+    await expect(harness.ctx.gsLlmGateway.recoverLoopbackRoute?.('http://127.0.0.1:1/v1/gs-cloud')).resolves.toBe(true)
   })
 
   it('closes the proxy port and withdraws the service on disposal', async () => {

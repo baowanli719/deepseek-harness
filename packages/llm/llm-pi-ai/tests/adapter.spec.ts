@@ -439,6 +439,148 @@ describe('PiAiAdapter provider routing', () => {
   })
 })
 
+describe('loopback route recovery', () => {
+  const DEAD_LOOPBACK = 'http://127.0.0.1:1'
+
+  function recoveringAdapter(
+    providers: () => Record<string, LlmPiAi.PiAiProviderProfile>,
+    recoverLoopbackRoute: (detail: { provider: string; baseURL: string }) => Promise<boolean>,
+  ): PiAiAdapter {
+    return new PiAiAdapter({
+      profiles: () => resolveProfiles(providers()),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+      recoverLoopbackRoute,
+    })
+  }
+
+  it('repoints a refused loopback route through the hook and retries the request once', async () => {
+    const live = await mockServer([{ events: textEvents }])
+    let providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: DEAD_LOOPBACK },
+    }
+    const recover = vi.fn(async (_detail: { provider: string; baseURL: string }) => {
+      providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: live.url } }
+      return true
+    })
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], recoveringAdapter(() => providers, recover))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(recover).toHaveBeenCalledOnce()
+    expect(recover).toHaveBeenCalledWith({ provider: 'deepseek', baseURL: DEAD_LOOPBACK })
+    expect(live.paths).toEqual(['/chat/completions'])
+  })
+
+  it('delivers the connection failure unchanged when the hook declines to repoint', async () => {
+    const providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: DEAD_LOOPBACK } }
+    const recover = vi.fn(async (_detail: { provider: string; baseURL: string }) => false)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], recoveringAdapter(() => providers, recover))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+    expect(recover).toHaveBeenCalledOnce()
+  })
+
+  it('delivers the connection failure unchanged when the hook itself fails', async () => {
+    const providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: DEAD_LOOPBACK } }
+    const recover = vi.fn(async (_detail: { provider: string; baseURL: string }) => {
+      throw new Error('mirror write exploded')
+    })
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], recoveringAdapter(() => providers, recover))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+    expect(recover).toHaveBeenCalledOnce()
+  })
+
+  it('delivers the connection failure unchanged without a recovery hook', async () => {
+    const providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: DEAD_LOOPBACK } }
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+    }))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+  })
+
+  it('delivers the failure without retrying when the repoint leaves the profiles identical', async () => {
+    const memoized = resolveProfiles({ deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: DEAD_LOOPBACK } })
+    const recover = vi.fn(async (_detail: { provider: string; baseURL: string }) => true)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], new PiAiAdapter({
+      profiles: () => memoized,
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+      recoverLoopbackRoute: recover,
+    }))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+    expect(recover).toHaveBeenCalledOnce()
+  })
+
+  it('retries at most once when the repoint changes nothing the adapter can see', async () => {
+    const providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: DEAD_LOOPBACK } }
+    const recover = vi.fn(async (_detail: { provider: string; baseURL: string }) => true)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], recoveringAdapter(() => providers, recover))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+    expect(recover).toHaveBeenCalledOnce()
+  })
+
+  it('never offers a non-loopback failure to the hook', async () => {
+    // `.invalid` never resolves (RFC 2606), so the request fails at the
+    // connection layer without touching a routable network.
+    const providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: 'http://llm-gone.invalid:8080' } }
+    const recover = vi.fn(async (_detail: { provider: string; baseURL: string }) => true)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], recoveringAdapter(() => providers, recover))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+    expect(recover).not.toHaveBeenCalled()
+  })
+
+  it('never offers an HTTP error status from a loopback endpoint to the hook', async () => {
+    const server = await mockServer([{ status: 500, body: JSON.stringify({ error: { message: 'provider 500' } }) }])
+    const providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url } }
+    const recover = vi.fn(async (_detail: { provider: string; baseURL: string }) => true)
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], recoveringAdapter(() => providers, recover))
+
+    const result = await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(recover).not.toHaveBeenCalled()
+    expect(server.paths).toEqual(['/chat/completions'])
+  })
+})
+
+
 describe('provider profile lifecycle', () => {
   it('keeps adapter helpers off the package root', () => {
     for (const helper of [

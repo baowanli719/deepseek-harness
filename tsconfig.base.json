@@ -125,6 +125,8 @@
       "@deepseek-ai/dsh-client-ui-link-preview": ["./packages/client/ui-link-preview/src"],
       "@deepseek-ai/dsh-client-ui-skills-gs": ["./packages/client/ui-skills-gs/src"],
       "@deepseek-ai/dsh-client-ui-model-risk-gs": ["./packages/client/ui-model-risk-gs/src"],
+      "@deepseek-ai/dsh-client-ui-notice-gs": ["./packages/client/ui-notice-gs/src"],
+      "@deepseek-ai/dsh-client-ui-scenarios-gs": ["./packages/client/ui-scenarios-gs/src"],
       "@deepseek-ai/dsh-gs-app/prompt-language": ["./packages/bundle/gs-app/src/prompt-language.ts"],
       "@deepseek-ai/dsh-gs-app/prompt-policy": ["./packages/bundle/gs-app/src/prompt-policy.ts"],
       "@deepseek-ai/dsh-gs-app/skill-policy": ["./packages/bundle/gs-app/src/skill-policy.ts"],

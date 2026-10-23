@@ -55,6 +55,10 @@
  * @module @deepseek-ai/dsh-llm-pi-ai
  */
 import type {} from '@deepseek-ai/dsh-settings'
+// Type-only: pulls the `Context.gsLlmGateway` service declaration in; the
+// service itself is resolved optionally at runtime through `ctx.get`, so a
+// composition without the gateway keeps every other behavior of this plugin.
+import type {} from '@deepseek-ai/dsh-llm-gs-gateway'
 
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 
@@ -229,6 +233,21 @@ export function apply(ctx: Context, config: Config): void {
         `llm-pi-ai: unusable replay state on assistant history for route "${provider}/${model}";`
         + ` sending that message as provider-neutral content (${reason})`,
       )
+    },
+    // A mirrored route can outlive the loopback listener its baseURL named
+    // (a mirror write that never landed, a proxy re-bound without a push):
+    // the gateway proxy knows its own live origin, so the route is repointed
+    // and the request retried once rather than surfacing a bare
+    // "Connection error." forever. Without the gateway service there is
+    // nothing to repoint, and the failure stands.
+    recoverLoopbackRoute: ({ provider, baseURL }) => {
+      const gateway = ctx.get('gsLlmGateway')
+      if (gateway?.recoverLoopbackRoute === undefined) return Promise.resolve(false)
+      ctx.logger.warn(
+        `llm-pi-ai: provider route "${provider}" lost its loopback gateway at ${baseURL};`
+        + ' repointing the mirrored plan at the live origin and retrying the request once',
+      )
+      return gateway.recoverLoopbackRoute(baseURL)
     },
   })
   // Independent of the route set: signing in is what makes a route worth

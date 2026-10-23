@@ -1,6 +1,7 @@
 /** Session-addressed, cold-readable skill catalog Remote. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import { SessionQueryError } from '@deepseek-ai/dsh-session-query'
 import { isUserInvocable } from '@deepseek-ai/dsh-skill'
@@ -16,6 +17,31 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/**
+ * Narrow optional face of the sensitive-policy service
+ * (`@deepseek-ai/dsh-sensitive-policy`): privacy state plus the provider-trust
+ * predicate behind the endpoint judgement. Absent service = no gated lane.
+ */
+interface SessionPrivacyFace {
+  isPrivate(sessionId: string): boolean
+  trustsProvider(provider: string): boolean
+}
+
+/**
+ * Narrow optional face of the gs-server skill catalog share
+ * (`@deepseek-ai/dsh-gs-server-skills`): the gated trusted-only entries of the
+ * latest server sync, carrying their display metadata.
+ */
+interface GatedServerSkillCatalogFace {
+  snapshot(): {
+    gated: readonly {
+      name: string
+      displayName?: string
+      description?: string
+    }[]
+  }
+}
+
 /** Host service backing `ctx.remote.skills` without activating a cold Agent. */
 export class SessionSkillCatalog extends TypertRemoteService {
   static inject = ['agents', 'sessionQuery', 'typert', 'workingDirectory']
@@ -27,6 +53,10 @@ export class SessionSkillCatalog extends TypertRemoteService {
 
   /**
    * List the user-invocable skills visible to one Session composition.
+   * Gated trusted-only server skills join the list when the Session is private
+   * or its effective model selection already resolves to a trusted route, so
+   * the composer can name them before the private Agent activates; loading and
+   * execution keep their own private-session checks.
    * @param request - Session identity whose cwd and preset select the catalog view.
    * @param signal - caller lifetime carried by the Remote transport; admitted catalog reads retain their existing completion semantics.
    * @returns user-invocable skill metadata without loading skill bodies.
@@ -37,6 +67,7 @@ export class SessionSkillCatalog extends TypertRemoteService {
     const { sessionId } = request
     let cwd: string
     let agentPreset: string | undefined
+    let selectedProvider: string | undefined
     try {
       using observation = await this.ctx.sessionQuery.observeSession(sessionId)
       if (observation.projections === undefined) {
@@ -46,6 +77,7 @@ export class SessionSkillCatalog extends TypertRemoteService {
         ?? observation.header.cwd
         ?? this.ctx.workingDirectory.defaultDirectory
       agentPreset = observation.projections.values.agentPreset ?? undefined
+      selectedProvider = observation.projections.values.modelSelection?.next?.provider ?? undefined
       const live = this.ctx.agents.get(sessionId)
       if (live !== undefined) cwd = await this.ctx.workingDirectory.ensure(live, signal)
     } catch (error: unknown) {
@@ -76,18 +108,48 @@ export class SessionSkillCatalog extends TypertRemoteService {
     const scope = live ?? lease?.key
     try {
       const skills = (await skillRegistry.list({ cwd, scope })).filter(isUserInvocable)
-      return {
-        skills: skills.map(skill => ({
-          name: skill.name,
-          ...skill.path === undefined ? {} : { path: skill.path },
-          description: skill.description,
-          ...skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse },
-          modelInvocable: skill.invocation.modelInvocable,
-        })),
-      }
+      const entries: SkillListValue['skills'] = skills.map(skill => ({
+        name: skill.name,
+        ...skill.path === undefined ? {} : { path: skill.path },
+        description: skill.description,
+        ...skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse },
+        modelInvocable: skill.invocation.modelInvocable,
+      }))
+      return { skills: [...entries, ...this.gatedComposerSkills(String(sessionId), selectedProvider, entries)] }
     } catch (error: unknown) {
       throw new RemoteError('gateway/internal', `skill listing failed: ${String(error)}`, {})
     }
+  }
+
+  /**
+   * Gated trusted-only server skills bound to become invocable in one Session:
+   * listed when the Session is private or its effective selection (pending
+   * choice, then the composition default) resolves to a trusted route. The
+   * merge is listing-only — the gated lane's own per-load private check stays
+   * the gate for bodies and executions.
+   * @param sessionId - the Session whose composer reads the catalog.
+   * @param selectedProvider - provider route of the Session's pending selection, when recorded.
+   * @param listed - entries already listed through the registry.
+   * @returns gated entries not already listed, or none when the lane stays closed.
+   */
+  private gatedComposerSkills(
+    sessionId: string,
+    selectedProvider: string | undefined,
+    listed: SkillListValue['skills'],
+  ): SkillListValue['skills'] {
+    const policy = this.ctx.get('sensitivePolicy') as SessionPrivacyFace | undefined
+    const catalog = this.ctx.get('gsServerSkillCatalog') as GatedServerSkillCatalogFace | undefined
+    if (policy === undefined || catalog === undefined) return []
+    const provider = selectedProvider ?? this.ctx.agentDefaultModel.currentSelection().provider
+    if (!policy.isPrivate(sessionId) && !policy.trustsProvider(provider)) return []
+    const seen = new Set(listed.map(skill => skill.name))
+    return catalog.snapshot().gated
+      .filter(entry => !seen.has(entry.name))
+      .map(entry => ({
+        name: entry.name,
+        description: entry.description ?? entry.displayName ?? '',
+        modelInvocable: true,
+      }))
   }
 
   /** Resolve a live or standing preset scope without creating an Agent. */

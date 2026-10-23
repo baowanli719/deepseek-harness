@@ -591,6 +591,8 @@ describe('gated trusted-only lane', () => {
       runtimeType: 'server-mcp',
       definitionRevision: 'rev-z1',
       modelPolicy: 'trusted-only',
+      displayName: 'Knowledge Base',
+      description: 'Consult the policy knowledge base.',
     }])
     expect(catalog.resolveGated('zhidu-knowledge', 'server-mcp')?.definitionRevision).toBe('rev-z1')
     expect(catalog.resolveRemote('zhidu-knowledge', 'server-mcp')).toBeUndefined()

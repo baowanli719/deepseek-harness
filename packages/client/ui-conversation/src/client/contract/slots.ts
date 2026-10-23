@@ -268,12 +268,25 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.hero.agentPreset': { kind: 'single'; scope: 'session-maybe'; owner: HeroAgentPresetOwnerProps }
     /** Compact options right-aligned in the New Session row after the workspace and preset controls; rendered only with a Session. */
     'conversation.hero.options': { kind: 'list'; scope: 'session' }
+    /**
+     * Server notice entries centered on the blank-session header row, sharing
+     * the line with the corner control. Rendered only while the header chrome
+     * is hidden (the New Session hero); an occupant with no active notice
+     * renders null.
+     */
+    'conversation.notice': { kind: 'list'; scope: 'session-maybe' }
     /** Full-width entries above the composer card. */
     'conversation.input.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Floating entries rendered inside the resident composer card. */
     'conversation.input.overlay': { kind: 'list'; scope: 'session' }
     /** Ambient entries below the composer card. */
     'conversation.composer.dock': { kind: 'list'; scope: 'session' }
+    /**
+     * Session-scoped first-screen scenario actions below the hero composer
+     * card: the bar dispatches the slot only for its hero variant with a
+     * Session, so the active Session's bottom composer never renders it.
+     */
+    'conversation.composer.shortcuts': { kind: 'list'; scope: 'session'; owner: ComposerShortcutsOwnerProps }
     /** Compact controls at the left of the composer tool row. */
     'conversation.input.left': { kind: 'list'; scope: 'session' }
     /** Compact controls before the composer submit action. */
@@ -491,6 +504,14 @@ export interface InputControlOwnerProps {
   locked: boolean
 }
 
+/** Owner share of composer shortcut entries. */
+export interface ComposerShortcutsOwnerProps {
+  /** Whether draft edits are currently locked, including machine adjudication and submission. */
+  locked: boolean
+  /** Restore editor focus and reveal its current selection. */
+  focusComposer: () => void
+}
+
 /** A toolbar activity hides ordinary accessory controls while expanded; its occupant must release expansion on unmount. */
 export interface InputActivityOwnerProps extends InputControlOwnerProps {
   /** @param active - whether the occupant needs the toolbar width before the submit action. */
@@ -505,7 +526,7 @@ export type ComposerBarProps =
     | 'conversation.input.permission'
     | 'conversation.input.left' | 'conversation.input.plan'
     | 'conversation.input.right' | 'conversation.input.model' | 'conversation.input.activity'
-    | 'conversation.composer.dock'
+    | 'conversation.composer.shortcuts' | 'conversation.composer.dock'
   >
   & InjectFace<ComposerBarInjected>
   & PropsLocale<'conversation'>
@@ -582,6 +603,7 @@ export type ConversationSessionHeaderSlotProps =
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
     | 'conversation.session.header.corner'
+    | 'conversation.notice'
   >
   & PropsStore<ConversationStore>
   & InjectFace<ConversationSessionHeaderInjected>

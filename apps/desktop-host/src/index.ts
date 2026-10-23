@@ -87,7 +87,9 @@ async function main(): Promise<void> {
     if (!process.connected || process.send === undefined) { resolve(); return }
     process.send(message, (error) => { if (error === null) resolve(); else reject(error) })
   })
-  const stop = (): Promise<void> => stopping ??= (async () => {
+  // The shell reports the child's stderr tail with an exit; state the shutdown reason there.
+  const stop = (reason: string): Promise<void> => stopping ??= (async () => {
+    console.error(`dsh desktop host: shutting down: ${reason}`)
     // Startup failure is reported by main; shutdown only owns a tree that booted.
     const running = await application.catch(() => undefined)
     await running?.shutdown.shutdown(0)
@@ -96,7 +98,7 @@ async function main(): Promise<void> {
   })()
   process.on('message', (message: unknown) => {
     if (typeof message !== 'object' || message === null || !('type' in message)) return
-    if (message.type === 'shutdown') { void stop(); return }
+    if (message.type === 'shutdown') { void stop('the shell requested shutdown'); return }
     if (message.type === 'quit-inspection') {
       if (!('requestId' in message) || !Number.isSafeInteger(message.requestId)) return
       const requestId = message.requestId
@@ -126,7 +128,15 @@ async function main(): Promise<void> {
       }
     })().catch((error: unknown) => { console.error(error) })
   })
-  process.once('disconnect', () => { void stop() })
+  process.once('disconnect', () => { void stop('the IPC channel to the shell disconnected') })
+  process.once('exit', (code) => {
+    if (code !== 0 || stopping !== undefined) return
+    try {
+      process.stderr.write('dsh desktop host: exiting with code 0 without a shutdown request\n')
+    } catch {
+      // A broken stderr pipe cannot be reported during exit.
+    }
+  })
   const { ctx } = await application
   if (profileName === 'gs-desktop') {
     installGsUpdatePublisher(ctx, () => {

@@ -36,7 +36,7 @@ declare const text: string
 await writeFileAtomic('/home/u/.dsh/cordis.patch.yml', text, { mode: 0o600 })
 ```
 
-Parent directories are created as needed, and readers observe either the old or the new complete content. On Windows, transient replacement interference reported as `EACCES`, `EBUSY`, or `EPERM` is retried for a bounded interval; any remaining failure removes the temporary file and leaves the target untouched.
+Parent directories are created as needed, and readers observe either the old or the new complete content. On Windows, transient replacement interference reported as `EACCES`, `EBUSY`, `EEXIST`, or `EPERM` is retried for a bounded interval; any remaining failure removes the temporary file and leaves the target untouched. A committed replacement also sweeps the target's orphan `<name>.*.tmp` siblings that comfortably predate the write — residue of earlier failures whose own cleanup was refused — while leaving fresh siblings a concurrent writer may still be using alone; sweep failures never fail the write.
 
 ### Coordinating writers
 

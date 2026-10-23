@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
+import { z as zod } from 'zod'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -319,6 +320,92 @@ describe('sensitive-policy egress tool denial', () => {
     expect(ctx.sensitivePolicy.isPrivate('c1')).toBe(true)
     const result = await executeAs(ctx, agent, 'web_fetch')
     expect(result.isError).toBe(true)
+  })
+
+  it('exposes provider trust through the policy face', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    expect(ctx.sensitivePolicy.trustsProvider('trusted-gw')).toBe(true)
+    expect(ctx.sensitivePolicy.trustsProvider('ext-cloud')).toBe(false)
+    expect(ctx.sensitivePolicy.view().trustsProvider('trusted-gw')).toBe(true)
+  })
+
+  it('enters private and mounts the gated lane at agent/created when the default route is trusted', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'trusted-gw', model: 'm1' }) })
+    const mount = vi.fn()
+    ctx.provide('gsServerSkillGate', { mountPrivateLane: mount })
+    const { agent, key } = await fakeAgent(ctx, 's-default')
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    expect(ctx.sensitivePolicy.isPrivate('s-default')).toBe(true)
+    expect(ctx.sensitivePolicy.stateOf('s-default').privateCause).toBe('provider-endpoint')
+    expect(mount).toHaveBeenCalledTimes(1)
+    expect(ctx.tools.get('web_fetch', key)).toBeUndefined()
+  })
+
+  it('stays standard at agent/created when the default route is external', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'ext-cloud', model: 'm1' }) })
+    const { agent, key } = await fakeAgent(ctx, 's-external')
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    expect(ctx.sensitivePolicy.isPrivate('s-external')).toBe(false)
+    expect(ctx.tools.get('web_fetch', key)).toBeDefined()
+  })
+
+  it('enters private at agent/created from a recorded trusted model selection', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    ctx.sessionProjections.register({
+      key: 'modelSelection',
+      stateVersion: 1,
+      stateSchema: zod.object({ pending: zod.unknown(), lastUsed: zod.unknown() }),
+      init: () => ({ pending: null, lastUsed: null }),
+      apply: (state: { pending: unknown; lastUsed: unknown }, event: { type?: unknown; data?: unknown }) =>
+        event.type === 'model/selection' ? { ...state, pending: event.data } : state,
+    } as never)
+    const { agent } = await fakeAgent(ctx, 's-pending', undefined, [
+      { type: 'model/selection', data: { provider: 'trusted-gw', model: 'm1' } } as unknown as SessionEvent,
+    ])
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    expect(ctx.sensitivePolicy.isPrivate('s-pending')).toBe(true)
+    expect(ctx.sensitivePolicy.stateOf('s-pending').privateCause).toBe('provider-endpoint')
+  })
+
+  it('mounts the gated lane when a trusted selection commits on a live agent', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    const { agent, key } = await fakeAgent(ctx, 's-switch')
+    const registry = new Map([[agent.id as string, agent]])
+    ctx.provide('agents', { get: (id: SessionId) => registry.get(id as string) })
+    const mount = vi.fn()
+    ctx.provide('gsServerSkillGate', { mountPrivateLane: mount })
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    expect(ctx.sensitivePolicy.isPrivate('s-switch')).toBe(false)
+    expect(mount).not.toHaveBeenCalled()
+    ctx.emit('session/event', agent.session, {
+      type: 'model/selection', seq: SessionSeq(0), time: 0,
+      data: { provider: 'trusted-gw', model: 'm1' },
+    } as unknown as SessionEvent)
+    expect(ctx.sensitivePolicy.isPrivate('s-switch')).toBe(true)
+    expect(mount).toHaveBeenCalledTimes(1)
+    expect(ctx.tools.get('web_fetch', key)).toBeUndefined()
+  })
+
+  it('ignores a committed selection on an external route', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    const { agent } = await fakeAgent(ctx, 's-external-switch')
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    ctx.emit('session/event', agent.session, {
+      type: 'model/selection', seq: SessionSeq(0), time: 0,
+      data: { provider: 'ext-cloud', model: 'm1' },
+    } as unknown as SessionEvent)
+    expect(ctx.sensitivePolicy.isPrivate('s-external-switch')).toBe(false)
   })
 
   it('restores a private session from the previous gs-worker policy event', async () => {

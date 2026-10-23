@@ -1,0 +1,29 @@
+.shortcuts {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  max-width: var(--dsh-composer-card-max-width);
+  padding-top: 24px;
+}
+
+/* Pill-shaped 32px actions, more generous than the compact base size. */
+.shortcut {
+  min-width: 0;
+  max-width: 100%;
+  height: 32px;
+  font-size: 13px;
+  line-height: 20px;
+  padding: 0 16px;
+  border-radius: 999px;
+  corner-shape: round;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

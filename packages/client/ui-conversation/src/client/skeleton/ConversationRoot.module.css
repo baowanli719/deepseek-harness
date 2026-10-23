@@ -415,6 +415,15 @@ button.crumb:hover {
   scrollbar-gutter: stable;
 }
 
+/* Hero-only notice lane on the blank-session header row: takes the space the
+   hidden chrome leaves, centers its occupant, and yields to the corner seat. */
+.titleNotice {
+  display: flex;
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+}
+
 /* The bar also stops 2px short of the scroller's ends, matching its 2px edge
    offset. WebKit-only: the Firefox path has no track to inset. */
 .scrollBody::-webkit-scrollbar-track {

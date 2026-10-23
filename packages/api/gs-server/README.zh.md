@@ -25,6 +25,21 @@ gs-worker 办公 Agent 的 gsclaw-server 客户端：`gsServer` Cordis 服务负
 
 `src/contract.ts` 中的模型风险协议以 `GsModelRiskStatusRequest` 指定提供方和模型，以 `GsModelRiskView` 返回当前揭示书及可选的存档签署记录，以 `GsModelRiskSignRequest` 提交 revision、确认和归一化签名笔画，并以 `GsModelRiskDownloadRequest`/`GsModelRiskDownloadResponse` 按签署编号查询和传输 base64 PDF。签署不含客户端身份字段；网关读取当前认证账号的姓名和邮箱。
 
+`GsClientConfig.scenarioShortcuts` 是 GS composer 场景快捷入口的可选服务端策略。字段缺席时由客户端选择默认项；`null` 或 `enabled: false` 隐藏整个 entry，单项的 `enabled: false` 仅隐藏该项。启用的自定义项保持服务端顺序，并要求唯一、非空白的稳定 `id`、作为服务端数据渲染的非空白显示 `label`，以及匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$` 且不带前导 `/` 的 `skill`：
+
+```json
+{
+  "scenarioShortcuts": {
+    "enabled": true,
+    "items": [
+      { "id": "research-summary", "label": "研报分析", "skill": "gs-research-summary" }
+    ]
+  }
+}
+```
+
+`GET /api/gs-server/scenario-shortcuts` 主动刷新 ClientConfig，仅返回该字段；字段缺席时省略它，使客户端默认项与显式 `null` 保持可区分。[ui-scenarios-gs](../../client/ui-scenarios-gs/README.zh.md) 拥有默认场景与草稿插入行为。
+
 认证提交绑定代次，并与凭据写入串行执行。登出先使正在进行的登录、恢复、刷新与配置拉取失效，再删除本地凭据，并通过 `gs-server/session-ended` 通知消费方。切换端点先结束旧会话。显式端点配置无效时启动失败；仅回环地址及出厂部署端点允许 HTTP；其他端点必须使用 HTTPS。
 
 在 Host 侧组合该插件，提供 `stateDir` 和上报给网关的客户端版本：
@@ -40,7 +55,7 @@ gs-worker 办公 Agent 的 gsclaw-server 客户端：`gsServer` Cordis 服务负
 
 消费方声明 `inject = ['gsServer']` 并使用服务契约：`getAccessToken()` 返回内存中的 access token（未登录为 undefined），`fetch(path, init)` 对已解析端点发起认证请求，自动附带 Bearer token 与策略版本头，遇过期 token 的 401 时单飞刷新并重试一次，`getClientConfig()` 返回最新缓存的服务端 ClientConfig。根上下文上以声明合并方式提供事件：`gs-server/session-established`（登录、令牌写入、重启恢复、刷新）、`gs-server/session-expired`（刷新被 401 拒绝）、`gs-server/trust-revoked`（刷新被 403 拒绝）、`gs-server/client-config-changed`（payload 为新的 ClientConfig）。
 
-驱动自有登录界面的宿主直接使用服务方法：登录前握手用 `getMeta`/`getAuthMethods`/`fetchCaptcha`，内置流程用 `loginWithPassword`/`sendEmailCode`/`loginWithEmailCode`，外部签发令牌对（SSO、扫码）经 `adoptTokens` 写入，重启后用 `restoreSession` 恢复，另有 `logout`、`sessionView`、`brandView`、`refreshClientConfig` 与 `setEndpointOverride`/`clearEndpointOverride`。邮箱验证码方法会把纯邮箱前缀补全为配置的企业邮箱域名，并在调用网关前以 `invalid_email_account` 错误拒绝其他域名。`modelRiskStatus`/`modelRiskSign`/`modelRiskDownload` 代理非可信模型风险揭示流程：签署要求查询、手写签名确认与已签署 PDF 下载。启用 `routes` 时，同一套能力经同源回环 HTTP 暴露在 `/api/gs-server/meta`、`/session`、`/brand`、`/captcha`、`/login`、`/email-code`、`/email-login`、`/logout`、`/model-risk/status`、`/model-risk/sign`、`/model-risk/download`；凭证状态绝不离开 Host 进程。
+驱动自有登录界面的宿主直接使用服务方法：登录前握手用 `getMeta`/`getAuthMethods`/`fetchCaptcha`，内置流程用 `loginWithPassword`/`sendEmailCode`/`loginWithEmailCode`，外部签发令牌对（SSO、扫码）经 `adoptTokens` 写入，重启后用 `restoreSession` 恢复，另有 `logout`、`sessionView`、`brandView`、`refreshClientConfig` 与 `setEndpointOverride`/`clearEndpointOverride`。邮箱验证码方法会把纯邮箱前缀补全为配置的企业邮箱域名，并在调用网关前以 `invalid_email_account` 错误拒绝其他域名。`modelRiskStatus`/`modelRiskSign`/`modelRiskDownload` 代理非可信模型风险揭示流程：签署要求查询、手写签名确认与已签署 PDF 下载。启用 `routes` 时，同一套能力经同源回环 HTTP 暴露在 `/api/gs-server/meta`、`/session`、`/brand`、`/captcha`、`/login`、`/email-code`、`/email-login`、`/logout`、`/app-update`、`/notice`、`/scenario-shortcuts`、`/model-risk/status`、`/model-risk/sign`、`/model-risk/download`；凭证状态绝不离开 Host 进程。
 
 refresh token 是唯一跨重启持久化的凭证。Windows 使用 CurrentUser DPAPI；macOS 使用 AES-GCM，主密钥保存在登录钥匙串中。其他平台拒绝持久化登录，除非宿主通过 `Config.protector` 注入操作系统保护器。子进程经标准输入接收秘密，不通过命令行参数传递。
 

@@ -314,4 +314,42 @@ describe('request-level dynamic profiles', () => {
     await configurations.get(ctx)!.update({ providers: { anthropic: {}, openai: {} } })
     expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(before)
   })
+
+  it('repoints a route whose loopback gateway refused the connection, through the gsLlmGateway service', async () => {
+    const dir = await home()
+    await writeFile(join(dir, '.credentials.yaml'), 'version: 1\nrefs:\n  PI_LIVE_KEY: live-key\n', { mode: 0o600 })
+    const live = await mockServer([{ events: textEvents }])
+    const stale = 'http://127.0.0.1:1/v1'
+    const ctx = await boot(dir, { providers: { deepseek: { apiKeyEnv: 'PI_LIVE_KEY', baseURL: stale } } })
+    // The gateway face this plugin consumes: the mirror owner repoints the
+    // running configuration at the live origin — here through the same
+    // Loader volatile update a real mirror commit runs.
+    const recoverLoopbackRoute = vi.fn(async (_baseURL: string) => {
+      await configurations.get(ctx)!.update({ providers: { deepseek: { apiKeyEnv: 'PI_LIVE_KEY', baseURL: live.url } } })
+      return true
+    })
+    ctx.provide('gsLlmGateway', {
+      origin: live.url,
+      token: 'per-boot-token',
+      providerBaseUrl: (providerId: string) => `${live.url}/v1/${providerId}`,
+      recoverLoopbackRoute,
+    })
+
+    const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-flash', messages: [] })
+
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(recoverLoopbackRoute).toHaveBeenCalledOnce()
+    expect(recoverLoopbackRoute).toHaveBeenCalledWith(stale)
+    expect(live.paths).toEqual(['/chat/completions'])
+  })
+
+  it('delivers the loopback connection failure when no gsLlmGateway service is mounted', async () => {
+    const dir = await home()
+    await writeFile(join(dir, '.credentials.yaml'), 'version: 1\nrefs:\n  PI_LIVE_KEY: live-key\n', { mode: 0o600 })
+    const ctx = await boot(dir, { providers: { deepseek: { apiKeyEnv: 'PI_LIVE_KEY', baseURL: 'http://127.0.0.1:1/v1' } } })
+
+    const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-flash', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+  })
 })

@@ -44,7 +44,7 @@ kind: "package-reference"
 
 ### 读取发布的服务
 
-本插件发布 `ctx.gsLlmGateway`，其中包含代理 `origin`、每次启动的 `token`，以及供组合自建代理路由的 `providerBaseUrl(providerId)`。
+本插件发布 `ctx.gsLlmGateway`，其中包含代理 `origin`、每次启动的 `token`，以及供组合自建代理路由的 `providerBaseUrl(providerId)`。它的 `recoverLoopbackRoute(baseURL)` 服务于请求级自愈（由 `llm-pi-ai` 消费）：当模型请求发现其镜像 baseURL 拒绝连接时，该方法用当前 ClientConfig 重新镜像，使运行中的组合重新指向代理的实时 origin，并回答该请求是否值得重试一次——当失败的请求本就指向实时 origin，或会话尚未提供 ClientConfig 时，它会拒绝。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -55,7 +55,7 @@ kind: "package-reference"
 
 ### 模型镜像
 
-`planGsLlmGatewayModels` 把 ClientConfig 的 `models` 段规划为按序排列的 `openai-completions` provider 档案——`baseURL` 指向代理，`apiKeyEnv` 指向凭证引用——以及来自 `defaultPrimary` 的默认选择（回退到第一个可用模型）。每个镜像档案都设置 `compat.sendSessionAffinityHeaders` 并采用 `openrouter` 格式，因此适配器把每个带会话的请求以单个 `x-session-id` 头绑定到其会话 id——这正是代理审计判定读取的事实，且该头只走回环这一跳。不可用的 provider 和模型跳过并给出警告，而不是让镜像失败；`null` 或不可用的段保持本地设置不变。镜像在 Loader 激活完成后（从缓存的 ClientConfig）、`gs-server/session-established` 和 `gs-server/client-config-changed` 时通过 `settings.replace` 写入 `providers`，通过 `settings.mutate` 写入默认选择；内容相同的推送会被指纹跳过。被镜像的命名空间由本插件独占：用户编辑只能存活到下一次推送。
+`planGsLlmGatewayModels` 把 ClientConfig 的 `models` 段规划为按序排列的 `openai-completions` provider 档案——`baseURL` 指向代理，`apiKeyEnv` 指向凭证引用——以及来自 `defaultPrimary` 的默认选择（回退到第一个可用模型）。每个镜像档案都设置 `compat.sendSessionAffinityHeaders` 并采用 `openrouter` 格式，因此适配器把每个带会话的请求以单个 `x-session-id` 头绑定到其会话 id——这正是代理审计判定读取的事实，且该头只走回环这一跳。不可用的 provider 和模型跳过并给出警告，而不是让镜像失败；`null` 或不可用的段保持本地设置不变。镜像在 Loader 激活完成后（从缓存的 ClientConfig）、`gs-server/session-established` 和 `gs-server/client-config-changed` 时通过 `settings.replace` 写入 `providers`，通过 `settings.mutate` 写入默认选择；内容相同的推送会被指纹跳过。每次写入都启用 `applyOnPersistFailure`：落盘失败仍会记录日志并在下一次推送时重试，但校验过的规划无论如何都会提交到运行中的组合，因此无法写入的 profile patch 不会把适配器困在已死的回环端口上。被镜像的命名空间由本插件独占：用户编辑只能存活到下一次推送。
 
 ### 为什么是 llm-pi-ai 而不是 llm-deepseek 的 volatile 配置
 

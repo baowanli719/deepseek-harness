@@ -103,6 +103,8 @@
     { "path": "./packages/client/ui-link-preview" },
     { "path": "./packages/client/ui-skills-gs" },
     { "path": "./packages/client/ui-model-risk-gs" },
+    { "path": "./packages/client/ui-notice-gs" },
+    { "path": "./packages/client/ui-scenarios-gs" },
     { "path": "./packages/client/ui-approval" },
     { "path": "./packages/client/ui-chat/tsconfig.client.json" },
     { "path": "./packages/client/ui-conversation/tsconfig.client.json" },

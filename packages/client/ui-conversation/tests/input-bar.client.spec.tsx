@@ -29,7 +29,7 @@ import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
 import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
-  ComposerAttachment, ComposerAttachmentsOwnerProps, DraftFileUploads, InputActivityOwnerProps,
+  ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerShortcutsOwnerProps, DraftFileUploads, InputActivityOwnerProps,
 } from '../src/client/contract/slots.ts'
 import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
@@ -100,6 +100,7 @@ interface BenchOptions {
   leftItems?: React.ReactNode
   rightItems?: React.ReactNode
   activityEntry?: (owner: InputActivityOwnerProps) => React.ReactNode
+  shortcutsEntry?: (owner: ComposerShortcutsOwnerProps) => React.ReactNode
   contextPressure?: ContextPressureProjection
   footer?: React.ReactNode
   attachments?: readonly ComposerAttachment[]
@@ -173,6 +174,7 @@ function bench(over?: BenchOptions) {
     if (key === 'conversation.input.permission') return over?.permissionEntry ?? null
     if (key === 'conversation.input.model') return over?.modelEntry ?? null
     if (key === 'conversation.input.activity') return over?.activityEntry?.(owner as InputActivityOwnerProps) ?? null
+    if (key === 'conversation.composer.shortcuts') return over?.shortcutsEntry?.(owner as ComposerShortcutsOwnerProps) ?? null
     return null
   }) as never
   const props: InputBarProps = {
@@ -267,6 +269,14 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
     if (call?.key === 'conversation.input.attachments') return call.owner as ComposerAttachmentsOwnerProps
   }
   throw new Error('attachment slot was not rendered')
+}
+
+function shortcutsOwner(slotCalls: readonly { key: string; owner: unknown }[]): ComposerShortcutsOwnerProps {
+  for (let i = slotCalls.length - 1; i >= 0; i -= 1) {
+    const call = slotCalls[i]
+    if (call?.key === 'conversation.composer.shortcuts') return call.owner as ComposerShortcutsOwnerProps
+  }
+  throw new Error('composer shortcuts slot was not rendered')
 }
 
 /** The state's placeholder copy (the textarea.placeholder equivalent; the visible layer renders it only while empty). */
@@ -378,6 +388,68 @@ describe('composer focus handoff', () => {
     // land the caret at the start of the draft. jsdom carries no caret, so the
     // selection itself is asserted in the browser lane.
     expect(lexicalFocus).toHaveBeenCalled()
+  })
+})
+
+describe('composer shortcuts slot', () => {
+  it('renders below the hero input card and above the statistics dock', () => {
+    const { view } = bench({
+      variant: 'hero',
+      shortcutsEntry: () => <i data-testid="scenario-shortcut" />,
+      contextPressure: { pressureTokens: 32_000, contextWindow: 128_000 },
+    })
+    const card = view.container.querySelector('[data-composer-card]')!
+    const shortcut = view.getByTestId('scenario-shortcut')
+    const meter = view.getByRole('button', { name: '上下文已用 25%' })
+
+    expect(card.compareDocumentPosition(shortcut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(shortcut.compareDocumentPosition(meter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('does not dispatch or render in the bottom composer variant', () => {
+    const { view, slotCalls } = bench({
+      variant: 'composer',
+      shortcutsEntry: () => <i data-testid="scenario-shortcut" />,
+    })
+
+    expect(view.queryByTestId('scenario-shortcut')).toBeNull()
+    expect(slotCalls.some(call => call.key === 'conversation.composer.shortcuts')).toBe(false)
+  })
+
+  it('does not dispatch or render without a Session', () => {
+    const { view, props, slotCalls } = bench({ variant: 'hero', shortcutsEntry: () => <i data-testid="scenario-shortcut" /> })
+    slotCalls.length = 0
+    view.rerender(<InputBar {...props} sessionId={undefined} />)
+
+    expect(view.queryByTestId('scenario-shortcut')).toBeNull()
+    expect(slotCalls.some(call => call.key === 'conversation.composer.shortcuts')).toBe(false)
+  })
+
+  it('focuses the existing editor through the owner callback without changing the draft', () => {
+    const { view, shell, textarea } = bench({
+      variant: 'hero',
+      draft: 'keep this draft',
+      shortcutsEntry: owner => <button data-testid="scenario-shortcut" onClick={owner.focusComposer} />,
+    })
+    textarea.blur()
+    const lexicalFocus = vi.spyOn(shell.editor, 'focus')
+
+    fireEvent.click(view.getByTestId('scenario-shortcut'))
+    expect(document.activeElement).toBe(textarea)
+    expect(lexicalFocus).toHaveBeenCalled()
+    expect(shell.snapshot.draft).toBe('keep this draft')
+  })
+
+  it.each([{ disabled: true }, { inert: true }, { blocked: { reason: 'waiting' } }])(
+    'passes the composer lock to shortcuts: %j', (options) => {
+      const { slotCalls } = bench({ ...options, variant: 'hero' })
+      expect(shortcutsOwner(slotCalls).locked).toBe(true)
+    },
+  )
+
+  it('keeps shortcuts unlocked while the agent is running', () => {
+    const { slotCalls } = bench({ variant: 'hero', running: true })
+    expect(shortcutsOwner(slotCalls).locked).toBe(false)
   })
 })
 
@@ -1485,7 +1557,7 @@ describe('running and lock semantics', () => {
 
 describe('machine pending lock', () => {
   it('submitting renders read-only textarea, pending dot, and a disabled primary', () => {
-    const { view, shell } = bench()
+    const { view, shell, slotCalls } = bench({ variant: 'hero' })
     // Drive the machine into submitting through a claim + enter.
     act(() => {
       shell.setDraft('/goal ')
@@ -1503,6 +1575,7 @@ describe('machine pending lock', () => {
     const textarea = view.container.querySelector<HTMLDivElement>('[data-composer-input]')!
     expect(editableOf(textarea)).toBe(false)
     expect(view.container.querySelector<HTMLButtonElement>('button[aria-label="发送消息"]')!.disabled).toBe(true)
+    expect(shortcutsOwner(slotCalls).locked).toBe(true)
   })
 })
 
@@ -1807,7 +1880,8 @@ describe('command launcher chrome and control seats', () => {
     // Capability absent (no permission slot entry): the chip renders nothing.
     expect(view.queryByLabelText(/^访问模式/)).toBeNull()
     // Every seat dispatched, nothing rendered (render passes may repeat; the
-    // seat set is the contract).
+    // seat set is the contract). The bottom composer never dispatches
+    // conversation.composer.shortcuts — that seat is the hero variant's.
     expect([...new Set(slotCalls.map(c => c.key))]).toEqual([
       'conversation.input.overlay', 'conversation.input.attachments',
       'conversation.input.permission', 'conversation.input.plan', 'conversation.input.left',

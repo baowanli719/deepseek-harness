@@ -127,7 +127,8 @@ root [AppFrame]
       │     ├─ conversation.session.header.lineage
       │     ├─ conversation.session.header.actions
       │     ├─ conversation.session.header.utilities
-      │     └─ conversation.session.header.corner
+      │     ├─ conversation.session.header.corner
+      │     └─ conversation.notice
       └─ calls Factory: conversation.content
 
 Factory: conversation.content [ConversationContent]
@@ -165,6 +166,7 @@ Factory: conversation.content [ConversationContent]
 │  ├─ conversation.input.model
 │  │  └─ conversation.input.model.label
 │  ├─ conversation.input.overlay
+│  ├─ conversation.composer.shortcuts (hero variant only)
 │  ├─ conversation.composer.dock
 │  ├─ conversation.input.left
 │  └─ conversation.input.right

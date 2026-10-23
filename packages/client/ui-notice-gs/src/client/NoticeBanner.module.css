@@ -1,0 +1,4 @@
+.banner { display: flex; align-items: center; gap: 12px; width: 66.67%; min-width: 0; padding: 4px 12px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-state-warn-tertiary); color: var(--dsw-alias-state-warn-label); font-size: 12px; line-height: 1.5; }
+.text { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; }
+.close { flex-shrink: 0; border: 0; padding: 0; cursor: pointer; font: inherit; background: transparent; color: var(--dsw-alias-state-warn-label); }
+.close:hover { text-decoration: underline; }

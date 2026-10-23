@@ -27,6 +27,9 @@
       "path": "../../llm/llm"
     },
     {
+      "path": "../../llm/llm-gs-gateway"
+    },
+    {
       "path": "../../attachment/attachment"
     },
     {

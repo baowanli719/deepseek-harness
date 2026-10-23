@@ -38,7 +38,7 @@ Use [settings](../../settings/settings/README.md) for forms restricted to live f
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The [editor](src/index.ts) reconciles external changes before deriving a candidate, locks the profile manifest alongside other profile operations, and atomically replaces its config override. It preserves YAML comments and `!!js` expressions outside replaced values. A failed reconciliation restores the prior document and reloads the prior patches.
+The [editor](src/index.ts) reconciles external changes before deriving a candidate, locks the profile manifest alongside other profile operations, and atomically replaces its config override. It preserves YAML comments and `!!js` expressions outside replaced values. A failed reconciliation restores the prior document and reloads the prior patches. A failed persist rejects without touching the running composition — unless the caller passes `applyOnPersistFailure`, in which case the validated next config still commits through Loader reconciliation and the edit then rejects with the persist failure, so a retry of the same edit re-attempts the persist.
 
 Configuration reads share one composition for entries without profile config overrides. Overridden entries are composed separately with only their own override removed; profile inserts and other entries' overrides remain effective. Returned configs are detached, and compositions are not cached between reads.
 

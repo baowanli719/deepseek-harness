@@ -3,20 +3,21 @@
  * `writeFileAtomic` writes a random-suffix sibling with exclusive create and
  * the caller's permission bits, then renames it over the target, so readers
  * observe either the old or the new complete content and a replaced file ends
- * up with exactly the stated mode. `withFileLock` serializes cross-process
- * writers of one file through a `wx`-created `<file>.lock` sibling, so a
- * read-modify-write cycle can never resurrect a state another writer just
- * replaced; readers stay lock-free because the rename commit is atomic. A lock
- * whose recorded holder process no longer exists is taken over.
+ * up with exactly the stated mode; a committed replacement also sweeps orphan
+ * temp siblings earlier failures left behind. `withFileLock` serializes
+ * cross-process writers of one file through a `wx`-created `<file>.lock`
+ * sibling, so a read-modify-write cycle can never resurrect a state another
+ * writer just replaced; readers stay lock-free because the rename commit is
+ * atomic. A lock whose recorded holder process no longer exists is taken over.
  * @module @deepseek-ai/dsh-atomic-write
  */
 
 import { createHash, randomBytes } from 'node:crypto'
-import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import { setTimeout as wait } from 'node:timers/promises'
 
-const WINDOWS_TRANSIENT_RENAME_ERRORS: ReadonlySet<string> = new Set(['EACCES', 'EBUSY', 'EPERM'])
+const WINDOWS_TRANSIENT_RENAME_ERRORS: ReadonlySet<string> = new Set(['EACCES', 'EBUSY', 'EEXIST', 'EPERM'])
 const WINDOWS_RENAME_RETRY_INITIAL_MS = 20
 const WINDOWS_RENAME_RETRY_MAX_MS = 200
 const WINDOWS_RENAME_RETRY_LIMIT = 8
@@ -62,6 +63,42 @@ export interface WriteFileAtomicOptions {
 }
 
 /**
+ * A temp sibling younger than this margin may belong to a concurrent writer
+ * whose rename is still backing off, so the orphan sweep leaves it alone; the
+ * bounded rename retry window keeps every live temp far younger.
+ */
+const ORPHAN_TEMP_AGE_MS = 60_000
+
+/**
+ * Remove `<name>.*.tmp` siblings of a committed replacement that predate the
+ * write by {@link ORPHAN_TEMP_AGE_MS}: the residue of earlier failures whose
+ * own cleanup was refused (endpoint protection holding a fresh file is the
+ * observed cause). Best-effort — a file that resists stat or removal stays.
+ */
+async function sweepOrphanTemps(filename: string, startedAt: number): Promise<void> {
+  let entries: string[]
+  try {
+    entries = await readdir(dirname(filename))
+  } catch {
+    // A directory that cannot be listed keeps its temps; the replacement itself already committed.
+    return
+  }
+  const prefix = `${basename(filename)}.`
+  const orphanBefore = startedAt - ORPHAN_TEMP_AGE_MS
+  await Promise.all(entries.map(async (entry) => {
+    if (!entry.startsWith(prefix) || !entry.endsWith('.tmp')) return
+    const path = join(dirname(filename), entry)
+    try {
+      const info = await stat(path)
+      if (!info.isFile() || info.mtimeMs >= orphanBefore) return
+      await rm(path, { force: true })
+    } catch {
+      // The temp vanished under the sweep, or the platform refuses to touch it; either way it is not this write's concern.
+    }
+  }))
+}
+
+/**
  * Replace `filename` with `content` in one atomic step, creating parent
  * directories. The content is first written to a random-suffix sibling opened
  * with exclusive create (`wx`): the open refuses to follow a symlink planted
@@ -70,9 +107,12 @@ export interface WriteFileAtomicOptions {
  * race. The rename also replaces a symlinked target itself instead of writing
  * through to its referent, and the same-directory sibling keeps the rename on
  * one filesystem. Windows replacement retries transient `EACCES`, `EBUSY`,
- * and `EPERM` failures for a bounded interval while the complete temp file
- * remains the rename source. On any remaining failure the temp file is
- * removed and the failure rethrown. Crash durability (fsync) is out of scope.
+ * `EEXIST`, and `EPERM` failures for a bounded interval while the complete
+ * temp file remains the rename source. On any remaining failure the temp file
+ * is removed and the failure rethrown. A committed replacement sweeps orphan
+ * temp siblings of the same target that predate this write (see
+ * {@link sweepOrphanTemps}); sweep failures never fail the write. Crash
+ * durability (fsync) is out of scope.
  * @param filename - final path receiving the content.
  * @param content - complete next file content.
  * @param options - permission bits for the replacement inode.
@@ -84,6 +124,7 @@ export async function writeFileAtomic(filename: string, content: string | Uint8A
   })
   // TODO(settings-atomic-durability): Use a replacement that fsyncs the file
   // and parent directory and preserves owner-only permissions on Windows.
+  const startedAt = Date.now()
   const temp = `${filename}.${randomBytes(6).toString('hex')}.tmp`
   try {
     await writeFile(temp, content, { mode: options.mode, flag: 'wx' })
@@ -92,6 +133,7 @@ export async function writeFileAtomic(filename: string, content: string | Uint8A
     await rm(temp, { force: true })
     throw error
   }
+  await sweepOrphanTemps(filename, startedAt)
 }
 
 /** Whether an exclusive create found an existing lock. */

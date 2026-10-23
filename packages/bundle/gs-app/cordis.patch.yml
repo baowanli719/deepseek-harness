@@ -141,6 +141,16 @@
     - id: ui-model-risk-gs
       name: '@deepseek-ai/dsh-client-ui-model-risk-gs'
 
+    # Server-pushed notice banner at the top of the conversation content area,
+    # polled from the gs-server notice loopback route.
+    - id: ui-notice-gs
+      name: '@deepseek-ai/dsh-client-ui-notice-gs'
+
+    # Server-configured scenario actions below the composer card; selection only
+    # inserts the configured skill command into the retained draft.
+    - id: ui-scenarios-gs
+      name: '@deepseek-ai/dsh-client-ui-scenarios-gs'
+
 # ── model-access posture ───────────────────────────────────────────────────
 #
 # The direct DeepSeek adapter would bypass the gsclaw gateway, and the Web

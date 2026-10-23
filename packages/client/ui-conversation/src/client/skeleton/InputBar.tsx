@@ -168,9 +168,12 @@ export const InputBar = memo(function InputBar({
   // paths where it does not act (programmatic focus with preventScroll, and
   // session switches that land the caret off screen). The live DOM selection
   // is the ruler; no mirror layer exists to consult.
-  const revealSelection = (): void => {
+  const revealSelection = useCallback((): void => {
     revealDraftSelection(scrollRef)
-  }
+  }, [])
+  const focusComposer = useCallback((): void => {
+    if (editor !== null) focusDraftEditor(editor, revealSelection)
+  }, [editor, revealSelection])
 
   // Unlock (mount / session switch) returns focus to the box, and owns the
   // reveal that comes with it. Lexical's focus() suppresses the browser's
@@ -517,6 +520,12 @@ export const InputBar = memo(function InputBar({
           </div>
         </div>
       </div>
+      {/* First-screen scenario actions: only the hero composer dispatches the
+          slot, so a started Session's bottom composer never renders it. */}
+      {variant === 'hero' && sessionId !== undefined ? renderSlot('conversation.composer.shortcuts', {
+        locked: locked || machineBusy,
+        focusComposer,
+      }) : null}
       <div className={css.dock} data-composer-dock>
         {variant === 'composer' && input !== undefined && sessionId !== undefined
           ? renderSlot('conversation.composer.dock', {})

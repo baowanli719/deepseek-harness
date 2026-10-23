@@ -114,6 +114,8 @@ When another writer owns the Session, the send-error toast asks the user to quit
 
 Two independent Escape presses in the focused Chat or Composer stop its current running turn and preserve queued messages. The interval comes from the shortcuts plugin’s `stopSequenceMs` configuration (500 ms by default). A menu, approval, modal, terminal, embedded webpage, composition, repeated key, changed input region, Session or turn breaks the sequence. The shortcut uses the same scoped cancellation as the Stop button. The plugin registers Stop as a fixed action in the `input` display group. Its registration reserves plain Escape against editable shortcuts and supplies the `Esc Esc` sequence shown in the Stop button’s hover and keyboard-focus tooltip.
 
+`conversation.composer.shortcuts` is a strict-Session list of first-screen scenario actions below the hero composer card: only the hero variant with a Session dispatches the slot, so a started task's bottom composer never renders it, and it does not render without a Session. The owner's `locked` reports whether draft edits are refused, including machine adjudication and submission; `focusComposer()` restores editor focus and reveals the current selection. Occupants use the standard `useInput` and `inputActions` for revision-guarded draft edits. This package declares no entries for the slot.
+
 <a id="temporary-composer-entries"></a>
 ## Temporary composer entries
 

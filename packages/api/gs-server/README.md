@@ -25,6 +25,21 @@ The gs-worker office Agent's gsclaw-server client: the `gsServer` Cordis service
 
 The model-risk protocol in `src/contract.ts` uses `GsModelRiskStatusRequest` to name the provider and model, `GsModelRiskView` for the current disclosure and optional archived consent, `GsModelRiskSignRequest` for the revision, acknowledgment, and normalized signature strokes, and `GsModelRiskDownloadRequest`/`GsModelRiskDownloadResponse` for consent-id lookup and base64 PDF transfer. Signing has no client identity fields; the gateway resolves the authenticated account's name and email.
 
+`GsClientConfig.scenarioShortcuts` is the optional server policy for GS composer scenario shortcuts. An absent field selects the client's defaults; `null` or `enabled: false` hides the whole entry, while an item's `enabled: false` hides only that item. Enabled custom items retain server order and require a unique, non-blank stable `id`, a non-blank display `label` rendered as server data, and a `skill` matching `^[a-z0-9]+(?:-[a-z0-9]+)*$`, without the leading `/`:
+
+```json
+{
+  "scenarioShortcuts": {
+    "enabled": true,
+    "items": [
+      { "id": "research-summary", "label": "研报分析", "skill": "gs-research-summary" }
+    ]
+  }
+}
+```
+
+`GET /api/gs-server/scenario-shortcuts` actively refreshes ClientConfig and returns only this field, omitting it when absent so client defaults remain distinguishable from an explicit `null`. [ui-scenarios-gs](../../client/ui-scenarios-gs/README.md) owns the default scenarios and draft-insertion behavior.
+
 Authentication commits are bound to a generation and serialized with credential writes. Logout invalidates in-flight login, restore, refresh, and configuration pulls before removing local credentials; `gs-server/session-ended` notifies consumers. Changing endpoints first ends the old session. Invalid explicit endpoint configuration fails startup; HTTP is accepted only for loopback and the exact shipped deployment endpoint; other endpoints require HTTPS.
 
 Compose the plugin on the Host with a `stateDir` and the client version it reports to the gateway:
@@ -40,7 +55,7 @@ Compose the plugin on the Host with a `stateDir` and the client version it repor
 
 Consumers declare `inject = ['gsServer']` and use the service contract: `getAccessToken()` resolves the in-memory access token (undefined while signed out), `fetch(path, init)` runs an authenticated request against the resolved endpoint with the Bearer token and policy-version header attached, refreshing once on an expired-token 401, and `getClientConfig()` returns the latest cached server ClientConfig. Declaration-merged root events: `gs-server/session-established` (login, token adoption, restore, refresh), `gs-server/session-expired` (refresh rejected with 401), `gs-server/trust-revoked` (refresh rejected with 403), and `gs-server/client-config-changed` (payload: the new ClientConfig).
 
-Hosts driving their own login UI use the service surface directly: `getMeta`/`getAuthMethods`/`fetchCaptcha` for the pre-login handshake, `loginWithPassword`/`sendEmailCode`/`loginWithEmailCode` for the built-in flows, `adoptTokens` as the token-write entry for externally issued pairs (SSO, QR), `restoreSession` after a restart, `logout`, `sessionView`, `brandView`, `refreshClientConfig`, and the `setEndpointOverride`/`clearEndpointOverride` pair. The email-code methods resolve a bare mailbox prefix to the configured enterprise email domain and reject foreign domains with an `invalid_email_account` error before calling the gateway. The `modelRiskStatus`/`modelRiskSign`/`modelRiskDownload` methods proxy the untrusted-model disclosure flow: requirement status, handwritten-signature acknowledgment, and signed-PDF download. With `routes` enabled, the same surface is served over same-origin loopback HTTP at `/api/gs-server/meta`, `/session`, `/brand`, `/captcha`, `/login`, `/email-code`, `/email-login`, `/logout`, `/model-risk/status`, `/model-risk/sign`, and `/model-risk/download`; credential state never leaves the Host process.
+Hosts driving their own login UI use the service surface directly: `getMeta`/`getAuthMethods`/`fetchCaptcha` for the pre-login handshake, `loginWithPassword`/`sendEmailCode`/`loginWithEmailCode` for the built-in flows, `adoptTokens` as the token-write entry for externally issued pairs (SSO, QR), `restoreSession` after a restart, `logout`, `sessionView`, `brandView`, `refreshClientConfig`, and the `setEndpointOverride`/`clearEndpointOverride` pair. The email-code methods resolve a bare mailbox prefix to the configured enterprise email domain and reject foreign domains with an `invalid_email_account` error before calling the gateway. The `modelRiskStatus`/`modelRiskSign`/`modelRiskDownload` methods proxy the untrusted-model disclosure flow: requirement status, handwritten-signature acknowledgment, and signed-PDF download. With `routes` enabled, the same surface is served over same-origin loopback HTTP at `/api/gs-server/meta`, `/session`, `/brand`, `/captcha`, `/login`, `/email-code`, `/email-login`, `/logout`, `/app-update`, `/notice`, `/scenario-shortcuts`, `/model-risk/status`, `/model-risk/sign`, and `/model-risk/download`; credential state never leaves the Host process.
 
 The refresh token is the only credential persisted across restarts. Windows uses CurrentUser DPAPI; macOS uses AES-GCM with its master key in the login Keychain. Other platforms refuse persistent login unless the host injects an OS-backed `Config.protector`. Subprocesses receive secrets over stdin, never command-line arguments.
 

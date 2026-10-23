@@ -100,6 +100,12 @@ export interface SensitivePolicyView {
    * @returns the state; unknown sessions read as {@link STANDARD_SESSION_STATE}.
    */
   stateOf(sessionId: string): SensitiveSessionState
+  /**
+   * Whether one provider route is trusted under the latest trust metadata.
+   * @param provider - the provider route id.
+   * @returns whether the route is explicitly trusted; unbound reads fail closed.
+   */
+  trustsProvider(provider: string): boolean
 }
 
 /**
@@ -111,6 +117,12 @@ export class SensitivePolicyCore {
   private readonly sessions = new Map<string, SensitiveSessionState>()
   /** Transition listeners, notified after every committed state change. */
   private readonly listeners = new Set<(sessionId: string, event: SensitivePolicyEvent) => void>()
+  /**
+   * Provider-trust predicate the owning plugin binds at apply time. Consumers
+   * read it to anticipate the endpoint judgement before a request runs; the
+   * unbound default trusts nothing.
+   */
+  trustsProvider: (provider: string) => boolean = () => false
 
   /**
    * Subscribe to committed transitions.
@@ -131,6 +143,7 @@ export class SensitivePolicyCore {
       knows: sessionId => this.knows(sessionId),
       isPrivate: sessionId => this.isPrivate(sessionId),
       stateOf: sessionId => this.stateOf(sessionId),
+      trustsProvider: provider => this.trustsProvider(provider),
     }
   }
 

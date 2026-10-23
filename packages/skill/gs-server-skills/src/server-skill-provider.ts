@@ -568,7 +568,14 @@ export class ServerSkillProvider implements SkillProvider {
         },
       })
       if (trustedOnly) {
-        gated.push({ name: skill.name, runtimeType: remoteType, definitionRevision: revision, modelPolicy })
+        gated.push({
+          name: skill.name,
+          runtimeType: remoteType,
+          definitionRevision: revision,
+          modelPolicy,
+          displayName: skill.displayName,
+          description,
+        })
         gatedSkills.push({
           name: skill.name,
           version: skill.version,

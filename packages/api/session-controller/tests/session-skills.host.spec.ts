@@ -10,7 +10,12 @@ import { SessionSkillCatalog } from '../src/skill-catalog.ts'
 
 function observation(
   sessionId: SessionId,
-  options: { readonly cwd?: string; readonly workingDirectory?: string | null; readonly agentPreset?: string } = {},
+  options: {
+    readonly cwd?: string
+    readonly workingDirectory?: string | null
+    readonly agentPreset?: string
+    readonly selectionProvider?: string
+  } = {},
 ): SessionObservation {
   const events = Object.freeze([])
   const lease = (): SessionObservation => ({
@@ -30,6 +35,9 @@ function observation(
       values: {
         ...options.agentPreset === undefined ? {} : { agentPreset: options.agentPreset },
         ...options.workingDirectory === undefined ? {} : { workingDirectory: options.workingDirectory },
+        ...options.selectionProvider === undefined ? {} : {
+          modelSelection: { lastUsed: null, next: { provider: options.selectionProvider, model: 'm1' } },
+        },
       },
     },
     retain: lease,
@@ -258,5 +266,105 @@ describe('SessionSkillCatalog', () => {
       .rejects.toMatchObject({
         code: 'gateway/internal', message: 'skill listing failed: Error: catalog offline',
       })
+  })
+
+  it('lists gated trusted-only skills when the Session selection resolves to a trusted route', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-trusted')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project', selectionProvider: 'trusted-gw' })),
+    } as never)
+    ctx.provide('skills', { list: () => Promise.resolve([]) } as never)
+    ctx.provide('sensitivePolicy', {
+      isPrivate: () => false,
+      trustsProvider: (provider: string) => provider === 'trusted-gw',
+    } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({
+        gated: [{
+          name: 'zhidu-knowledge',
+          displayName: 'Knowledge Base',
+          description: 'Consult the policy knowledge base.',
+        }],
+      }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({
+      skills: [{
+        name: 'zhidu-knowledge',
+        description: 'Consult the policy knowledge base.',
+        modelInvocable: true,
+      }],
+    })
+  })
+
+  it('lists gated skills for a private Session regardless of its selection', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-private')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project' })),
+    } as never)
+    ctx.provide('skills', { list: () => Promise.resolve([]) } as never)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'ext-cloud', model: 'm1' }) } as never)
+    ctx.provide('sensitivePolicy', {
+      isPrivate: (id: string) => id === String(sessionId),
+      trustsProvider: () => false,
+    } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({ gated: [{ name: 'zhidu-knowledge', displayName: 'Knowledge Base' }] }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({
+      skills: [{ name: 'zhidu-knowledge', description: 'Knowledge Base', modelInvocable: true }],
+    })
+  })
+
+  it('hides gated skills from a Session bound to an external route', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-external')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project', selectionProvider: 'ext-cloud' })),
+    } as never)
+    ctx.provide('skills', { list: () => Promise.resolve([]) } as never)
+    ctx.provide('sensitivePolicy', { isPrivate: () => false, trustsProvider: () => false } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({ gated: [{ name: 'zhidu-knowledge', description: 'Consult the policy knowledge base.' }] }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({ skills: [] })
+  })
+
+  it('does not duplicate gated skills the registry already listed', async () => {
+    const ctx = await context()
+    const sessionId = SessionId('gated-dedup')
+    ctx.provide('sessionQuery', {
+      observeSession: () => Promise.resolve(observation(sessionId, { cwd: '/project', selectionProvider: 'trusted-gw' })),
+    } as never)
+    ctx.provide('skills', {
+      list: () => Promise.resolve([{
+        name: 'zhidu-knowledge',
+        description: 'Scoped gated lane candidate.',
+        invocation: { modelInvocable: true, userInvocable: true },
+      }]),
+    } as never)
+    ctx.provide('sensitivePolicy', {
+      isPrivate: () => true,
+      trustsProvider: (provider: string) => provider === 'trusted-gw',
+    } as never)
+    ctx.provide('gsServerSkillCatalog', {
+      snapshot: () => ({ gated: [{ name: 'zhidu-knowledge', description: 'Snapshot copy.' }] }),
+    } as never)
+    const catalog = new SessionSkillCatalog(ctx)
+
+    await expect(catalog.list({ sessionId }, new AbortController().signal)).resolves.toEqual({
+      skills: [{
+        name: 'zhidu-knowledge',
+        description: 'Scoped gated lane candidate.',
+        modelInvocable: true,
+      }],
+    })
   })
 })

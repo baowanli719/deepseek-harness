@@ -63,6 +63,10 @@ export interface GsServerSkillRemoteEntry {
   readonly definitionRevision: string
   /** Normalized data-egress policy of the catalog entry. */
   readonly modelPolicy: 'standard' | 'trusted-only'
+  /** Display name the catalog carried, when the entry is surfaced to users. */
+  readonly displayName?: string
+  /** Routing description the catalog carried, when the entry is surfaced to users. */
+  readonly description?: string
 }
 
 /** Effective remote-catalog projection consumed by the server-skill-tools bridge. */
