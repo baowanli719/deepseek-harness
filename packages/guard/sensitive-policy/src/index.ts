@@ -8,7 +8,11 @@
  * private conversation (`privateCause: 'provider-endpoint'`). The selection
  * judgement lands at agent activation and at each `model/selection` commit —
  * before the next request assembles — while the request judgement stands at
- * the call boundary. Enforcement lives in the operations
+ * the call boundary. Endpoint-judged privacy is re-judged at each selection
+ * commit and activation: while the session has observed no model traffic and
+ * carries no sensitivity marking, switching off the trusted route releases it
+ * back to standard (see `SensitivePolicyCore.exitEndpointPrivacy`).
+ * Enforcement lives in the operations
  * that make it, never in UI filtering:
  *
  * - `llm/stream` wrapper: a private session's request on an untrusted route
@@ -226,19 +230,22 @@ export function apply(ctx: Context, config?: Config): void {
   const liveSessions = new Map<string, Session>()
   const durability = new Map<string, Promise<void>>()
 
+  /**
+   * Persist one committed transition, then flush. The append runs deferred on
+   * the durability chain: a transition can commit while another append is
+   * being published (`enter-private` from the `model/selection` commit
+   * listener re-enters this subscriber), and `Session.append` refuses
+   * reentrant publication. Chaining preserves transition order, and the
+   * `llm/stream` wrapper awaits the chain before dispatching, so persistence
+   * still lands before the next sensitive operation. Failures reject the
+   * chain: they surface at that await and are logged here.
+   */
   const recordTransition = (sessionId: string, event: SensitivePolicyEvent): void => {
-    const session = liveSessions.get(sessionId) ?? ctx.get('sessions')?.get(SessionId(sessionId))
-    if (session === undefined) return
-    try {
-      session.append('sensitive/policy', event)
-    } catch (cause) {
-      const failure = Promise.reject<void>(cause instanceof Error ? cause : new Error('cannot persist sensitive policy', { cause }))
-      durability.set(sessionId, failure)
-      void failure.catch((error: unknown) => { ctx.logger.error(error) })
-      throw cause
-    }
     const pending = (durability.get(sessionId) ?? Promise.resolve())
       .then(async () => {
+        const session = liveSessions.get(sessionId) ?? ctx.get('sessions')?.get(SessionId(sessionId))
+        if (session === undefined) return
+        session.append('sensitive/policy', event)
         const store = ctx.get('sessions')
         if (store === undefined) { await ctx.parallel('session/flush', session); return }
         if (!await store.flush(session)) throw new Error('sensitive-policy requires a durable Session backend')
@@ -311,19 +318,38 @@ export function apply(ctx: Context, config?: Config): void {
   /**
    * Lift the egress tools off one private session's visible surface (the
    * guard above remains the enforcement). Scoped restrictions unwind with the
-   * agent; registration races are idempotent per session.
+   * agent; registration races are idempotent per session. The disposer is
+   * kept so {@link liftEgress} can restore the surface when endpoint-judged
+   * privacy is released before any traffic.
    */
-  const restrictedSessions = new Set<string>()
+  const restrictedSessions = new Map<string, () => void>()
   const restrictEgress = (agent: Agent): void => {
     const sessionId = String(agent.session.id)
     if (restrictedSessions.has(sessionId)) return
     const denied = resolved.egressTools.filter(tool => ctx.tools.get(tool) !== undefined)
     if (denied.length === 0) return
     try {
-      agent.ctx.tools.restrict({ deny: [...denied] })
-      restrictedSessions.add(sessionId)
+      restrictedSessions.set(sessionId, agent.ctx.tools.restrict({ deny: [...denied] }))
     } catch (cause) {
       ctx.logger.warn(`sensitive-policy: private session ${sessionId} egress visibility restriction failed: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
+  }
+
+  /**
+   * Restore one session's egress tool surface after endpoint-judged privacy
+   * is released. The execution gate reads live policy state, so only the
+   * visibility restriction needs lifting; the mounted skill lane re-checks
+   * `isPrivate` per load and neutralizes itself.
+   * @param sessionId - the released session id.
+   */
+  const liftEgress = (sessionId: string): void => {
+    const lift = restrictedSessions.get(sessionId)
+    if (lift === undefined) return
+    restrictedSessions.delete(sessionId)
+    try {
+      lift()
+    } catch (cause) {
+      ctx.logger.warn(`sensitive-policy: released session ${sessionId} egress visibility restore failed: ${cause instanceof Error ? cause.message : String(cause)}`)
     }
   }
 
@@ -370,10 +396,15 @@ export function apply(ctx: Context, config?: Config): void {
     if (parent !== undefined && core.isPrivate(String(parent))) core.enterPrivate(sessionId)
     // Endpoint judgement at activation: a session whose effective selection
     // resolves to a trusted route enters private before its first request
-    // assembles, so the gated skill lane mounts ahead of prompt assembly.
+    // assembles, so the gated skill lane mounts ahead of prompt assembly. A
+    // restored endpoint-private session is re-judged against the same
+    // selection: while it has observed no traffic, a current untrusted route
+    // releases it before the lane and restrictions apply.
+    const effectiveProvider = effectiveProviderOf(agent.session)
     if (!core.isPrivate(sessionId)) {
-      const provider = effectiveProviderOf(agent.session)
-      if (provider !== undefined && core.trustsProvider(provider)) core.enterPrivate(sessionId, 'provider-endpoint')
+      if (effectiveProvider !== undefined && core.trustsProvider(effectiveProvider)) core.enterPrivate(sessionId, 'provider-endpoint')
+    } else if (effectiveProvider !== undefined && !core.trustsProvider(effectiveProvider)) {
+      core.exitEndpointPrivacy(sessionId)
     }
     if (core.isPrivate(sessionId)) {
       // The gated skill lane joins every private session, however it became
@@ -390,14 +421,20 @@ export function apply(ctx: Context, config?: Config): void {
   // Endpoint judgement at selection commit: switching a session onto a trusted
   // route enters private at once — a live agent mounts the gated lane before
   // the next request assembles, and a draft session is already private when
-  // its agent activates.
+  // its agent activates. The judgement reruns in both directions: switching to
+  // an untrusted route releases endpoint-judged privacy that has observed no
+  // traffic, restoring the live agent's egress surface.
   ctx.on('session/event', (session, event) => {
     if ((event as { type: string }).type !== 'model/selection') return
     const provider = providerOfSelectionValue((event as { data?: unknown }).data)
-    if (provider === undefined || !core.trustsProvider(provider)) return
+    if (provider === undefined) return
     const sessionId = String(session.id)
     core.registerSession(sessionId)
-    core.enterPrivate(sessionId, 'provider-endpoint')
+    if (core.trustsProvider(provider)) {
+      core.enterPrivate(sessionId, 'provider-endpoint')
+      return
+    }
+    if (core.exitEndpointPrivacy(sessionId)) liftEgress(sessionId)
   })
   // A session that turns private mid-flight mounts the lane on its live agent
   // too, not only at creation, and restricts the egress surface.

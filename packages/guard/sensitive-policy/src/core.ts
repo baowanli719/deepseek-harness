@@ -5,7 +5,11 @@
  * `unclassified`; `enterPrivate` locks it to `trusted-only` at entry, and
  * sensitivity only ever rises (`unclassified` → `potential` → `sensitive`).
  * There is no downgrade: compaction, message deletion, and execution failures
- * never relax a session.
+ * never relax a session. The single bounded exception is
+ * {@link SensitivePolicyCore.exitEndpointPrivacy}: endpoint-judged privacy
+ * that has observed no model traffic and carries no sensitivity marking
+ * follows the current model route, so switching away from the trusted route
+ * before any request releases it.
  *
  * Previous gs-worker releases wrote `sensitive/policy` transitions. The
  * current core replays them when a historical agent session is created.
@@ -110,7 +114,8 @@ export interface SensitivePolicyView {
 
 /**
  * Per-session sensitive-data policy state. Transitions are monotonic — privacy
- * and sensitivity never downgrade inside a process lifetime — and every commit
+ * and sensitivity never downgrade inside a process lifetime, with the single
+ * bounded exception of {@link exitEndpointPrivacy} — and every commit
  * notifies subscribers after the state change lands.
  */
 export class SensitivePolicyCore {
@@ -219,6 +224,31 @@ export class SensitivePolicyCore {
    */
   markSensitive(sessionId: string): void {
     this.commit(sessionId, { kind: 'mark-sensitive' })
+  }
+
+  /**
+   * Release endpoint-judged privacy when the session's route judgement no
+   * longer holds: the session is private solely because its model selection
+   * resolved to a trusted route (`provider-endpoint`), no model traffic has
+   * been observed (`provider` unset), and no sensitivity marking has landed.
+   * Explicit entries, marked content, and sessions that already talked to a
+   * trusted route never exit — their history may already hold sensitive data.
+   *
+   * The exit is a process-local re-derivation, not a durable transition: no
+   * event commits and subscribers are not notified, so the durable
+   * `sensitive/policy` log keeps the original `enter-private` record and the
+   * owning plugin re-derives the exit at every agent activation from the
+   * restored state plus the current effective selection.
+   * @param sessionId - the session id.
+   * @returns whether the session was released back to `standard`.
+   */
+  exitEndpointPrivacy(sessionId: string): boolean {
+    const state = this.sessions.get(sessionId)
+    if (state === undefined) return false
+    if (state.inferencePolicy !== 'trusted-only' || state.privateCause !== 'provider-endpoint') return false
+    if (state.sensitivity !== 'unclassified' || state.provider !== undefined) return false
+    this.sessions.set(sessionId, STANDARD_SESSION_STATE)
+    return true
   }
 
   /**

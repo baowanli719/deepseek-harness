@@ -825,7 +825,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.sensitivePolicy` — `SensitivePolicyCore`
 
-Per-session sensitive-data policy state. Transitions are monotonic — privacy and sensitivity never downgrade inside a process lifetime — and every commit notifies subscribers after the state change lands.
+Per-session sensitive-data policy state. Transitions are monotonic — privacy and sensitivity never downgrade inside a process lifetime, with the single bounded exception of {@link exitEndpointPrivacy} — and every commit notifies subscribers after the state change lands.
 
 ```ts cordis-catalog
 /**
@@ -891,6 +891,24 @@ markPotential(sessionId: string): void
  * @param sessionId - the session id.
  */
 markSensitive(sessionId: string): void
+
+/**
+ * Release endpoint-judged privacy when the session's route judgement no
+ * longer holds: the session is private solely because its model selection
+ * resolved to a trusted route (`provider-endpoint`), no model traffic has
+ * been observed (`provider` unset), and no sensitivity marking has landed.
+ * Explicit entries, marked content, and sessions that already talked to a
+ * trusted route never exit — their history may already hold sensitive data.
+ *
+ * The exit is a process-local re-derivation, not a durable transition: no
+ * event commits and subscribers are not notified, so the durable
+ * `sensitive/policy` log keeps the original `enter-private` record and the
+ * owning plugin re-derives the exit at every agent activation from the
+ * restored state plus the current effective selection.
+ * @param sessionId - the session id.
+ * @returns whether the session was released back to `standard`.
+ */
+exitEndpointPrivacy(sessionId: string): boolean
 
 /**
  * Record the provider route one session's model traffic used (on change only).
