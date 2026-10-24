@@ -43,11 +43,29 @@ async function compile(): Promise<{ files: number; bytes: number }> {
     }, null, 2)}\n`)
     const output = join(lib, 'devtools')
     await rm(output, { recursive: true, force: true })
-    await rename(temporary, output)
+    await renameWithRetry(temporary, output)
     console.log(`DevTools npm ${DEVTOOLS_NPM_VERSION}: ${files.length} files, ${bytes} bytes`)
     return { files: files.length, bytes }
   } finally {
     await rm(temporary, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Move the staged tree into place. Windows virus scanners and indexers briefly
+ * hold freshly written files, so a transient EPERM/EBUSY on the rename retries
+ * with backoff instead of failing the whole bundle.
+ */
+async function renameWithRetry(source: string, target: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(source, target)
+      return
+    } catch (cause) {
+      const code = (cause as NodeJS.ErrnoException).code
+      if ((code !== 'EPERM' && code !== 'EBUSY') || attempt >= 4) throw cause
+      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)))
+    }
   }
 }
 

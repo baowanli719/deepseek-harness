@@ -52,9 +52,9 @@ kind: "package-reference"
 
 `restrictExternalMcp` 默认为 true。将它设为 false，并设置 `egressTools: []`，即可在私密会话中保留命令、联网与外部 MCP 工具，同时保留可信模型路由、持久私密状态与审计标记。GS 产品组合选择此配置。
 
-- 一个 `sensitivePolicy` 服务（`SensitivePolicyCore`），保存每个会话的策略状态：`enterPrivate(sessionId)` 将会话锁定为仅可信出口（永不撤销），`stateOf`/`isPrivate` 读取状态，敏感度（`unclassified` → `potential` → `sensitive`）只升不降。
+- 一个 `sensitivePolicy` 服务（`SensitivePolicyCore`），保存每个会话的策略状态：`enterPrivate(sessionId)` 将会话锁定为仅可信出口，`stateOf`/`isPrivate` 读取状态，敏感度（`unclassified` → `potential` → `sensitive`）只升不降。私密状态永不降级，唯一有界例外是 `exitEndpointPrivacy(sessionId)`：释放尚无模型流量、亦无敏感度标记的端点判定私密。
 - 在模型调用边界（`llm/stream`）：私密会话在不可信路由上的请求会在适配器运行前被拒，返回终结性的 `session_provider_forbidden` 错误；获准的请求会记录其提供方路由，并由 gsclaw 模型网关代理在其网线请求上盖上 `x-gsclaw-sensitive: 1` 审计头。
-- 端点判定也会早于首个请求落定：在 `agent/created` 时以及每次提交 `model/selection` 时，有效模型选择（待生效选择、最后使用的路由，然后是组合默认模型）解析到可信路由的会话即转为私密，因此门控通道与外发限制在下一次请求组装前就已就位。核心及其只读视图上的 `trustsProvider(provider)` 向需要预判该判定的消费方暴露同一谓词。
+- 端点判定也会早于首个请求落定：在 `agent/created` 时以及每次提交 `model/selection` 时，有效模型选择（待生效选择、最后使用的路由，然后是组合默认模型）解析到可信路由的会话即转为私密，因此门控通道与外发限制在下一次请求组装前就已就位。该判定双向重放：切到不可信路由会释放尚无流量的端点判定私密，并恢复存活 Agent 的外发工具可见面。核心及其只读视图上的 `trustsProvider(provider)` 向需要预判该判定的消费方暴露同一谓词。
 - 在工具执行时，所有私密会话都拒绝配置的外发工具；当 `restrictExternalMcp` 为 true 时，还拒绝外部 `mcp__` 工具，包括视觉工具。作用域限制还隐藏配置的工具；执行守卫覆盖直接调用与 PTC 子派发。
 - 当组合了可选的 `gsServerSkillGate` 服务（`@deepseek-ai/dsh-gs-server-skills`）时：每个私密会话的 Agent——无论会话如何变为私密——都会把受门控的 trusted-only 服务端技能通道挂载进其作用域上下文（`agent.ctx`）：对已处于私密的会话在 `agent/created` 时挂载；会话在运行中转为私密时，则在存活 Agent 上即时挂载。挂载按会话幂等，缺少门控服务时为空操作，且作用域注册随 Agent 一并卸载，因此信任吊销导致的取消会连带拆除该通道。
 - 在 `gs-server/trust-revoked` 时：所有已有模型流量的私密会话都会被挂起（其存活 Agent 以 `hook` 原因被取消），且不会再去重判可能已过期的缓存。在 `gs-server/client-config-changed` 时：按最新的信任元数据重判每个私密会话记录的提供方，新落入不可信的会话随即挂起。
@@ -72,7 +72,7 @@ kind: "package-reference"
 ### 设计哲学
 
 - **在产生行为的操作里执行。** 拒绝发生在 `llm/stream` 瀑布与单调的 `tools.guard` 执行闸门内部，而非 UI 过滤或模式省略，因此直接调用与间接调用（PTC 子派发）都无法绕过。`agent/created` 上的作用域 `tools.restrict` 只是修剪可见面；闸门才是强制点。
-- **私密会话共享执行限制。** explicit 与 provider-endpoint 原因记录私密状态的来源。两者都强制可信模型路由与外发拒绝；端点原因可升级为 explicit，私密状态永不降级。
+- **私密会话共享执行限制。** explicit 与 provider-endpoint 原因记录私密状态的来源。两者都强制可信模型路由与外发拒绝；端点原因可升级为 explicit。私密状态永不降级，唯一有界例外：尚无模型流量、亦无敏感度标记的端点判定私密跟随当前路由，在任何请求发生前切离可信路由即释放（`exitEndpointPrivacy`）。该释放是进程内重推导，每次激活时重新判定；持久化日志保留原有 `enter-private` 记录。
 - **失败即关闭。** 信任解析把未知提供方、缺失的 models 节、缺失的缓存 ClientConfig 一律视为 `external`。信任吊销会挂起所有已有流量的私密会话，而不是重读可能早于吊销的缓存。
 - **只挂载门控，不复制门控。** 本包只负责判定会话何时为私密；受门控通道本身（逐次加载与逐次执行都复核 `sensitivePolicy.isPrivate` 的作用域 Provider）位于 `@deepseek-ai/dsh-gs-server-skills`，经可选的 `gsServerSkillGate` 服务以 `ctx.get` 到达——绝不作为声明式注入——因此未组合该服务的部署行为与此前完全一致。
 - **审计头由网关盖章。** 网线发出发生在模型网关代理中，位于本包请求要跨越的一跳 HTTP 的另一侧：镜像的 `llm-pi-ai` 配置打开了 pi-ai 的会话亲和发射，因此每个适配器请求都带着其会话 id 到达回环代理；代理对照本核心（`isPrivate`）重判该会话，并向上游盖上 `x-gsclaw-sensitive: 1`。判定与盖章读的是同一个核心，二者不可能分歧；会话 id 绝不离开回环这一跳。
@@ -83,7 +83,7 @@ kind: "package-reference"
 
 ### 选择如何被判定
 
-在 `agent/created` 时，插件读取会话的有效模型选择——先是从松散读取的 `modelSelection` 投影中取待生效选择或最后使用的路由，然后是组合的可选默认模型服务——并在首个请求组装前应用同一端点判定。每次提交的 `model/selection` 事件都会重放该判定，因此把存活会话切到可信路由会在下一次请求前挂上门控通道；路由切回时私密状态永不降级。
+在 `agent/created` 时，插件读取会话的有效模型选择——先是从松散读取的 `modelSelection` 投影中取待生效选择或最后使用的路由，然后是组合的可选默认模型服务——并在首个请求组装前应用同一端点判定。每次提交的 `model/selection` 事件都会重放该判定，因此把存活会话切到可信路由会在下一次请求前挂上门控通道。该判定双向重放：不可信选择会释放尚无流量的端点判定私密并解除作用域外发限制；而显式进入、已有敏感度标记、或已记录可信路由流量的会话在路由切换时保持锁定。
 
 ### 挂起如何判定与执行
 

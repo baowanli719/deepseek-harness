@@ -18,7 +18,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { AgentCancelCause, SessionEvent } from '@deepseek-ai/dsh-session'
-import { Session, SessionId, SessionSeq, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionSeq, SessionStore, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import type { GsClientConfig, GsModelProviderEntry } from '@deepseek-ai/dsh-gs-server'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -220,6 +220,39 @@ describe('sensitive-policy egress tool denial', () => {
     const chunks = await drain(stream(restored, requestFor('durable', 'ext-cloud'), external))
     expect(chunks).toMatchObject([{ type: 'finish', reason: { kind: 'error' } }])
     expect(external).not.toHaveBeenCalled()
+  })
+
+  it('persists a transition committed while another append is being published', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(Projections)
+    await ctx.plugin(SessionStore)
+    const holder: ConfigHolder = { current: gsClientConfig(['trusted-gw']) }
+    ctx.provide('gsServer', mockGsServer(holder))
+    await ctx.plugin(sensitivePolicy)
+    onTestFinished(() => ctx.fiber.dispose())
+    const warnings: string[] = []
+    ctx.logger.warn = ((message: unknown) => { warnings.push(String(message)) }) as typeof ctx.logger.warn
+    // One durability participant so the store's flush checkpoint reports true.
+    ctx.on('session/flush', () => {})
+    const session = ctx.sessions.create(SessionId('s-attached'))
+    // The model/selection type lives in the session-controller package; this
+    // suite reaches it loosely, the same way the plugin reads the projection.
+    const appendSelection = session.append.bind(session) as (type: 'model/selection', data: { provider: string; model: string }) => void
+    // A trusted selection commit enters private from inside this append's own
+    // publication: recording the transition must defer past the publication
+    // instead of throwing the reentrancy refusal.
+    appendSelection('model/selection', { provider: 'trusted-gw', model: 'm1' })
+    expect(ctx.sensitivePolicy.isPrivate('s-attached')).toBe(true)
+    const adapter = vi.fn(() => (async function* (): AsyncGenerator<StreamChunk> {
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    })())
+    await drain(stream(ctx, requestFor('s-attached', 'trusted-gw'), adapter))
+    expect(adapter).toHaveBeenCalledTimes(1)
+    expect(session.snapshotEvents().map(event => event.type))
+      .toEqual(['model/selection', 'sensitive/policy', 'sensitive/policy'])
+    expect(warnings).toEqual([])
   })
 
   it('denies external MCP execution for endpoint-private sessions', async () => {
@@ -438,6 +471,125 @@ describe('sensitive-policy egress tool denial', () => {
     expect(ctx.sensitivePolicy.stateOf('pre-registered')).toMatchObject({
       inferencePolicy: 'trusted-only', sensitivity: 'sensitive', privateCause: 'explicit',
     })
+  })
+})
+
+describe('sensitive-policy endpoint re-judgement', () => {
+  /** One committed `model/selection` event on the given route. */
+  function selectionEvent(provider: string): SessionEvent {
+    return { type: 'model/selection', seq: SessionSeq(0), time: 0, data: { provider, model: 'm1' } } as unknown as SessionEvent
+  }
+
+  /** Register a live-agent registry resolving the given agents by session id. */
+  function provideAgents(ctx: Context, entries: readonly Agent[]): void {
+    const registry = new Map(entries.map(agent => [agent.id as string, agent]))
+    ctx.provide('agents', { get: (id: SessionId) => registry.get(id as string) })
+  }
+
+  it('releases endpoint-judged privacy when an untrusted selection commits before any traffic', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'trusted-gw', model: 'm1' }) })
+    const { agent, key } = await fakeAgent(ctx, 's-release')
+    provideAgents(ctx, [agent])
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    expect(ctx.sensitivePolicy.isPrivate('s-release')).toBe(true)
+    expect(ctx.tools.get('web_fetch', key)).toBeUndefined()
+    ctx.emit('session/event', agent.session, selectionEvent('ext-cloud'))
+    expect(ctx.sensitivePolicy.isPrivate('s-release')).toBe(false)
+    // The visible surface is restored and the execution gate follows.
+    expect(ctx.tools.get('web_fetch', key)).toBeDefined()
+    expect((await executeAs(ctx, agent, 'web_fetch')).isError).toBe(false)
+    // The next request on the untrusted route dispatches instead of failing closed.
+    let reached = false
+    await drain(stream(ctx, requestFor('s-release', 'ext-cloud'), () => {
+      reached = true
+      return (async function* (): AsyncGenerator<StreamChunk> {
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      })()
+    }))
+    expect(reached).toBe(true)
+  })
+
+  it('stays locked on an untrusted switch once trusted-route traffic is recorded', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    const { agent, key } = await fakeAgent(ctx, 's-locked')
+    provideAgents(ctx, [agent])
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    await drain(stream(ctx, requestFor('s-locked', 'trusted-gw'), () => (async function* (): AsyncGenerator<StreamChunk> {
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    })()))
+    expect(ctx.sensitivePolicy.stateOf('s-locked').privateCause).toBe('provider-endpoint')
+    expect(ctx.tools.get('web_fetch', key)).toBeUndefined()
+    ctx.emit('session/event', agent.session, selectionEvent('ext-cloud'))
+    // The conversation already reached the trusted model, so it never follows the route back out.
+    expect(ctx.sensitivePolicy.isPrivate('s-locked')).toBe(true)
+    expect(ctx.tools.get('web_fetch', key)).toBeUndefined()
+    const chunks = await drain(stream(ctx, requestFor('s-locked', 'ext-cloud'), () => (async function* (): AsyncGenerator<StreamChunk> {})()))
+    expect(chunks).toMatchObject([{ type: 'finish', reason: { kind: 'error', failure: { code: SENSITIVE_PROVIDER_FORBIDDEN } } }])
+  })
+
+  it('never releases explicit entries or sensitivity-marked sessions on an untrusted switch', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    ctx.sensitivePolicy.enterPrivate('s-explicit')
+    const explicit = await fakeAgent(ctx, 's-explicit')
+    await ctx.serial('agent/created', { agent: explicit.agent, source: 'startup' as const })
+    ctx.emit('session/event', explicit.agent.session, selectionEvent('ext-cloud'))
+    expect(ctx.sensitivePolicy.isPrivate('s-explicit')).toBe(true)
+    const marked = await fakeAgent(ctx, 's-marked')
+    await ctx.serial('agent/created', { agent: marked.agent, source: 'startup' as const })
+    ctx.sensitivePolicy.enterPrivate('s-marked', 'provider-endpoint')
+    ctx.sensitivePolicy.markPotential('s-marked')
+    ctx.emit('session/event', marked.agent.session, selectionEvent('ext-cloud'))
+    expect(ctx.sensitivePolicy.isPrivate('s-marked')).toBe(true)
+  })
+
+  it('re-judges restored endpoint privacy at agent/created against the current route', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'ext-cloud', model: 'm1' }) })
+    const { agent, key } = await fakeAgent(ctx, 's-restored', undefined, [
+      { type: 'sensitive/policy', data: { kind: 'enter-private', cause: 'provider-endpoint' } },
+    ])
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    // The durable log still says private, but the current route is untrusted
+    // and no traffic was recorded, so activation releases the session.
+    expect(ctx.sensitivePolicy.isPrivate('s-restored')).toBe(false)
+    expect(ctx.tools.get('web_fetch', key)).toBeDefined()
+  })
+
+  it('keeps restored endpoint privacy when the current route is still trusted', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'trusted-gw', model: 'm1' }) })
+    const { agent, key } = await fakeAgent(ctx, 's-kept', undefined, [
+      { type: 'sensitive/policy', data: { kind: 'enter-private', cause: 'provider-endpoint' } },
+    ])
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    expect(ctx.sensitivePolicy.isPrivate('s-kept')).toBe(true)
+    expect(ctx.tools.get('web_fetch', key)).toBeUndefined()
+  })
+
+  it('re-enters private when the route switches back to trusted after a release', async () => {
+    const { ctx } = await setup()
+    onTestFinished(() => ctx.fiber.dispose())
+    registerFixtureTools(ctx)
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'trusted-gw', model: 'm1' }) })
+    const { agent, key } = await fakeAgent(ctx, 's-return')
+    provideAgents(ctx, [agent])
+    await ctx.serial('agent/created', { agent, source: 'startup' as const })
+    ctx.emit('session/event', agent.session, selectionEvent('ext-cloud'))
+    expect(ctx.sensitivePolicy.isPrivate('s-return')).toBe(false)
+    ctx.emit('session/event', agent.session, selectionEvent('trusted-gw'))
+    expect(ctx.sensitivePolicy.isPrivate('s-return')).toBe(true)
+    expect(ctx.tools.get('web_fetch', key)).toBeUndefined()
   })
 })
 
