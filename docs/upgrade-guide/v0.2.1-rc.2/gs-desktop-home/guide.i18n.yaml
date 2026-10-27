@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.2/gs-desktop-home/guide.md
+/:
+  en: 774c727b94ff7ccc
+  zh: 7f020953c7ee5cd9
+/gs-desktop-uses-a-separate-data-directory:
+  en: dfd86a2d3cca5797
+  zh: 51ee851be49e8edd
+/gs-desktop-uses-a-separate-data-directory/change:
+  en: 77435e5a73971b68
+  zh: a09ca3444148418b
+/gs-desktop-uses-a-separate-data-directory/migration:
+  en: 36c55cb068ad2805
+  zh: 9a1e3e6b9f687af8

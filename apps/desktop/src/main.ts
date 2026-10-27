@@ -23,7 +23,9 @@ import {
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from 'electron'
-import { DEFAULT_DESKTOP_PROFILE, resolveDesktopPaths, resolveDesktopProfileName } from './paths.ts'
+import { DEFAULT_DESKTOP_PROFILE, resolveDesktopHome, resolveDesktopPaths, resolveDesktopProfileName } from './paths.ts'
+import { defaultDshHome } from '@deepseek-ai/dsh-home-paths'
+import { migrateGsHome } from './gs-home-migration.ts'
 import { DesktopProjectManager } from './project-manager.ts'
 import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError } from './host-process.ts'
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
@@ -348,8 +350,15 @@ async function main(): Promise<void> {
   if (typeof appManifest !== 'object' || appManifest === null) throw new Error('desktop policy: invalid application manifest')
   const manifest = appManifest as Record<string, unknown>
   activeProfileName = resolveDesktopProfileName(app.isPackaged ? manifest : undefined)
+  const importLegacyGsData = activeProfileName === 'gs-desktop' && (process.env.DSH_HOME?.trim() ?? '') === ''
+  const desktopHome = resolveDesktopHome(activeProfileName)
+  if (importLegacyGsData) {
+    try { await migrateGsHome(defaultDshHome(), desktopHome) } catch (cause) {
+      throw new Error(currentDesktopLocale().messages.gsDataImportFailed, { cause })
+    }
+  }
   const gsDesktop = activeProfileName === 'gs-desktop'
-  const paths = resolveDesktopPaths(undefined, activeProfileName)
+  const paths = resolveDesktopPaths(desktopHome, activeProfileName)
   const development = !app.isPackaged
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
@@ -360,13 +369,14 @@ async function main(): Promise<void> {
   const loginShellRead = new AbortController()
   // The probe runs in its own process group, which outlives Desktop unless the read is aborted.
   app.on('will-quit', () => { loginShellRead.abort() })
-  const loginShell = readDesktopLoginShellEnvironment(process.env, resolveDesktopLoginShellConfig(process.env), {
+  const launchEnvironment = { ...process.env, DSH_HOME: desktopHome }
+  const loginShell = readDesktopLoginShellEnvironment(launchEnvironment, resolveDesktopLoginShellConfig(process.env), {
     signal: loginShellRead.signal,
   }).then((result) => {
     for (const failure of result.failures) console.warn(`desktop login shell: ${failure.shell} failed (${failure.reason})`)
     return result.environment
   })
-  let hostEnvironment: NodeJS.ProcessEnv = process.env
+  let hostEnvironment: NodeJS.ProcessEnv = launchEnvironment
   const prepareHostEnvironment = async (): Promise<void> => { hostEnvironment = await loginShell }
   let quitting = false
   let startup: Promise<void> | undefined

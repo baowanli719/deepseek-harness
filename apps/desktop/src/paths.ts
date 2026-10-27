@@ -1,10 +1,24 @@
 /** Filesystem ownership for the Electron-managed desktop installation. */
 
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 /** Profile name an upstream-branded Desktop initializes and boots. */
 export const DEFAULT_DESKTOP_PROFILE = 'desktop'
+
+/**
+ * Resolve the product's data root before preparing profiles or spawning the Host.
+ * @param profileName - GS Desktop uses `~/.gs-worker`; other profiles use `~/.dsh`.
+ * @param env - A nonblank DSH_HOME overrides either product default.
+ * @returns Absolute data root shared by the shell, Host, and plugin subprocesses.
+ */
+export function resolveDesktopHome(profileName: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (profileName === 'gs-desktop' && (env.DSH_HOME?.trim() ?? '') === '') {
+    return join(homedir(), '.gs-worker')
+  }
+  return resolveDshHome(undefined, env)
+}
 
 /**
  * Resolve the profile this Desktop build owns: the name baked into the packaged
@@ -27,24 +41,25 @@ export function resolveDesktopProfileName(
   return value
 }
 
-/** Stable desktop installation paths under the shared Harness home. */
+/** Stable desktop installation paths under the selected product's home. */
 export interface DesktopPaths {
   readonly profile: string
   readonly lock: string
 }
 
 /**
- * Resolve every Electron-owned path without changing the shared data roots.
- * @param dshHome - Harness home shared with npm-installed dsh.
+ * Resolve every Electron-owned path without changing process environment variables.
+ * @param dshHome - Explicit home; omission uses the selected profile's product default or DSH_HOME.
  * @param profileName - Profile this build owns; branded builds keep their state out of the upstream profile.
  * @returns immutable desktop path set.
  */
 export function resolveDesktopPaths(
-  dshHome: string = resolveDshHome(),
+  dshHome?: string,
   profileName: string = DEFAULT_DESKTOP_PROFILE,
 ): DesktopPaths {
+  const home = dshHome ?? resolveDesktopHome(profileName)
   return {
-    profile: join(dshHome, 'profiles', profileName),
-    lock: join(dshHome, 'profiles', profileName, 'lock'),
+    profile: join(home, 'profiles', profileName),
+    lock: join(home, 'profiles', profileName, 'lock'),
   }
 }

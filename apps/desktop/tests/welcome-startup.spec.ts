@@ -1,12 +1,15 @@
 vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
 /** Welcome startup uses the Host before transitioning to the workspace. */
 
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { BrowserWindowConstructorOptions } from 'electron'
 import type { DesktopLocale } from '../src/locale.ts'
 import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { WelcomeOperations } from '../src/welcome-api.ts'
 import { DESKTOP_IPC } from '../src/ipc.ts'
+
+vi.mock('../src/gs-home-migration.ts', () => ({ migrateGsHome: vi.fn(async () => 'not-needed') }))
+beforeEach(() => { vi.stubEnv('DSH_HOME', undefined) })
 
 const state = vi.hoisted(() => ({
   appListeners: new Map<string, (...args: unknown[]) => void>(),

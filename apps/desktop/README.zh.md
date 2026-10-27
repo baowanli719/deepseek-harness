@@ -214,6 +214,10 @@ Web 侧的对应命令是 `pnpm run dev:web` 与 `pnpm run start:web`，见[开�
 
 ### 启动引导
 
+GS Desktop 壳默认使用 `~/.gs-worker` 作为 Harness 主目录，使会话、设置、凭据、存储和 profile 包与默认使用 `~/.dsh` 的上游 Desktop 和 CLI 隔离。非空白的 `DSH_HOME` 可覆盖任一产品的默认值并禁用自动导入；壳将解析后的主目录传给 Host 及其子进程，不改变自身的启动环境。通过 CLI 启动 `gs-desktop` 仍遵循 CLI 的主目录解析规则，因此访问 Desktop 数据时需显式选择 GS 主目录。除非 profile 配置覆盖，Desktop 监听端口由操作系统分配。
+
+启动 Host 前，若 `~/.dsh/profiles/gs-desktop` 存在且尚未完成导入，GS Desktop 会自动导入旧数据。导入包括之前可见的对话、附件、工作区状态、GS profile 和登录状态以及托管凭据，Session 各代际文件保持原始字节。旧历史没有产品标记，因此也包含此前与上游共享的对话。原始数据保持不变，目标目录已有文件优先，完成后不会在后续启动时重复导入。源数据变化时会先重试再发布；持续变化或文件系统失败会中止启动并显示本地化重试提示。链接的数据目录会被拒绝；用户安装的插件链接会保留，指向旧主目录内部的绝对引用会改为新位置。参见[迁移指南](../../docs/upgrade-guide/v0.2.1-rc.2/gs-desktop-home/guide.zh.md)。
+
 `gs-desktop` profile 使用从 `dsh-desktop` 迁移的账号密码和邮箱验证码登录窗。启动时读取 Host 的 gs-server 会话，有已密封的 refresh token 时先恢复会话；未登录则打开 440×700 的密码或邮箱验证码表单。表单仅调用 Host 的私有回环路由，登录成功后进入工作区。邮箱验证码登录支持只输入邮箱前缀或完整 `@gszq.com` 邮箱；gs-server 服务会把前缀补全为企业邮箱域名，在发送验证码前拒绝其他域名，登录窗口按界面语言提示被拒绝的账号。上游 Desktop profile 继续使用原有欢迎流程。
 
 API Key 输入框初始为空，并通过 `autocomplete="new-password"` 请求 Chromium 不要自动填入已保存的登录密码。
@@ -389,7 +393,7 @@ node apps/desktop/node_modules/pnpm/bin/pnpm.mjs --dir apps/desktop run test:upd
 
 - 发布签名、公证、更新托管和跨上一版本的已安装产物验证需要生产发布环境。
 - 依赖的生命周期脚本遵循 pnpm 的构建权限；Desktop 不提供单独的审批对话框。
-- 桌面壳与 CLI dsh 共享 `$DSH_HOME` 下的会话、设置、凭据、工作区和存储，但可执行包、插件激活和锁文件彼此隔离。
+- 上游桌面壳与 CLI dsh 共享 `$DSH_HOME` 下的会话、设置、凭据、工作区和存储，但可执行包、插件激活和锁文件彼此隔离。
 - 在 Electron win32-arm64 宿主上，未打包启动现在可以成功，但载荷仍为 x64：`packages/skill/tool-workspace-dependencies/src/index.ts` 的架构校验会把载荷记录的架构与宿主 `process.arch` 比较，因此 `load_workspace_dependencies` 工具仍可能拒绝 primary runtime。
 
 仅向应用提供的 `dshOnboarding.hasApiKey()` preload 方法返回欢迎后端当前的 API Key 存在状态布尔值；原生登录与引导共用凭证发现逻辑，且只有受管理的应用主 frame 可以调用。

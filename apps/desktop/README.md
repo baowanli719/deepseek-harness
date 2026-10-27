@@ -214,6 +214,10 @@ Dependency installation does not run the locked Electron package's separate bina
 
 ### Startup onboarding
 
+The GS Desktop shell defaults its Harness home to `~/.gs-worker`, isolating sessions, settings, credentials, storage, and profile packages from upstream Desktop and CLI defaults under `~/.dsh`. A nonblank `DSH_HOME` overrides either product's default and disables automatic import; the shell passes the resolved home to the Host and its subprocesses without changing its own launch environment. A CLI launch of `gs-desktop` still uses the CLI's home resolution, so select the GS home explicitly when accessing the Desktop's data. Desktop listeners use OS-assigned ports unless profile configuration overrides them.
+
+Before starting its Host, GS Desktop automatically imports legacy data when `~/.dsh/profiles/gs-desktop` exists and no import has completed. It copies the previously visible conversations, attachments, workspace state, GS profile and sign-in state, and managed credentials; Session generations retain their original bytes. Legacy history has no product identifier, so shared upstream conversations are included. Original data remains untouched, existing destination files win, and subsequent launches do not repeat a completed import. Changing source data is retried before publication; persistent changes or filesystem failures stop startup with a localized retry message. Linked data directories are refused; user-installed plugin links are retained, with absolute references into the old home retargeted. See the [migration guide](../../docs/upgrade-guide/v0.2.1-rc.2/gs-desktop-home/guide.md).
+
 The `gs-desktop` profile uses the password and email-code login window migrated from `dsh-desktop`. Startup reads the Host's gs-server session, restores a sealed refresh token when available, and opens the 440×700 password or email-code form when signed out. The form calls only the Host's private loopback routes; successful login enters the workspace. Email-code login accepts the mailbox prefix or the full `@gszq.com` address; the gs-server service completes bare prefixes with the enterprise email domain and rejects other domains before sending a code, and the window explains rejected accounts in the shell locale. The upstream Desktop profile continues to use its existing Welcome flow.
 
 The API-key input starts empty and uses `autocomplete="new-password"` to ask Chromium not to autofill saved login passwords.
@@ -389,7 +393,7 @@ An unpackaged Electron process uses `.desktop-build/development/project` under i
 
 - Release signing, notarization, update hosting, and previous-version installed-artifact qualification require the production release environment.
 - Dependency lifecycle scripts follow pnpm’s build permissions; Desktop provides no separate approval dialog.
-- The desktop shell shares sessions, settings, credentials, workspaces, and storage under `$DSH_HOME` with CLI dsh, while executable packages, plugin activation, and lockfiles remain separate.
+- The upstream desktop shell shares sessions, settings, credentials, workspaces, and storage under `$DSH_HOME` with CLI dsh, while executable packages, plugin activation, and lockfiles remain separate.
 - Unpackaged startup on an Electron win32-arm64 host now succeeds, but the payload remains x64: the architecture check in `packages/skill/tool-workspace-dependencies/src/index.ts` compares the recorded payload architecture against the host `process.arch`, so the `load_workspace_dependencies` tool can still reject the primary runtime.
 
 The app-only `dshOnboarding.hasApiKey()` preload method returns the welcome backend’s current API-key presence boolean; native login and onboarding share credential discovery, and only the owned application main frame may invoke it.

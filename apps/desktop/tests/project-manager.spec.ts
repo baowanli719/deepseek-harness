@@ -1,8 +1,8 @@
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveDesktopPaths, resolveDesktopProfileName } from '../src/paths.ts'
+import { resolveDesktopHome, resolveDesktopPaths, resolveDesktopProfileName } from '../src/paths.ts'
 import { DesktopProjectManager, desktopProfileTemplate } from '../src/project-manager.ts'
 import { readProfilePlugins } from '@deepseek-ai/dsh-app-boot'
 import { runtimeFixture } from './runtime-fixture.ts'
@@ -332,6 +332,17 @@ describe('desktop link-backend projections', () => {
 })
 
 describe('desktop product profile selection', () => {
+  it('separates GS product data while honoring explicit homes for either product', () => {
+    for (const DSH_HOME of [undefined, '', '  ']) {
+      expect(resolveDesktopHome('desktop', { DSH_HOME })).toBe(join(homedir(), '.dsh'))
+      expect(resolveDesktopHome('gs-desktop', { DSH_HOME })).toBe(join(homedir(), '.gs-worker'))
+    }
+    for (const profile of ['desktop', 'gs-desktop']) {
+      expect(resolveDesktopHome(profile, { DSH_HOME: '~/custom-data' })).toBe(join(homedir(), 'custom-data'))
+      expect(resolveDesktopHome(profile, { DSH_HOME: './custom-data' })).toBe(resolve('custom-data'))
+    }
+  })
+
   it('resolves the profile name from the baked manifest, then the environment', () => {
     expect(resolveDesktopProfileName(undefined, {})).toBe('desktop')
     expect(resolveDesktopProfileName(undefined, { DSH_DESKTOP_PROFILE: 'gs-desktop' })).toBe('gs-desktop')

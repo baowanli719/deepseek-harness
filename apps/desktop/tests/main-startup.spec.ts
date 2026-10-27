@@ -13,6 +13,9 @@ import { en, zh } from '../src/locale.ts'
 import { DesktopUpdatePreparationError } from '../src/update-error.ts'
 import { writeCrashReport } from '../src/crash-report.ts'
 
+const importGsData = vi.hoisted(() => vi.fn(async (_legacy: string, _home: string) => 'not-needed' as const))
+vi.mock('../src/gs-home-migration.ts', () => ({ migrateGsHome: importGsData }))
+
 type InvokeEvent = { sender?: unknown; senderFrame: { url: string } }
 type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
 
@@ -402,6 +405,8 @@ function applicationMenuItems(): MenuItemConstructorOptions[] {
 }
 
 beforeEach(() => {
+  importGsData.mockReset().mockResolvedValue('not-needed')
+  vi.stubEnv('DSH_HOME', undefined)
   vi.resetModules()
   vi.clearAllMocks()
   harness.dialog.showMessageBox.mockReset()
@@ -449,6 +454,35 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it('imports legacy GS data before profile preparation and keeps relaunch environment defaults intact', async () => {
+    vi.stubEnv('DSH_DESKTOP_PROFILE', 'gs-desktop')
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    expect(importGsData).toHaveBeenCalledTimes(1)
+    expect(importGsData.mock.invocationCallOrder[0]).toBeLessThan(harness.applyRelease.mock.invocationCallOrder[0]!)
+    expect(process.env.DSH_HOME).toBeUndefined()
+    expect(harness.loginShell.mock.calls[0]?.[0].DSH_HOME).toContain('.gs-worker')
+  })
+
+  it.each(['desktop', 'gs-desktop'])('keeps explicit homes out of automatic migration (%s)', async (profile) => {
+    vi.stubEnv('DSH_DESKTOP_PROFILE', profile)
+    vi.stubEnv('DSH_HOME', join(tmpdir(), 'explicit-desktop-home'))
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    expect(importGsData).not.toHaveBeenCalled()
+  })
+
+  it('stops before starting the Host when legacy data could not be imported', async () => {
+    vi.stubEnv('DSH_DESKTOP_PROFILE', 'gs-desktop')
+    importGsData.mockRejectedValueOnce(new Error('source changed'))
+    await import('../src/main.ts')
+    await harness.dialogShown.promise
+    expect(harness.applyRelease).not.toHaveBeenCalled()
+    expect(harness.hosts).toHaveLength(0)
+    const options = harness.dialog.showMessageBox.mock.calls[0]![0] as MessageBoxOptions
+    expect(options.detail).toContain(en.gsDataImportFailed)
+  })
+
   it.each([[0, false], [1, false], [0, true]] as const)('prompts for pushed GS releases and downloads only after confirmation (%s, deferred=%s)', async (response, deferred) => {
     vi.stubEnv('DSH_DESKTOP_PROFILE', 'gs-desktop')
     const gs = await import('../src/gs-login-backend.ts')
