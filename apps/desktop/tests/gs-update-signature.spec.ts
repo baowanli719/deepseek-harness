@@ -1,5 +1,5 @@
 /** Installer identity checks fail before any native execution. */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
@@ -81,6 +81,14 @@ it('requires matching macOS Team IDs and successful Gatekeeper assessment', asyn
   })
   await verifyGsUpdateSignature(path, 'darwin', '/Applications/GS.app/Contents/MacOS/GS')
   expect(execute.mock.calls.at(-1)?.[0]).toBe('/usr/sbin/spctl')
+  const bundle = join(root, 'GS.app')
+  await mkdir(bundle)
+  await verifyGsUpdateSignature(bundle, 'darwin', '/Applications/GS.app/Contents/MacOS/GS', 'application')
+  expect(execute.mock.calls.at(-1)?.[1]).toEqual(['--assess', '--type', 'execute', bundle])
+  await expect(verifyGsUpdateSignature(path, 'darwin', '/Applications/GS.app/Contents/MacOS/GS', 'application')).rejects.toThrow('directory')
+  const link = join(root, 'linked.app')
+  await symlink(bundle, link, process.platform === 'win32' ? 'junction' : 'dir')
+  await expect(verifyGsUpdateSignature(link, 'darwin', '/Applications/GS.app/Contents/MacOS/GS', 'application')).rejects.toThrow('directory')
   execute.mockImplementation(async (command: string, args: string[]) => {
     if (command.endsWith('codesign') && args[0] === '--display') return { stdout: '', stderr: `TeamIdentifier=${args.at(-1) === path ? 'OTHER' : 'GS123'}\n` }
     return { stdout: '', stderr: '' }

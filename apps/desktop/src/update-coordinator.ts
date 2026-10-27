@@ -17,6 +17,8 @@ export interface DesktopReleaseSource {
   check(): Promise<string | undefined>
   /** Download the checked version after user confirmation, reporting bounded progress. */
   download(version: string, progress: (percent: number) => void): Promise<void>
+  /** Stage platform installation inputs while the client stays open; omission needs no separate preparation. */
+  prepare?(version: string): Promise<void>
   /** Launch the prepared installer after the shell has completed task shutdown. */
   install(version: string): Promise<void>
   /** Cancel outstanding requests and prevent further installer handoffs. */
@@ -34,7 +36,7 @@ export class DesktopUpdateCoordinator {
   private installOperation: Promise<DesktopUpdateState> | undefined
 
   private readonly onProgress = (progress: ProgressInfo): void => {
-    this.reportProgress(progress.percent)
+    if (this.releaseSource === undefined) this.reportProgress(progress.percent)
   }
 
   private reportProgress(percent: number): void {
@@ -44,7 +46,7 @@ export class DesktopUpdateCoordinator {
   }
 
   private readonly onDownloaded = (info: UpdateInfo): void => {
-    if (this.downloadOperation === undefined || info.version !== this.candidate) return
+    if (this.releaseSource !== undefined || this.downloadOperation === undefined || info.version !== this.candidate) return
     this.downloaded = true
   }
 
@@ -126,11 +128,15 @@ export class DesktopUpdateCoordinator {
       this.assertLive()
       if (this.candidate === undefined) throw new Error('desktop update: no checked update is available')
       if (version !== this.candidate) throw new Error('desktop update: download confirmation is stale')
-      this.setState({ phase: 'downloading', version, percent: 0 })
+      this.setState({ phase: 'downloading', version })
       try {
         if (this.releaseSource === undefined) await this.updater.downloadUpdate()
         else {
           await this.releaseSource.download(version, (percent) => { this.reportProgress(percent) })
+          if (this.releaseSource.prepare !== undefined) {
+            this.setState({ phase: 'preparing', version })
+            await this.releaseSource.prepare(version)
+          }
           this.downloaded = true
         }
         if (!this.downloaded) throw new Error('desktop update: platform preparation did not report readiness')

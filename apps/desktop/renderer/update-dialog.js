@@ -3,7 +3,7 @@ const api = window.dshUpdateDialog
 let view
 let responding = false
 function respond(index) {
-  if (responding || view === undefined) return
+  if (responding || view === undefined || view.progress !== undefined) return
   responding = true
   void api.respond(view.revision, index).catch(() => { responding = false })
 }
@@ -11,7 +11,8 @@ document.getElementById('close').addEventListener('click', () => { respond(view.
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && view !== undefined) { event.preventDefault(); respond(view.cancelId) }
   if (event.key !== 'Tab') return
-  const controls = [...document.querySelectorAll('button, details:not([hidden]) > summary, details[open]:not([hidden]) > pre')]
+  const controls = [...document.querySelectorAll('button:not([hidden]), details:not([hidden]) > summary, details[open]:not([hidden]) > pre')]
+  if (controls.length === 0) { event.preventDefault(); document.getElementById('dialog').focus(); return }
   const current = controls.indexOf(document.activeElement)
   const next = current < 0 ? (event.shiftKey ? controls.length - 1 : 0)
     : (current + (event.shiftKey ? -1 : 1) + controls.length) % controls.length
@@ -25,6 +26,7 @@ function render(state) {
     return
   }
   if (view !== undefined && state.revision <= view.revision) return
+  const retainFocus = view?.progress !== undefined && state.progress !== undefined
   responding = false
   view = state
   document.documentElement.lang = state.locale
@@ -33,6 +35,12 @@ function render(state) {
   document.getElementById('detail').textContent = state.detail
   document.getElementById('detail').hidden = state.detail === ''
   document.getElementById('close').setAttribute('aria-label', state.closeLabel)
+  document.getElementById('close').hidden = state.progress !== undefined
+  const progress = document.getElementById('update-progress')
+  progress.hidden = state.progress === undefined
+  progress.setAttribute('aria-label', state.message)
+  if (state.progress?.percent === undefined) progress.removeAttribute('value')
+  else progress.value = state.progress.percent
   document.getElementById('technical-details').hidden = state.technicalDetails === ''
   document.getElementById('technical-details-label').textContent = state.technicalDetailsLabel
   document.getElementById('technical-details-content').textContent = state.technicalDetails
@@ -47,9 +55,9 @@ function render(state) {
     document.getElementById('actions').append(button)
   }
   document.querySelector('main').hidden = false
-  document.getElementById('dialog').scrollTop = 0
+  if (!retainFocus) document.getElementById('dialog').scrollTop = 0
   document.body.classList.add('visible')
-  document.getElementById('dialog').focus()
+  if (!retainFocus) document.getElementById('dialog').focus()
 }
 let received = false
 const unsubscribe = api.subscribe(state => { received = true; render(state) })

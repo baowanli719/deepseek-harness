@@ -1,0 +1,24 @@
+[
+  {
+    "message": "正在下载更新…",
+    "progress": {}
+  },
+  {
+    "message": "正在下载 48%…",
+    "progress": {
+      "percent": 48.9
+    }
+  },
+  {
+    "message": "正在校验更新文件…",
+    "progress": {}
+  },
+  {
+    "message": "正在准备安装…",
+    "progress": {}
+  },
+  {
+    "message": "正在准备重启…",
+    "progress": {}
+  }
+]

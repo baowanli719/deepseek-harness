@@ -8,7 +8,7 @@ import type { SettingsRootInjected } from './shell-contract.ts'
 type SettingsTranslate = PropsLocale<'settings'>['t']
 
 const BUSY_PHASES: ReadonlySet<DesktopUpdatePresentation['phase']> = new Set([
-  'checking', 'downloading', 'verifying', 'installing',
+  'checking', 'downloading', 'verifying', 'preparing', 'installing',
 ])
 
 function updateCopy(state: DesktopUpdatePresentation, t: SettingsTranslate): { label: string; detail: string } {
@@ -16,14 +16,15 @@ function updateCopy(state: DesktopUpdatePresentation, t: SettingsTranslate): { l
     idle: '',
     checking: t('desktop.update.checking'),
     available: t('desktop.update.available'),
-    downloading: t('desktop.update.progress', { percent: state.percent ?? 0 }),
+    downloading: state.percent === undefined ? t('desktop.update.downloading') : t('desktop.update.progress', { percent: state.percent }),
     verifying: t('desktop.update.verifying'),
+    preparing: t('desktop.update.preparing'),
     installing: t('desktop.update.installing'),
     ready: t('desktop.update.ready'),
     error: t('desktop.update.retry'),
   }
   const label = labels[state.phase]
-  if (state.phase === 'checking' || state.phase === 'verifying' || state.phase === 'installing') {
+  if (state.phase === 'checking' || state.phase === 'verifying' || state.phase === 'preparing' || state.phase === 'installing') {
     return { label, detail: state.version ?? label }
   }
   if (state.phase === 'error') {
@@ -41,7 +42,9 @@ function updateCopy(state: DesktopUpdatePresentation, t: SettingsTranslate): { l
     return { label, detail: failures[state.failure ?? 'install'] }
   }
   if (state.phase === 'downloading' && state.version !== undefined) {
-    return { label, detail: t('desktop.update.downloadDetail', { percent: state.percent ?? 0, version: state.version }) }
+    return { label, detail: state.percent === undefined
+      ? t('desktop.update.versionDetail', { label, version: state.version })
+      : t('desktop.update.downloadDetail', { percent: state.percent, version: state.version }) }
   }
   return { label, detail: state.version === undefined
     ? label

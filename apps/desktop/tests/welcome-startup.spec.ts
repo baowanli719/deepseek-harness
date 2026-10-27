@@ -154,8 +154,15 @@ vi.mock('node:fs/promises', async importOriginal => ({
   readFile: vi.fn(async () => '{}'),
 }))
 vi.mock('../src/update-dialog.ts', () => ({ DesktopUpdateDialog: class {
+  showProgress() {}
+  clearProgress() {}
   constructor(_preload: string, locale: () => DesktopLocale) { state.dialogLocale = locale }
   dispose() {}
+} }))
+vi.mock('../src/gs-mac-update.ts', () => ({ GsMacUpdateInstaller: class {
+  prepare = vi.fn(async () => {})
+  install = vi.fn()
+  dispose = vi.fn(async () => {})
 } }))
 vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: class {
   state = { phase: 'idle' }

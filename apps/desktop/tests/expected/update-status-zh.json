@@ -20,6 +20,11 @@
     "percent": 58
   },
   {
+    "phase": "preparing",
+    "version": "0.1.5-rc.2",
+    "percent": 58
+  },
+  {
     "phase": "ready",
     "version": "0.1.5-rc.2",
     "percent": 58

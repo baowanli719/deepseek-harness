@@ -1,0 +1,24 @@
+[
+  {
+    "message": "Downloading update…",
+    "progress": {}
+  },
+  {
+    "message": "Downloading 48%…",
+    "progress": {
+      "percent": 48.9
+    }
+  },
+  {
+    "message": "Verifying update files…",
+    "progress": {}
+  },
+  {
+    "message": "Preparing installation…",
+    "progress": {}
+  },
+  {
+    "message": "Preparing to restart…",
+    "progress": {}
+  }
+]

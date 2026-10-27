@@ -338,6 +338,8 @@ vi.mock('../src/host-process.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/host-process.ts')>(), DesktopHostProcess: harness.FakeHost,
 }))
 vi.mock('../src/update-dialog.ts', () => ({ DesktopUpdateDialog: class {
+  showProgress() {}
+  clearProgress() {}
   get isOpen() { return harness.shellDialog.isOpen }
   show(owner: { options: { modal?: boolean } }, options: unknown) {
     return (owner.options.modal ? harness.dialog.showMessageBox(owner, options)
@@ -346,6 +348,11 @@ vi.mock('../src/update-dialog.ts', () => ({ DesktopUpdateDialog: class {
   cancel() {}
   readonly focus = harness.shellDialog.focus
   dispose() {}
+} }))
+vi.mock('../src/gs-mac-update.ts', () => ({ GsMacUpdateInstaller: class {
+  prepare = vi.fn(async () => {})
+  install = vi.fn()
+  dispose = vi.fn(async () => {})
 } }))
 vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: class {
   constructor(publish: (state: DesktopUpdateState) => DesktopUpdateState, beforeRestart: () => Promise<boolean>) {
@@ -1549,6 +1556,22 @@ describe('desktop main startup', () => {
     expect(harness.app.quit).toHaveBeenCalledOnce()
     host.exited.resolve()
     await harness.quitCompleted.promise
+    expect(harness.app.quit).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for remaining cleanup when the Host fails to stop during ordinary quit', async () => {
+    const host = await readyForUpdate()
+    const disposal = harness.deferPlatformDispose()
+    const failure = new Error('Host stop failed')
+    harness.app.quit()
+    await host.stopping.promise
+    host.exited.reject(failure)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(harness.platformDispose).toHaveBeenCalledOnce()
+    expect(harness.app.quit).toHaveBeenCalledOnce()
+    disposal.resolve()
+    await harness.quitCompleted.promise
+    expect(console.error).toHaveBeenCalledWith(failure)
     expect(harness.app.quit).toHaveBeenCalledTimes(2)
   })
 

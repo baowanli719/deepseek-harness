@@ -68,16 +68,20 @@ export function samePublisherSubject(installedSubject: string, downloadSubject: 
  * Refuse unsigned, modified, or differently signed installers before native execution.
  * Windows requires a valid timestamped download whose signer names the installed publisher's
  * CN, O, and C, so certificate renewal under the same identity still updates; macOS requires the
- * installed Team ID and a Gatekeeper-approved signed disk image.
+ * installed Team ID and Gatekeeper approval for the disk image or extracted application.
  * @param artifact - completely downloaded installer.
  * @param platform - native operating system.
  * @param installedExecutable - trusted installed application executable.
+ * @param kind - Disk-image installer by default; extracted macOS bundles require executable Gatekeeper assessment.
  */
 export async function verifyGsUpdateSignature(
   artifact: string, platform: NodeJS.Platform = process.platform, installedExecutable = process.execPath,
+  kind: 'installer' | 'application' = 'installer',
 ): Promise<void> {
   const stat = await lstat(artifact)
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('GS update requires a regular installer file')
+  if (stat.isSymbolicLink() || (kind === 'application' && platform === 'darwin' ? !stat.isDirectory() : !stat.isFile())) {
+    throw new Error('GS update requires a regular installer file or application directory')
+  }
   const environment = Object.fromEntries(Object.entries(process.env)
     .filter(([name]) => !/key|secret|token|password|^NODE_OPTIONS$|^NODE_PATH$/iu.test(name)))
   const options = { env: environment, encoding: 'utf8' as const, windowsHide: true, timeout: 60_000, maxBuffer: 64 * 1024 }
@@ -104,7 +108,8 @@ export async function verifyGsUpdateSignature(
       return /^TeamIdentifier=([A-Z0-9]+)$/mu.exec(stderr)?.[1]
     }))
     if (identities[0] === undefined || identities[0] !== identities[1]) throw new Error('GS update Team ID does not match the installed application')
-    await execute('/usr/sbin/spctl', ['--assess', '--type', 'open', '--context', 'context:primary-signature', artifact], options)
+    await execute('/usr/sbin/spctl', kind === 'application' ? ['--assess', '--type', 'execute', artifact]
+      : ['--assess', '--type', 'open', '--context', 'context:primary-signature', artifact], options)
     return
   }
   throw new Error('GS native updates are unavailable on this platform')

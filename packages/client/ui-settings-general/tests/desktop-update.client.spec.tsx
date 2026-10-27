@@ -141,11 +141,11 @@ it('shows fallback progress and error details when the shell omits optional fiel
   const f = fixture()
   try {
     await f.emit({ phase: 'downloading' })
-    const progress = screen.getByRole('button', { name: '0%' })
+    const progress = screen.getByRole('button', { name: '正在下载…' })
     fireEvent.focus(progress)
-    expect((await screen.findByRole('tooltip')).textContent).toBe('0%')
+    expect((await screen.findByRole('tooltip')).textContent).toBe('正在下载…')
     await f.emit({ phase: 'downloading', version: '1.0.1' })
-    fireEvent.focus(screen.getByRole('button', { name: '0%' }))
+    fireEvent.focus(screen.getByRole('button', { name: '正在下载…' }))
     expect((await screen.findByRole('tooltip')).textContent).toContain('1.0.1')
     await f.emit({ phase: 'error' })
     fireEvent.focus(screen.getByRole('button', { name: '重试更新' }))
@@ -153,7 +153,7 @@ it('shows fallback progress and error details when the shell omits optional fiel
   } finally { f.view.unmount(); f.status.resolve({ phase: 'idle' }) }
 })
 
-it.each(['checking', 'verifying', 'installing'] as const)('shows only the version during %s in both locales', async (phase) => {
+it.each(['checking', 'verifying', 'preparing', 'installing'] as const)('shows only the version during %s in both locales', async (phase) => {
   const f = fixture()
   try {
     await f.emit({ phase, version: '0.1.7-alpha.2' })
@@ -168,6 +168,7 @@ it.each(['checking', 'verifying', 'installing'] as const)('shows only the versio
 it.each([
   ['checking', '正在检查更新…'],
   ['verifying', '正在校验更新文件…'],
+  ['preparing', '正在准备安装…'],
   ['installing', '正在准备重启…'],
 ] as const)('retains the state label when %s has no version', async (phase, label) => {
   const f = fixture()

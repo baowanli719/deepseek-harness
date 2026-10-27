@@ -3,7 +3,7 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
 import { readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
@@ -39,6 +39,7 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { desktopUpdateChannel } from './update-channel.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { GsDesktopReleaseSource } from './gs-updates.ts'
+import { GsMacUpdateInstaller } from './gs-mac-update.ts'
 import { GsUpdateNotifications } from './gs-update-notifications.ts'
 import { DesktopCommandManager } from './command-management.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
@@ -64,6 +65,7 @@ import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
 import { DesktopPolicyTestAuth } from './policy-test-auth.ts'
 import { readDesktopSettings } from './settings.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
+import { desktopUpdateProgress } from './update-progress.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
@@ -600,9 +602,17 @@ async function main(): Promise<void> {
     }
     return shown
   }
+  const syncUpdateProgress = (state: DesktopUpdateState): void => {
+    if (isMandatory()) { updateDialog.clearProgress(); return }
+    const progress = desktopUpdateProgress(state, locale.messages)
+    const parent = currentDialogWindow()
+    if (progress === undefined) updateDialog.clearProgress()
+    else if (parent !== undefined) updateDialog.showProgress(parent, { title: locale.messages.updateTitle, ...progress })
+  }
   const publishUpdate = (state: DesktopUpdateState): DesktopUpdateState => {
     updateJournal?.state(state)
     updateState = state
+    syncUpdateProgress(state)
     if (gsDesktop && state.phase === 'available' && state.version !== undefined) {
       void gsNotifications.available(state.version).catch((error: unknown) => { console.error(error) })
     }
@@ -672,6 +682,12 @@ async function main(): Promise<void> {
     return startup
   }
 
+  const macInstaller = gsDesktop && process.platform === 'darwin' ? new GsMacUpdateInstaller({
+    installedBundle: resolve(dirname(process.execPath), '..', '..'),
+    directory: join(app.getPath('userData'), 'updates'),
+    arch: process.arch === 'arm64' ? 'arm64' : 'x64',
+    verifyBundle: path => verifyGsUpdateSignature(path, 'darwin', process.execPath, 'application'),
+  }) : undefined
   const gsReleases = gsDesktop ? new GsDesktopReleaseSource({
     pull: (signal) => {
       if (gsLoginBackend === undefined) throw new Error(locale.messages.gsUpdateInvalid)
@@ -681,6 +697,7 @@ async function main(): Promise<void> {
     directory: join(app.getPath('userData'), 'updates'), platform: process.platform, arch: process.arch,
     messages: () => locale.messages,
     verify: path => verifyGsUpdateSignature(path),
+    ...(macInstaller === undefined ? {} : { prepare: (path: string, version: string) => macInstaller.prepare(path, version) }),
     manifestKeys: GS_RELEASE_KEYS,
     install: async (path) => {
       if (process.platform === 'win32') {
@@ -695,8 +712,8 @@ async function main(): Promise<void> {
         })
         quitWithoutConfirmation()
       } else {
-        const failure = await shell.openPath(path)
-        if (failure) throw new Error(locale.messages.gsUpdateDownloadFailed)
+        if (macInstaller === undefined) throw new Error(locale.messages.gsUpdateDownloadFailed)
+        macInstaller.install()
       }
     },
   }) : undefined
@@ -726,6 +743,7 @@ async function main(): Promise<void> {
         const result = await updateDialog.show(parent, confirmation)
         if (result.response !== 0 || isMandatory()) return false
       }
+      syncUpdateProgress(updates.state)
       // The update lock rejects new HTTP requests, including analytics intake.
       await track('desktop_upgrade_install_restart_click', {})
       if (backend.host !== host) throw new DesktopUpdatePreparationError('tasks-unavailable', locale.messages.updateTasksUnavailable)
@@ -921,6 +939,10 @@ async function main(): Promise<void> {
   let promptOperation: Promise<void> | undefined
   let policyAuthenticationQueued = false
   const openUpdatePrompt = (manual = false, notification = false): Promise<void> => {
+    if (promptOperation !== undefined) { updateDialog.focus(); return promptOperation }
+    if (desktopUpdateProgress(updates.state, locale.messages) !== undefined) {
+      syncUpdateProgress(updates.state); updateDialog.focus(); return Promise.resolve()
+    }
     if (authenticationOperation !== undefined) {
       policyAuth?.focus(); updateDialog.focus()
     }
@@ -1418,12 +1440,15 @@ async function main(): Promise<void> {
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide()
     updateSchedule.dispose()
+    updates.dispose()
     updateDialog.dispose()
     mandatoryUI?.dispose()
-    void Promise.all([Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()), backend.close(),
+    void Promise.allSettled([Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()),
+      backend.close(), macInstaller?.dispose(),
       // A Platform cleanup failure is logged without cutting the remaining Host shutdown short.
       platformView.dispose().catch((error: unknown) => { console.error(error) })])
-      .catch((error: unknown) => { console.error(error) }).finally(() => { app.quit() })
+      .then((results) => { for (const result of results) if (result.status === 'rejected') console.error(result.reason) })
+      .finally(() => { app.quit() })
   }
   app.on('before-quit', (event) => {
     if (shellInstallerOwnsQuit) {

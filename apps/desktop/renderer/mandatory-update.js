@@ -29,8 +29,10 @@ function render(view) {
   if (downloadable) { primary = failed ? messages.updateRetry : messages.updateDownload; action = 'download' }
   if (ready) { primary = view.deferred ? messages.mandatoryContinue : messages.updateRetry; action = 'install' }
   if (view.deferred) { title = messages.mandatoryReady; detail = messages.mandatoryDeferred }
-  if (update.phase === 'downloading') status = format(messages.updateDownloading, { percent: String(Math.floor(update.percent ?? 0)) })
+  if (update.phase === 'downloading') status = update.percent === undefined ? messages.updateDownloadingUnknown
+    : format(messages.updateDownloading, { percent: String(Math.floor(update.percent)) })
   if (update.phase === 'verifying') status = messages.updateVerifying
+  if (update.phase === 'preparing') status = messages.updatePreparing
   if (update.phase === 'installing') status = messages.mandatoryInspecting
   if (update.phase === 'checking' || (policy.checking && ['idle', 'error'].includes(update.phase))) status = messages.updateChecking
   if (confirming) {
@@ -57,8 +59,9 @@ function render(view) {
   element('detail').textContent = detail
   element('status').textContent = status
   element('version').textContent = update.version === undefined ? '' : format(messages.mandatoryVersion, { version: update.version })
-  element('progress').hidden = update.phase !== 'downloading'
-  element('progress').value = update.percent ?? 0
+  element('progress').hidden = !['downloading', 'verifying', 'preparing'].includes(update.phase)
+  if (update.phase === 'downloading' && update.percent !== undefined) element('progress').value = update.percent
+  else element('progress').removeAttribute('value')
   element('progress').setAttribute('aria-label', status)
   element('error').textContent = error ?? ''
   element('error').hidden = error === undefined || confirming

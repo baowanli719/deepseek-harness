@@ -130,7 +130,7 @@ const FIELDS = new Set(['schemaVersion', 'sequence', 'time', 'pid', 'version', '
   'targetVersion', 'percent', 'failedOperation', 'errorCode'])
 const ACTIONS = new Set(['started', 'workspace-ready', 'workspace-failed', 'check-requested',
   'download-requested', 'install-confirmed', 'quit-requested', 'state'])
-const PHASES = new Set(['idle', 'checking', 'available', 'downloading', 'verifying', 'installing', 'ready', 'error'])
+const PHASES = new Set(['idle', 'checking', 'available', 'downloading', 'verifying', 'preparing', 'installing', 'ready', 'error'])
 const OPERATIONS = new Set(['check', 'download', 'install'])
 const ERROR_CODES = new Set(['ETIMEDOUT', 'ENOSPC', 'ERR_INTERNET_DISCONNECTED', 'ERR_CONNECTION_RESET',
   'ERR_CONNECTION_CLOSED', 'ERR_NAME_NOT_RESOLVED', 'ERR_UPDATER_INVALID_SIGNATURE', 'ERR_UPDATER_CHECKSUM_MISMATCH', 'UNCLASSIFIED'])

@@ -22,6 +22,35 @@ function page(name: string) {
   return { dom, document, element, run }
 }
 
+it('keeps progress read-only, switches measured progress to indeterminate, and restores confirmation controls', async () => {
+  const p = page('update-dialog')
+  const locale = resolveDesktopLocale('zh-CN')
+  const initial: UpdateDialogView = { revision: 1, locale: locale.id, title: '更新', message: '正在下载更新… 58%',
+    detail: '', buttons: [], cancelId: -1, closeLabel: locale.messages.updateClose,
+    technicalDetails: '', technicalDetailsLabel: locale.messages.updateTechnicalDetails, progress: { percent: 58 } }
+  let publish!: (view: UpdateDialogView) => void
+  const respond = vi.fn(async () => {})
+  Object.defineProperty(p.dom.window, 'dshUpdateDialog', { value: {
+    status: async () => initial, respond, subscribe: (listener: typeof publish) => { publish = listener; return () => {} },
+  } satisfies UpdateDialogApi })
+  p.run()
+  await expect.poll(() => p.element('title').textContent).toBe(initial.message)
+  expect(p.element('close').hidden).toBe(true)
+  expect(p.element('update-progress').getAttribute('value')).toBe('58')
+  p.document.dispatchEvent(new p.dom.window.KeyboardEvent('keydown', { key: 'Escape', cancelable: true }))
+  p.document.dispatchEvent(new p.dom.window.KeyboardEvent('keydown', { key: 'Tab', cancelable: true }))
+  expect(p.document.activeElement?.id).toBe('dialog')
+  expect(respond).not.toHaveBeenCalled()
+  publish({ ...initial, revision: 2, message: '正在准备安装…', progress: {} })
+  expect(p.element('update-progress').hasAttribute('value')).toBe(false)
+  const { progress: _progress, ...confirmation } = initial
+  publish({ ...confirmation, revision: 3, buttons: ['安装并重启'], cancelId: 1 })
+  expect(p.element('close').hidden).toBe(false)
+  expect(p.element('update-progress').hidden).toBe(true)
+  p.document.querySelector<HTMLButtonElement>('#actions button')!.click()
+  expect(respond).toHaveBeenCalledWith(3, 0)
+})
+
 it.each(['en', 'zh-CN'])('keeps ordinary diagnostics folded, text-only, and keyboard-accessible: %s', async (language) => {
   const p = page('update-dialog')
   const locale = resolveDesktopLocale(language)

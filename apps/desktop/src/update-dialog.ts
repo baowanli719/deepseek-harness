@@ -19,11 +19,14 @@ export interface UpdateDialogView {
   readonly closeLabel: string
   readonly technicalDetails: string
   readonly technicalDetailsLabel: string
+  /** Presence makes the dialog read-only; an absent percentage shows indeterminate progress. */
+  readonly progress?: { readonly percent?: number }
 }
 
 /** Electron message options with separately expandable, main-owned diagnostics. */
 export interface UpdateDialogOptions extends MessageBoxOptions {
   readonly technicalDetails?: string
+  readonly progress?: { readonly percent?: number }
 }
 
 /** The document can select only a displayed response index. */
@@ -36,7 +39,7 @@ export interface UpdateDialogApi {
 // main.ts's protocol.handle shell route serves this document and its renderer assets; the modal requires that route.
 const page = 'dsh-app://shell/update-dialog.html'
 
-/** One fading backdrop with replaceable confirmation content; aborted checks and mandatory policy cancel ordinary prompts. */
+/** One fading backdrop with confirmation or progress content; aborted checks and mandatory policy cancel ordinary prompts. */
 export class DesktopUpdateDialog {
   private disposed = false
   private revision = 0
@@ -48,7 +51,7 @@ export class DesktopUpdateDialog {
   /** Focus the current explanation or confirmation without replacing it or granting permission. */
   focus(): void { this.active?.window.focus() }
 
-  /** Whether a shell prompt is awaiting a response. */
+  /** Whether a shell confirmation or progress dialog is displayed. */
   get isOpen(): boolean { return this.active !== undefined }
 
   /**
@@ -63,6 +66,7 @@ export class DesktopUpdateDialog {
       this.owned(event)
       const active = this.active
       if (active === undefined || revision !== active.view.revision) throw new Error('desktop update: stale dialog response')
+      if (active.view.progress !== undefined) throw new Error('desktop update: progress does not accept responses')
       if (typeof index !== 'number' || !Number.isInteger(index)
         || (index !== active.view.cancelId && (index < 0 || index >= active.view.buttons.length))) {
         throw new Error('desktop update: invalid dialog response')
@@ -93,11 +97,12 @@ export class DesktopUpdateDialog {
     this.parent = parent
     const view: UpdateDialogView = { revision: ++this.revision, locale: locale.id, title: options.title ?? '', message: options.message,
       detail: options.detail ?? '', buttons, cancelId, closeLabel: locale.messages.updateClose,
-      technicalDetails: options.technicalDetails ?? '', technicalDetailsLabel: locale.messages.updateTechnicalDetails }
+      technicalDetails: options.technicalDetails ?? '', technicalDetailsLabel: locale.messages.updateTechnicalDetails,
+      ...(options.progress === undefined ? {} : { progress: options.progress }) }
     return new Promise((resolve) => {
       const abort = (): void => { finish(cancelId) }
       const finish = (response: number, retain = false): void => {
-        if (this.active?.view !== view) return
+        if (this.active?.finish !== finish) return
         this.active = undefined
         options.signal?.removeEventListener('abort', abort)
         if (!retain && !window.isDestroyed()) {
@@ -116,6 +121,27 @@ export class DesktopUpdateDialog {
       void window.loadURL(page).catch(failed)
     })
   }
+
+  /**
+   * Show or refresh read-only progress without replacing a pending confirmation or authorizing installation.
+   * @param parent - Application window retained until installer handoff.
+   * @param options - Localized stage and optional measured percentage.
+   */
+  showProgress(parent: BrowserWindow, options: UpdateDialogOptions & { progress: { readonly percent?: number } }): void {
+    const active = this.active
+    if (active !== undefined && active.view.progress === undefined) return
+    if (this.parent !== parent || active?.view.progress === undefined) {
+      void this.show(parent, { ...options, buttons: [], cancelId: -1 })
+      return
+    }
+    const locale = typeof this.locale === 'function' ? this.locale() : this.locale
+    active.view = { ...active.view, revision: ++this.revision, locale: locale.id,
+      title: options.title ?? '', message: options.message, detail: options.detail ?? '', progress: options.progress }
+    active.window.webContents.send(UPDATE_DIALOG_IPC.changed, active.view)
+  }
+
+  /** Dismiss progress when readiness, failure, or a confirmation takes over. */
+  clearProgress(): void { if (this.active?.view.progress !== undefined) this.cancel() }
 
   /** Cancel the displayed prompt without authorizing any operation. */
   cancel(): void { this.active?.finish(this.active.view.cancelId) }

@@ -78,6 +78,44 @@ it('checks, downloads, and installs through the GS source without calling the pu
   expect(quitAndInstall).not.toHaveBeenCalled()
 })
 
+it.each([true, false])('keeps the client open until GS platform preparation settles (success=%s)', async (success) => {
+  const f = fixture()
+  const entered = Promise.withResolvers<undefined>()
+  const prepared = Promise.withResolvers<undefined>()
+  const source = {
+    check: vi.fn(async () => '2.2.11'),
+    download: vi.fn(async (_version: string, progress: (percent: number) => void) => { progress(58); progress(100) }),
+    prepare: vi.fn(async () => { entered.resolve(undefined); await prepared.promise }),
+    install: vi.fn(async () => {}), dispose: vi.fn(),
+  }
+  const beforeRestart = vi.fn(async () => true)
+  const states: DesktopUpdateState[] = []
+  const coordinator = new DesktopUpdateCoordinator((state) => { states.push(state); return state }, beforeRestart,
+    f.updater, () => false, () => '2.2.10', undefined, 'latest', source)
+  coordinators.push(coordinator)
+  await coordinator.check()
+  const pending = coordinator.download('2.2.11')
+  await entered.promise
+  expect(states).toContainEqual({ phase: 'downloading', version: '2.2.11' })
+  expect(states).toContainEqual({ phase: 'verifying', version: '2.2.11', percent: 100 })
+  expect(coordinator.state).toEqual({ phase: 'preparing', version: '2.2.11' })
+  f.events.emit('download-progress', { percent: 10 })
+  f.events.emit('update-downloaded', { version: '2.2.11' })
+  expect(coordinator.state.phase).toBe('preparing')
+  await expect(coordinator.install('2.2.11')).rejects.toThrow('not ready')
+  expect(beforeRestart).not.toHaveBeenCalled()
+  if (success) prepared.resolve(undefined)
+  else prepared.reject(new Error('preparation failed'))
+  expect((await pending).phase).toBe(success ? 'ready' : 'error')
+  expect(beforeRestart).not.toHaveBeenCalled()
+  expect(source.install).not.toHaveBeenCalled()
+  if (success) {
+    await coordinator.install('2.2.11')
+    expect(beforeRestart).toHaveBeenCalledOnce()
+    expect(source.install).toHaveBeenCalledWith('2.2.11')
+  } else await expect(coordinator.install('2.2.11')).rejects.toThrow('not ready')
+})
+
 function fixture(channel: 'nightly' | 'latest' = 'nightly', version = '1.1.0-alpha.1') {
   const events = new EventEmitter()
   const checkForUpdates = vi.fn(async () => ({

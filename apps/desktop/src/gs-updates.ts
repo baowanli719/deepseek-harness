@@ -56,6 +56,8 @@ export interface GsDesktopReleaseOptions {
   arch: string
   /** Launch a completely written installer after the shell stops active tasks. */
   install(path: string): Promise<void>
+  /** Prepare the verified installer without stopping the application; omitted for directly executable installers. */
+  prepare?(path: string, version: string): Promise<void>
   /** Verify OS trust on platforms without enterprise manifest authorization; failure refuses installation. */
   verify(path: string): Promise<void>
   /** Embedded release keys require a detached signed manifest for Windows installers. */
@@ -95,7 +97,7 @@ export class GsDesktopReleaseSource implements DesktopReleaseSource {
   /**
    * Download the confirmed release into a private file and validate its format and release authorization.
    * @param version - Version confirmed in the native dialog.
-   * @param progress - Bounded percentage updates; 100 is emitted only after file validation.
+   * @param progress - Measured download percentage; 100 begins artifact verification, not installation readiness.
    */
   async download(version: string, progress: (percent: number) => void): Promise<void> {
     this.prepared = undefined
@@ -187,13 +189,29 @@ export class GsDesktopReleaseSource implements DesktopReleaseSource {
       }
       signal.throwIfAborted()
       await rename(partial, target)
+      progress(100)
       await this.verifyArtifact(target, manifest)
       this.prepared = { version, path: target, ...(manifest === undefined ? {} : { manifest }) }
-      progress(100)
     } catch (cause) {
       await rm(partial, { force: true })
       await rm(target, { force: true })
       throw cause
+    }
+  }
+
+  /**
+   * Prepare platform installation inputs after verification and before restart consent.
+   * @param version - Version whose download has completed.
+   */
+  async prepare(version: string): Promise<void> {
+    this.abort.signal.throwIfAborted()
+    if (this.prepared?.version !== version) throw new Error(this.options.messages().gsUpdateStale)
+    try {
+      await this.options.prepare?.(this.prepared.path, version)
+      this.abort.signal.throwIfAborted()
+    } catch (error) {
+      this.prepared = undefined
+      throw error
     }
   }
 

@@ -49,7 +49,8 @@ afterEach(() => {
 function setup(locale: DesktopLocale | (() => DesktopLocale) = resolveDesktopLocale('zh-CN')) {
   const parent = new fixture.FakeWindow({})
   dialogs = new DesktopUpdateDialog('preload-update-dialog.cjs', locale, new DesktopUpdateOverlays())
-  const show = (signal?: AbortSignal) => dialogs!.show(parent as unknown as BrowserWindow, {
+  const owner = parent as BrowserWindow & typeof parent
+  const show = (signal?: AbortSignal) => dialogs!.show(owner, {
     message: '下载完成', buttons: ['安装并重启'], cancelId: 1, ...(signal === undefined ? {} : { signal }),
   })
   const invoke = (channel: string, ...args: unknown[]) => {
@@ -58,8 +59,39 @@ function setup(locale: DesktopLocale | (() => DesktopLocale) = resolveDesktopLoc
     const view = fixture.handlers.get(UPDATE_DIALOG_IPC.status)!(event) as { revision: number }
     return fixture.handlers.get(channel)!(event, ...(channel === UPDATE_DIALOG_IPC.respond ? [view.revision, ...args] : args))
   }
-  return { parent, show, invoke }
+  const progress = (percent?: number): void => { dialogs!.showProgress(owner, {
+    message: percent === undefined ? '正在准备安装…' : `正在下载更新… ${percent}%`,
+    progress: percent === undefined ? {} : { percent },
+  }) }
+  return { parent, show, invoke, progress }
 }
+
+it('updates progress in one window, denies responses, and releases it before confirmation', async () => {
+  vi.useFakeTimers()
+  const f = setup()
+  f.progress(25)
+  const window = fixture.windows.at(-1)!
+  const first = f.invoke(UPDATE_DIALOG_IPC.status) as { revision: number }
+  expect(() => f.invoke(UPDATE_DIALOG_IPC.respond, -1)).toThrow(/progress/)
+  f.progress(80)
+  expect(fixture.windows.at(-1)).toBe(window)
+  expect(f.invoke(UPDATE_DIALOG_IPC.status)).toMatchObject({ progress: { percent: 80 }, buttons: [] })
+  const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+  expect(() => fixture.handlers.get(UPDATE_DIALOG_IPC.respond)!(event, first.revision, 0)).toThrow(/stale/)
+  f.progress()
+  expect(f.invoke(UPDATE_DIALOG_IPC.status)).toMatchObject({ progress: {} })
+  dialogs!.clearProgress()
+  expect(dialogs!.isOpen).toBe(false)
+  await vi.advanceTimersByTimeAsync(150)
+  expect(window.isDestroyed()).toBe(true)
+  const confirmed = f.show()
+  f.progress(90)
+  expect(f.invoke(UPDATE_DIALOG_IPC.status)).toMatchObject({ buttons: ['安装并重启'] })
+  dialogs!.clearProgress()
+  expect(dialogs!.isOpen).toBe(true)
+  f.invoke(UPDATE_DIALOG_IPC.respond, 0)
+  expect((await confirmed).response).toBe(0)
+})
 
 it('accepts only a displayed choice from its own main frame and retains cancellation outside the button list', async () => {
   const f = setup()
